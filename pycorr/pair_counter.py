@@ -1,3 +1,5 @@
+"""Implement base pair counter, to be extended when implementing a new engine."""
+
 import os
 import numpy as np
 
@@ -17,29 +19,29 @@ class BaseTwoPointCounterEngine(BaseClass):
 
     Attributes
     ----------
-    wcounts : array
-        (Optionally weighted) pair-counts.
-
     sep : array
         Array of separation values.
-    """
 
+    wcounts : array
+        (Optionally weighted) pair-counts.
+    """
     def __init__(self, mode, edges, positions1, positions2=None, weights1=None, weights2=None,
                 bin_type='auto', position_type='auto', weight_type='auto', los='midpoint',
                 boxsize=None, output_sepavg=True, nthreads=None, **kwargs):
-        """
-        Initialize :class:`BaseTwoPointCounterEngine`.
+        r"""
+        Initialize :class:`BaseTwoPointCounterEngine`, and run actual pair counts
+        (calling :meth:`run`), setting :attr:`wcounts` and :attr:`sep`.
 
         Parameters
         ----------
         mode : string
-            Pair counting mode, one of:
+            Type of pair counts, one of:
 
-            - "auto": pair counts as a function of angle (in degree) between two galaxies
-            - "s": pair counts as a function of distance between two galaxies
-            - "smu": pair counts as a function of distance between two galaxies and cosine angle :math:`\mu`
+            - "theta": as a function of angle (in degree) between two galaxies
+            - "s": as a function of distance between two galaxies
+            - "smu": as a function of distance between two galaxies and cosine angle :math:`\mu`
                      w.r.t. the line-of-sight
-            - "rppi": pair counts as a function of distance transverse (:math:`r_{p}`) and parallel (:math:`\pi`)
+            - "rppi": as a function of distance transverse (:math:`r_{p}`) and parallel (:math:`\pi`)
                      to the line-of-sight
             - "rp": same as "rppi", without binning in :math:`\pi`
 
@@ -53,14 +55,13 @@ class BaseTwoPointCounterEngine(BaseClass):
             Positions in the first catalog. Typically of shape (3, N), but can be (2, N) when ``mode`` is "theta".
 
         positions2 : list, array, default=None
-            Optionally, for cross-correlations, positions in the second catalog.
+            Optionally, for cross-pair counts, positions in the second catalog. See ``positions1``.
 
         weights1 : array, default=None
             Weights of the first catalog. Not required if ``weight_type`` is either ``None`` or "auto".
 
         weights2 : array, default=None
-            Optionally, for cross-correlations, weights in the second catalog
-            (not required if ``weight_type`` is either ``None`` or "auto").
+            Optionally, for cross-pair counts, weights in the second catalog. See ``weights1``.
 
         bin_type : string, default='auto'
             Binning type for first dimension, e.g. :math:`r_{p}` when ``mode`` is "rppi".
@@ -78,12 +79,14 @@ class BaseTwoPointCounterEngine(BaseClass):
 
         position_type : string, default='auto'
             Type of input positions, one of:
+
             - "rd": RA/Dec in degree, only if ``mode`` is "theta"
             - "rdd": RA/Dec in degree, distance, for any ``mode``
             - "xyz": Cartesian positions
 
         weight_type : string, default='auto'
             The type of weighting to apply. One of:
+
             - ``None``: no weights are applied.
             - "pair_product": each pair is weighted by the product of weights.
             - "auto": automatically choose weighting based on input ``weights1`` and ``weights2``,
@@ -91,11 +94,12 @@ class BaseTwoPointCounterEngine(BaseClass):
                else ``pair_product``.
 
         los : string, default='midpoint'
-            Line-of-sight to be used when ``mode`` is "smu" or "rppi"; one of:
+            Line-of-sight to be used when ``mode`` is "smu", "rppi" or "rp"; one of:
+
             - "midpoint": the mean position of the pair: :math:`\eta = (\mathbf{r}_{1} + \mathbf{r}_{2})/2`
             - "x", "y" or "z": cartesian axis
 
-        boxsize : array, int
+        boxsize : array, float, default=None
             For periodic wrapping, the side-length(s) of the periodic cube.
 
         output_sepavg : bool, default=True
@@ -130,6 +134,13 @@ class BaseTwoPointCounterEngine(BaseClass):
 
         self.norm = self.normalization()
 
+    def run(self):
+        """
+        Method that computes the actual pair counts and set :attr:`wcounts` and :attr:`sep`,
+        to be implemented in your new engine.
+        """
+        raise NotImplementedError('Implement method "run" in your {}'.format(self.__class__.__name__))
+
     def _set_edges(self, edges, bin_type='auto'):
         if np.ndim(edges[0]) == 0:
             edges = (edges,)
@@ -154,14 +165,17 @@ class BaseTwoPointCounterEngine(BaseClass):
 
     @property
     def shape(self):
+        """Return shape of obtained pair counts :attr:`wcounts`."""
         return tuple(len(edges) - 1 for edges in self.edges)
 
     @property
     def ndim(self):
+        """Return binning dimensionality."""
         return len(self.edges)
 
     @property
     def periodic(self):
+        """Whether periodic wrapping is used (i.e. :attr:`boxsize` is not ``None``)."""
         return self.boxsize is None
 
     def _set_positions(self, positions1, positions2=None, position_type='auto'):
@@ -273,7 +287,20 @@ class BaseTwoPointCounterEngine(BaseClass):
             raise PairCounterError('weight_type should be one of {}'.format(allowed_weight_types))
 
     def normalization(self):
-        """Return pair count normalization."""
+        r"""
+        Return pair count normalization, i.e., in case of cross-correlation:
+
+        .. math::
+
+            \left(\sum_{i=1}^{N_{1}} w_{1,i}\right) \left(\sum_{j=1}^{N_{2}} w_{2,j}\right)
+
+        with the sums running over the weights of the first and second catalogs, and in case of auto-correlation:
+
+        .. math::
+
+            \left(\sum_{i=1}^{N_{1}} w_{1,i}\right)^{2} - \sum_{i=1}^{N_{1}} w_{1,i}^{2}
+
+        """
         if self.weight_type is None:
             if self.autocorr:
                 return len(self.positions1[0]) * (len(self.positions1[0]) - 1)
@@ -283,7 +310,7 @@ class BaseTwoPointCounterEngine(BaseClass):
         return self.weights1.sum()*self.weights2.sum()
 
     def normalized_wcounts(self):
-        """Return normalized pair counts."""
+        """Return normalized pair counts, i.e. :attr:`wcounts` divided by :meth:`normalization`."""
         return self.wcounts/self.norm
 
     def __getstate__(self):
@@ -294,6 +321,11 @@ class BaseTwoPointCounterEngine(BaseClass):
         return state
 
     def rebin(self, factor=1):
+        """
+        Rebin pair counts, by factor(s) ``factor``.
+        A tuple must be provided in case :attr:`ndim` is greater than 1.
+        Input factors must divide :attr:`shape`.
+        """
         if np.ndim(factor) == 0:
             factor = (factor,)
         if len(factor) != self.ndim:
@@ -304,7 +336,24 @@ class BaseTwoPointCounterEngine(BaseClass):
 
 
 def TwoPointCounter(*args, engine='corrfunc', **kwargs):
+    """
+    Entry point to pair counter engines.
 
+    Parameters
+    ----------
+    engine : string
+        Name of pair counter engine, one of ["corrfunc"].
+
+    args : list
+        Arguments for pair counter engine, see :class:`BaseTwoPointCounterEngine`.
+
+    kwargs : dict
+        Arguments for pair counter engine, see :class:`BaseTwoPointCounterEngine`.
+
+    Returns
+    -------
+    engine : BaseTwoPointCounterEngine
+    """
     if isinstance(engine, str):
 
         if engine.lower() == 'corrfunc':
@@ -317,8 +366,52 @@ def TwoPointCounter(*args, engine='corrfunc', **kwargs):
 
 
 class AnalyticTwoPointCounter(BaseTwoPointCounterEngine):
+    """
+    Analytic pair counter. Assume periodic wrapping and no data weights.
 
+    Attributes
+    ----------
+    sep : array
+        Array of separation values.
+
+    wcounts : array
+        Analytical pair counts.
+    """
     def __init__(self, mode, edges, boxsize, n1=10, n2=None, los='z'):
+        """
+        Initialize :class:`AnalyticTwoPointCounter`, and set :attr:`wcounts` and :attr:`sep`.
+
+        Parameters
+        ----------
+        mode : string
+            Pair counting mode, one of:
+
+            - "s": pair counts as a function of distance between two galaxies
+            - "smu": pair counts as a function of distance between two galaxies and cosine angle :math:`\mu`
+                     w.r.t. the line-of-sight
+            - "rppi": pair counts as a function of distance transverse (:math:`r_{p}`) and parallel (:math:`\pi`)
+                     to the line-of-sight
+            - "rp": same as "rppi", without binning in :math:`\pi`
+
+        edges : tuple, array
+            Tuple of bin edges (arrays), for the first (e.g. :math:`r_{p}`)
+            and optionally second (e.g. :math:`\pi`) dimensions.
+            In case of single-dimension binning (e.g. ``mode`` is "theta", "s" or "rp"),
+            the single array of bin edges can be provided directly.
+
+        boxsize : array, float
+            The side-length(s) of the periodic cube.
+
+        n1 : int, default=10
+            Length of the first catalog.
+
+        n2 : int, default=None
+            Optionally, for cross-pair counts, length of second catalog.
+
+        los : string, default='z'
+            Line-of-sight to be used when ``mode`` is "rp", in case of non-cubic box;
+            one of cartesian axes "x", "y" or "z".
+        """
         self.mode = mode
         self._set_edges(edges)
         self._set_boxsize(boxsize)
@@ -330,6 +423,7 @@ class AnalyticTwoPointCounter(BaseTwoPointCounterEngine):
         self._set_default_sep()
 
     def run(self):
+        """Set analytical pair counts."""
         if self.mode == 's':
             v = 4./3. * np.pi * self.edges[0]**3
             dv = np.diff(v, axis=0)
@@ -349,6 +443,10 @@ class AnalyticTwoPointCounter(BaseTwoPointCounterEngine):
         self.wcounts = self.normalization()*dv/self.boxsize.prod()
 
     def normalization(self):
+        """
+        Return pair count normalization, i.e., in case of cross-correlation ``n1 * n2``,
+        and in case of auto-correlation ``n1 * (n1 - 1)``.
+        """
         if self.autocorr:
             return self.n1 * (self.n1 - 1)
         return self.n1 * self.n2

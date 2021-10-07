@@ -1,3 +1,5 @@
+"""Implement Corrfunc pair counter engine."""
+
 import numpy as np
 from Corrfunc import theory, mocks
 
@@ -7,7 +9,11 @@ from . import utils
 
 class CorrfuncTwoPointCounterEngine(BaseTwoPointCounterEngine):
 
+    """Extend :class:`BaseTwoPointCounterEngine` for Corrfunc pair counting code."""
+
     def run(self):
+        """Compute the pair counts and set :attr:`wcounts` and :attr:`sep`."""
+
         output_weightavg = self.weight_type is not None
 
         def boxsize():

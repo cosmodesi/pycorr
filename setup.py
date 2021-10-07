@@ -8,6 +8,6 @@ setup(name='pycorr',
       description='Estimation of correlation functions',
       license='GPL3',
       url='http://github.com/adematti/pycorr',
-      install_requires=['Corrfunc'],
+      install_requires=['numpy', 'scipy', 'Corrfunc'],
       packages=['pycorr']
 )

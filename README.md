@@ -4,9 +4,10 @@
 
 # Requirements
 
-Only strict requirements are:
+Strict requirements are:
 
   - numpy
+  - scipy
   - Corrfunc
 
 ## Installation
@@ -22,4 +23,4 @@ $>  python setup.py develop --user
 
 ## License
 
-**pypower** is free software distributed under a BSD3 license. For details see the [LICENSE](https://github.com/adematti/pycorr/blob/main/LICENSE).
+**pycorr** is free software distributed under a BSD3 license. For details see the [LICENSE](https://github.com/adematti/pycorr/blob/main/LICENSE).
