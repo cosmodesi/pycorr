@@ -1,6 +1,6 @@
 import numpy as np
 
-from pycorr import TwoPointCounter
+from pycorr import TwoPointCounter, HAS_MPI
 
 
 def diff(position1, position2):
@@ -155,14 +155,17 @@ def test(mode='s'):
     list_engine = ['corrfunc']
     list_options = []
     list_options.append({'autocorr':True,'weight_type':None})
-    list_options.append({'weight_type':'pair_product'})
+    list_options.append({'weight_type':'pair_product','bin_type':'custom'})
+    if HAS_MPI:
+        from pycorr import mpi
+        list_options.append({'mpicomm':mpi.COMM_WORLD,'weight_type':None})
     #list_options.append({'weight_type':'inverse_bitwise','n_bitwise_weights':2})
-    edges = np.linspace(1e-9,100,10)
+    edges = np.linspace(1,500,10)
     boxsize = (1000,)*3
     if mode == 'smu':
         edges = (edges, np.linspace(0,1,100))
     elif mode == 'rppi':
-        edges = (edges, np.linspace(0,100,101))
+        edges = (edges, np.linspace(0,1400,1401))
     elif mode == 'theta':
         edges = np.linspace(1e-5,10,10) # below 1e-5, self pairs are counted by Corrfunc
     for engine in list_engine:
@@ -172,9 +175,14 @@ def test(mode='s'):
             autocorr = options.pop('autocorr',False)
             options['boxsize'] = boxsize if options.pop('periodic',False) else None
             options['los'] = 'z' if options['boxsize'] is not None else 'midpoint'
+            bin_type = options.pop('bin_type','auto')
+            mpicomm = options.pop('mpicomm',None)
             ref = ref_func(edges, data1, data2=None if autocorr else data2, **options)
+            if mpicomm is not None:
+                data1 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data1]
+                data2 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data2]
             test = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:3], positions2=None if autocorr else data2[:3],
-                                   weights1=data1[3], weights2=None if autocorr else data2[3], position_type='xyz', **options).wcounts
+                                   weights1=data1[3], weights2=None if autocorr else data2[3], position_type='xyz', bin_type=bin_type, mpicomm=mpicomm, **options).wcounts
             assert np.allclose(test, ref)
 
 

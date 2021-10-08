@@ -199,7 +199,7 @@ def get_estimator(estimator='auto', has_cross=True):
         Estimator class.
     """
     if estimator == 'auto':
-        estimator = {True:'landyszalay', False:'natural'}[has_randoms]
+        estimator = {True:'landyszalay', False:'natural'}[has_cross]
 
     if isinstance(estimator, str):
 

@@ -4,8 +4,9 @@ import os
 import numpy as np
 
 from .utils import BaseClass
-from . import utils
-
+from . import utils, HAS_MPI
+if HAS_MPI:
+    from . import mpi
 
 class PairCounterError(Exception):
 
@@ -27,7 +28,7 @@ class BaseTwoPointCounterEngine(BaseClass):
     """
     def __init__(self, mode, edges, positions1, positions2=None, weights1=None, weights2=None,
                 bin_type='auto', position_type='auto', weight_type='auto', los='midpoint',
-                boxsize=None, output_sepavg=True, nthreads=None, **kwargs):
+                boxsize=None, output_sepavg=True, nthreads=None, mpicomm=None, **kwargs):
         r"""
         Initialize :class:`BaseTwoPointCounterEngine`, and run actual pair counts
         (calling :meth:`run`), setting :attr:`wcounts` and :attr:`sep`.
@@ -123,6 +124,7 @@ class BaseTwoPointCounterEngine(BaseClass):
         self._set_edges(edges, bin_type=bin_type)
         self._set_los(los)
         self._set_boxsize(boxsize)
+        self._mpi_decompose(mpicomm=mpicomm)
 
         self.output_sepavg = output_sepavg
         self.attrs = kwargs
@@ -176,7 +178,11 @@ class BaseTwoPointCounterEngine(BaseClass):
     @property
     def periodic(self):
         """Whether periodic wrapping is used (i.e. :attr:`boxsize` is not ``None``)."""
-        return self.boxsize is None
+        return self.boxsize is not None
+
+    @property
+    def with_mpi(self):
+        return self.mpicomm is not None and self.mpicomm.size > 1
 
     def _set_positions(self, positions1, positions2=None, position_type='auto'):
         position_type = position_type.lower()
@@ -187,9 +193,9 @@ class BaseTwoPointCounterEngine(BaseClass):
         def check_positions(positions):
             if self.mode == 'theta':
                 if position_type == 'xyz':
-                    positions = utils.cartesian_to_sky(positions)[1:]
+                    positions = list(utils.cartesian_to_sky(positions)[1:])
                 elif position_type == 'rdz':
-                    positions = positions[:2]
+                    positions = list(positions[:2])
                 elif position_type != 'rd':
                     raise PairCounterError('For mode = {}, position type should be one of ["xyz", "rdz", "rd"]'.format(self.mode))
                 if len(positions) != 2:
@@ -215,7 +221,7 @@ class BaseTwoPointCounterEngine(BaseClass):
 
         self.autocorr = positions2 is None
         if self.autocorr:
-            self.positions2 = [None]*len(self.positions1)
+            self.positions2 = None
         else:
             self.positions2 = list(positions2)
             self.positions2 = check_positions(self.positions2)
@@ -258,6 +264,19 @@ class BaseTwoPointCounterEngine(BaseClass):
             self.weights2 = weights2
             if not self.autocorr:
                 check_weights(self.weights2, len(self.positions2[0]))
+
+    def _mpi_decompose(self, mpicomm=None):
+        self.mpicomm = mpicomm
+        if self.with_mpi:
+            smoothing = np.max(self.edges[0])
+            if self.mode == 'pimax':
+                smoothing = np.sqrt(smoothing**2 + np.max(self.edges[1])**2)
+            elif self.mode == 'theta':
+                smoothing = 2 * np.sin(0.5 * np.deg2rad(smoothing))
+            (self.positions1, self.weights1), (self.positions2, self.weights2) = \
+             mpi.domain_decompose(self.mpicomm, smoothing, self.positions1, weights1=self.weights1,
+                                  positions2=self.positions2, weights2=self.weights2, boxsize=self.boxsize)
+            self.autocorr = False
 
     def _set_default_sep(self):
         edges = self.edges[0]
@@ -302,12 +321,22 @@ class BaseTwoPointCounterEngine(BaseClass):
 
         """
         if self.weight_type is None:
+            size1 = size2 = len(self.positions1[0])
+            if not self.autocorr: size2 = len(self.positions2[0])
+            if self.with_mpi:
+                size1, size2 = self.mpicomm.allreduce(size1), self.mpicomm.allreduce(size2)
             if self.autocorr:
-                return len(self.positions1[0]) * (len(self.positions1[0]) - 1)
-            return len(self.positions1[0]) * len(self.positions2[0])
+                return size1 * (size1 - 1)
+            return size1 * size2
         if self.autocorr:
-            return self.weights1.sum()**2 - (self.weights1**2).sum()
-        return self.weights1.sum()*self.weights2.sum()
+            sum1, sum2 = self.weights1.sum()**2, (self.weights1**2).sum()
+            if self.with_mpi:
+                sum1, sum2 = self.mpicomm.allreduce(sum1), self.mpicomm.allreduce(sum2)
+            return sum1**2 - sum2
+        sum1, sum2 = self.weights1.sum(), self.weights2.sum()
+        if self.with_mpi:
+            sum1, sum2 = self.mpicomm.allreduce(sum1), self.mpicomm.allreduce(sum2)
+        return sum1 * sum2
 
     def normalized_wcounts(self):
         """Return normalized pair counts, i.e. :attr:`wcounts` divided by :meth:`normalization`."""
@@ -377,7 +406,7 @@ class AnalyticTwoPointCounter(BaseTwoPointCounterEngine):
     wcounts : array
         Analytical pair counts.
     """
-    def __init__(self, mode, edges, boxsize, n1=10, n2=None, los='z'):
+    def __init__(self, mode, edges, boxsize, size1=10, size2=None, los='z'):
         """
         Initialize :class:`AnalyticTwoPointCounter`, and set :attr:`wcounts` and :attr:`sep`.
 
@@ -402,10 +431,10 @@ class AnalyticTwoPointCounter(BaseTwoPointCounterEngine):
         boxsize : array, float
             The side-length(s) of the periodic cube.
 
-        n1 : int, default=10
+        size1 : int, default=10
             Length of the first catalog.
 
-        n2 : int, default=None
+        size2 : int, default=None
             Optionally, for cross-pair counts, length of second catalog.
 
         los : string, default='z'
@@ -416,9 +445,9 @@ class AnalyticTwoPointCounter(BaseTwoPointCounterEngine):
         self._set_edges(edges)
         self._set_boxsize(boxsize)
         self._set_los(los)
-        self.n1 = n1
-        self.n2 = n2
-        self.autocorr = n2 is None
+        self.size1 = size1
+        self.size2 = size2
+        self.autocorr = size2 is None
         self.run()
         self._set_default_sep()
 
@@ -444,9 +473,9 @@ class AnalyticTwoPointCounter(BaseTwoPointCounterEngine):
 
     def normalization(self):
         """
-        Return pair count normalization, i.e., in case of cross-correlation ``n1 * n2``,
-        and in case of auto-correlation ``n1 * (n1 - 1)``.
+        Return pair count normalization, i.e., in case of cross-correlation ``size1 * size2``,
+        and in case of auto-correlation ``size1 * (size1 - 1)``.
         """
         if self.autocorr:
-            return self.n1 * (self.n1 - 1)
-        return self.n1 * self.n2
+            return self.size1 * (self.size1 - 1)
+        return self.size1 * self.size2

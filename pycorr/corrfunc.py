@@ -66,7 +66,7 @@ class CorrfuncTwoPointCounterEngine(BaseTwoPointCounterEngine):
 
         def sky_positions():
             positions1 = utils.cartesian_to_sky(self.positions1)
-            positions2 = self.positions2
+            positions2 = [None]*3
             if not self.autocorr:
                 positions2 = utils.cartesian_to_sky(self.positions2)
             return positions1, positions2
@@ -75,18 +75,22 @@ class CorrfuncTwoPointCounterEngine(BaseTwoPointCounterEngine):
         kwargs = {'weights1': self.weights1, 'weights2': self.weights2,
                   'bin_type':self.bin_type, 'weight_type':self.weight_type}
 
+        positions2 = self.positions2
+        if self.autocorr:
+            positions2 = [None]*3
+
         if self.mode == 'theta':
             if self.periodic:
                 raise PairCounterError('Corrfunc does not provide periodic boundary conditions for the angular correlation function')
             result = mocks.DDtheta_mocks(self.autocorr, nthreads=self.nthreads, binfile=self.edges[0],
-                                         RA1=self.positions1[0], DEC1=self.positions1[1], RA2=self.positions2[0], DEC2=self.positions2[1],
+                                         RA1=self.positions1[0], DEC1=self.positions1[1], RA2=positions2[0], DEC2=positions2[1],
                                          output_thetaavg=self.output_sepavg, fast_acos=self.attrs.get('fast_acos',False), **kwargs)
             key_sep = 'thetaavg'
 
         elif self.mode == 's':
             result = theory.DD(self.autocorr, nthreads=self.nthreads, binfile=self.edges[0],
                                X1=self.positions1[0], Y1=self.positions1[1], Z1=self.positions1[2],
-                               X2=self.positions2[0], Y2=self.positions2[1], Z2=self.positions2[2],
+                               X2=positions2[0], Y2=positions2[1], Z2=positions2[2],
                                periodic=self.periodic, boxsize=boxsize(),
                                output_ravg=self.output_sepavg, **kwargs)
 
@@ -140,35 +144,49 @@ class CorrfuncTwoPointCounterEngine(BaseTwoPointCounterEngine):
             key_sep = 'rpavg'
             if self.los in ['x','y','z']:
                 positions1, positions2 = rotated_positions()
-                result = theory.wp(self.autocorr, self.nthreads, self.edges[0],
-                                      self.positions1[0], self.positions1[1], self.positions1[2],
-                                      X2=self.positions2[0], Y2=self.positions2[1], Z2=self.positions2[2],
-                                      periodic=self.periodic, boxsize=boxsize(),
-                                      output_rpavg=self.output_sepavg, **kwargs)
+                result = theory.wp(self.autocorr, nthreads=self.nthreads, binfile=self.edges[0],
+                                   X1=positions1[0], Y1=positions1[1], Z1=positions1[2],
+                                   X2=positions2[0], Y2=positions2[1], Z2=positions2[2],
+                                   periodic=self.periodic, boxsize=boxsize(),
+                                   output_rpavg=self.output_sepavg, **kwargs)
             else:
                 check_los()
                 positions1, positions2 = sky_positions()
+                # \pi = \hat{\ell} \cdot (r_{1} - r_{2}) < r_{1} + r_{2}
                 if self.autocorr:
-                    pimax = positions1[0].max() - positions1[0].min()
+                    pimax = 2*positions1[0].max()
                 else:
-                    pimax = max(positions1[0].max(),positions2[0].max()) - min(positions1[0].min(),positions2[0].min())
+                    pimax = 2*max(positions1[0].max(),positions2[0].max())
                 result = mocks.DDrppi_mocks(self.autocorr, cosmology=1, nthreads=self.nthreads,
                                             pimax=pimax, binfile=self.edges[0],
                                             RA1=positions1[1], DEC1=positions1[2], CZ1=positions1[0],
                                             RA2=positions2[1], DEC2=positions2[2], CZ2=positions2[0],
                                             is_comoving_dist=True,
                                             output_rpavg=self.output_sepavg, **kwargs)
+
                 # sum over pi to keep only rp
                 result = {key:result[key] for key in ['npairs','weightavg',key_sep]}
+                result[key_sep].shape = result['weightavg'].shape = result['npairs'].shape = self.shape + (-1,)
                 npairs = result['npairs']
-                result['npairs'] = npairs*(result['weightavg'] if output_weightavg else 1)
-                result['weightavg'] = 1
-                result[key_sep].shape = npairs.shape = result['npairs'].shape = self.shape + (-1,)
+                result['weightavg'][npairs == 0] = 0.
                 result['npairs'] = np.sum(result['npairs'],axis=-1)
-                result[key_sep] = np.sum(result[key_sep]*npairs,axis=-1)/np.sum(npairs,axis=-1)
+                sumnpairs = np.maximum(result['npairs'], 1e-9) # just to avoid division by 0
+                result[key_sep] = np.sum(result[key_sep]*npairs,axis=-1)/sumnpairs
+                result['weightavg'] = np.sum(result['weightavg']*npairs,axis=-1)/sumnpairs
+
         else:
             raise PairCounterError('Corrfunc does not support mode {}'.format(self.mode))
 
-        self.wcounts = result['npairs']*(result['weightavg'] if output_weightavg else 1)
+        self.npairs = result['npairs']
+        self.wcounts = self.npairs*(result['weightavg'] if output_weightavg else 1)
+        self.wcounts[self.npairs == 0] = 0.
         self.sep = result[key_sep]
-        self.sep.shape = self.wcounts.shape = self.shape
+        self.sep.shape = self.wcounts.shape = self.npairs.shape = self.shape
+        #self.wcounts.shape = self.shape[:1] + (1400,)
+        #self.wcounts = self.wcounts.sum(axis=-1)
+
+        if self.with_mpi:
+            self.wcounts = self.mpicomm.allreduce(self.wcounts)
+            npairs = np.maximum(self.mpicomm.allreduce(self.npairs), 1e-9) # just to avoid division by 0
+            self.sep = self.mpicomm.allreduce(self.sep * self.npairs)/npairs
+            self.npairs = npairs
