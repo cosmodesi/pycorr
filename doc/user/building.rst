@@ -9,13 +9,29 @@ Strict requirements are:
 
   - numpy
   - scipy
+
+To use Corrfunc as pair-counting engine (only engine linked so far):
+
   - Corrfunc
+
+To perform MPI parallelization:
+
+  - mpi4py
+  - pmesh
 
 pip
 ---
 To install **pycorr**, simply run::
 
   python -m pip install git+https://github.com/adematti/pycorr
+
+To also install Corrfunc::
+
+  python -m pip install git+https://github.com/adematti/pycorr#egg=pycorr[corrfunc]
+
+To perform MPI parallelization::
+
+  python -m pip install git+https://github.com/adematti/pycorr#egg=pycorr[mpi]
 
 git
 ---

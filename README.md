@@ -8,7 +8,15 @@ Strict requirements are:
 
   - numpy
   - scipy
+
+To use Corrfunc as pair-counting engine (only engine linked so far):
+
   - Corrfunc
+
+To perform MPI parallelization:
+
+  - mpi4py
+  - pmesh
 
 ## Installation
 
