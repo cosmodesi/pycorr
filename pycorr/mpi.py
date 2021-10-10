@@ -21,12 +21,12 @@ def scatter_array(data, counts=None, root=0, mpicomm=None):
     ----------
     data : array_like or None
         on `root`, this gives the data to split and scatter
-    mpicomm : MPI communicator
-        the MPI communicator
-    root : int
-        the rank number that initially has the data
     counts : list of int
         list of the lengths of data to send to each rank
+    root : int
+        the rank number that initially has the data
+    mpicomm : MPI communicator
+        the MPI communicator
 
     Returns
     -------
@@ -121,11 +121,11 @@ def gather_array(data, root=0, mpicomm=None):
     ----------
     data : array_like
         the data on each rank to gather
-    mpicomm : MPI communicator
-        the MPI communicator
     root : int, or Ellipsis
         the rank number to gather the data to. If root is Ellipsis or None,
         broadcast the result to all ranks.
+    mpicomm : MPI communicator
+        the MPI communicator
 
     Returns
     -------
@@ -251,10 +251,10 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
     Parameters
     ----------
     mpicomm : MPI communicator
-        the MPI communicator
+        The MPI communicator.
 
     smoothing : float
-        the maximum Cartesian separation implied by the user's binning
+        The maximum Cartesian separation implied by the user's binning.
 
     positions1 : list, array
         Positions in the first catalog. Typically of shape (3, N) or (2, N);
@@ -268,7 +268,15 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
         Optionally, weights of the first catalog.
 
     weights2 : array, default=None
-        Optionally, weights in the second catalog
+        Optionally, weights in the second catalog.
+
+    boxsize : array, default=None
+        For periodic wrapping, the 3 side-lengths of the periodic cube.
+
+    domain_factor : int, default=None
+        Multiply the size of the MPI mesh by this factor.
+        If ``None``, defaults to 2 in case ``boxsize`` is ``None``,
+        else (periodic wrapping) 1.
 
     Returns
     -------
@@ -304,6 +312,7 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
     ngrid = split_size_3d(mpicomm.size)
     if domain_factor is None:
         domain_factor = 1 if periodic else 2
+    ngrid *= domain_factor
 
     size1 = mpicomm.allreduce(len(positions1[0]))
 
@@ -354,7 +363,7 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
         posmax += 1e-9
 
     # domain decomposition
-    grid = [np.linspace(pmin, pmax, domain_factor*grid + 1, endpoint=True) for pmin, pmax, grid in zip(posmin, posmax, ngrid)]
+    grid = [np.linspace(pmin, pmax, grid + 1, endpoint=True) for pmin, pmax, grid in zip(posmin, posmax, ngrid)]
     domain = GridND(grid, comm=mpicomm, periodic=periodic) # raises VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences
 
     if not periodic:

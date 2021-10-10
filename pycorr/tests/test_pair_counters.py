@@ -165,7 +165,7 @@ def test(mode='s'):
     if mode == 'smu':
         edges = (edges, np.linspace(0,1,100))
     elif mode == 'rppi':
-        edges = (edges, np.linspace(0,1400,1401))
+        edges = (edges, np.linspace(0,140,141))
     elif mode == 'theta':
         edges = np.linspace(1e-5,10,10) # below 1e-5, self pairs are counted by Corrfunc
     for engine in list_engine:

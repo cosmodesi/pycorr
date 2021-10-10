@@ -254,6 +254,103 @@ def rebin(ndarray, new_shape, statistic=np.sum):
     return ndarray
 
 
+# create a lookup table for set bits per byte
+_popcount_lookuptable = np.array([bin(i).count('1') for i in range(256)], dtype=np.int32)
+
+
+def popcount(array):
+    """
+    Return number of 1 bits in each value of input array.
+    Inspired from https://github.com/numpy/numpy/issues/16325.
+    """
+    #if not np.issubdtype(array.dtype, np.unsignedinteger):
+    #    raise ValueError('input array must be an unsigned int dtype')
+    return _popcount_lookuptable[array.view((np.uint8, (array.dtype.itemsize,)))].sum(axis=-1)
+
+
+def pack_bitarrays(*arrays, dtype=np.uint64):
+    """
+    Pack bit arrays into a list of integer arrays.
+    Inverse operation is :func:`unpack_bitarray`, i.e.
+    ``unpack_bitarrays(pack_bitarrays(*arrays, dtype=dtype))``is ``arrays``,
+    whatever integer ``dtype`` is.
+
+    Parameters
+    ----------
+    arrays : bool arrays
+        Arrays of integers or booleans whose elements should be packed to bits.
+
+    dtype : string, dtype
+        Type of output integer arrays.
+
+    Returns
+    -------
+    arrays : list
+        List of integer arrays of type ``dtype``, representing input boolean arrays.
+    """
+    return reformat_bitarrays(*np.packbits(arrays, axis=0, bitorder='little'), dtype=dtype)
+
+
+def unpack_bitarrays(*arrays):
+    """
+    Unpack integer arrays into a bit array.
+    Inverse operation is :func:`pack_bitarray`, i.e.
+    ``pack_bitarrays(unpack_bitarrays(*arrays), dtype=arrays.dtype)``is ``arrays``.
+
+    Parameters
+    ----------
+    arrays : integer arrays
+        Arrays of integers whose elements should be unpacked to bits.
+
+    Returns
+    -------
+    arrays : list
+        List of boolean arrays of type ``np.uint8``, representing input integer arrays.
+    """
+    arrayofbytes = reformat_bitarrays(*arrays, dtype=np.uint8)
+    return np.unpackbits(arrayofbytes, axis=0, count=None, bitorder='little')
+
+
+def reformat_bitarrays(*arrays, dtype=np.uint64):
+    """
+    Reformat input integer arrays into list of arrays of type ``dtype``.
+    If, e.g. 6 arrays of type ``np.uint8`` are input, and ``dtype`` is ``np.uint32``,
+    a list of 2 arrays is returned.
+
+    Parameters
+    ----------
+    arrays : integer arrays
+        Arrays of integers to reformat.
+
+    dtype : string, dtype
+        Type of output integer arrays.
+
+    Returns
+    -------
+    arrays : list
+        List of integer arrays of type ``dtype``, representing input integer arrays.
+    """
+    dtype = np.dtype(dtype)
+    toret = []
+    nremainingbytes = 0
+    for array in arrays:
+        # first bits are in the first byte array
+        arrayofbytes = array.view((np.uint8, (array.dtype.itemsize,)))
+        arrayofbytes = np.moveaxis(arrayofbytes, -1, 0)
+        for arrayofbyte in arrayofbytes:
+            if nremainingbytes == 0:
+                toret.append([])
+                nremainingbytes = dtype.itemsize
+            newarray = toret[-1]
+            nremainingbytes -= 1
+            newarray.append(arrayofbyte[...,None])
+    for iarray,array in enumerate(toret):
+        npad = dtype.itemsize - len(array)
+        if npad: array += [np.zeros_like(array[0])]*npad
+        toret[iarray] = np.squeeze(np.concatenate(array,axis=-1).view(dtype), axis=-1)
+    return toret
+
+
 class DistanceToRedshift(object):
 
     """Class that holds a conversion distance -> redshift."""
