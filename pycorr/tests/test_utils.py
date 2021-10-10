@@ -108,9 +108,40 @@ def test_pack_unpack():
     """
 
 
+def get_bitweight_normalization(weights1, weights2=None):
+    w1 = np.bincount(utils.popcount(*bitweights1) + 1, weights=indweights1, minlength=nrealizations+1)
+    c1 = np.flatnonzero(w1)
+    auto = weights2 is None
+    if auto:
+        w2 = w1
+        c2 = c1
+    else:
+        w2 = np.bincount(utils.popcount(*bitweights2) + 1, weights=indweights2, minlength=nrealizations+1)
+        c2 = np.flatnonzero(w2)
+    joint = utils.joint_occurences(nrealizations, max_occurences=max(c1.max(), c2.max()))
+    sumw_cross = 0
+    for c1_, w1_ in zip(c1, w1):
+        for c2_, w2_ in zip(c2, w2):
+            sumw_cross += w1_ * w2_ * (joint[c1_][c2_] if c2_ <= c1_ else joint[c2_][c1_])
+    sumw_auto = 0
+    if not auto:
+        w1sq = np.bincount(utils.popcount(*bitweights1), weights=indweights1**2, minlength=nrealizations+1)
+        for c1_, w1sq_ in zip(c1, w1sq):
+            sumw_auto += joint[c1_, c1_] * w1sq_
+    return sumw_cross - sumw_auto
+
+
+
+def test_normalization():
+    #print(pascals_triangle(4))
+    #pascals_triangle(512)
+    utils.joint_occurences(nrealizations=512)
+
+
 if __name__ == '__main__':
 
      test_packbit()
      test_popcount()
      test_reformatbit()
      test_pack_unpack()
+     test_normalization()

@@ -258,14 +258,16 @@ def rebin(ndarray, new_shape, statistic=np.sum):
 _popcount_lookuptable = np.array([bin(i).count('1') for i in range(256)], dtype=np.int32)
 
 
-def popcount(array):
+def popcount(*arrays):
     """
     Return number of 1 bits in each value of input array.
     Inspired from https://github.com/numpy/numpy/issues/16325.
     """
     #if not np.issubdtype(array.dtype, np.unsignedinteger):
     #    raise ValueError('input array must be an unsigned int dtype')
-    return _popcount_lookuptable[array.view((np.uint8, (array.dtype.itemsize,)))].sum(axis=-1)
+    toret = _popcount_lookuptable[arrays[0].view((np.uint8, (arrays[0].dtype.itemsize,)))].sum(axis=-1)
+    for array in arrays[1:]: toret += popcount(array)
+    return toret
 
 
 def pack_bitarrays(*arrays, dtype=np.uint64):
@@ -348,6 +350,79 @@ def reformat_bitarrays(*arrays, dtype=np.uint64):
         npad = dtype.itemsize - len(array)
         if npad: array += [np.zeros_like(array[0])]*npad
         toret[iarray] = np.squeeze(np.concatenate(array,axis=-1).view(dtype), axis=-1)
+    return toret
+
+
+def pascal_triangle(n_rows):
+    """
+    Compute Pascal triangle.
+    Taken from https://stackoverflow.com/questions/24093387/pascals-triangle-for-python.
+
+    Parameters
+    ----------
+    n_rows : int
+        Number of rows in the Pascal triangle, i.e. maximum number of elements :math:`n`.
+
+    Returns
+    -------
+    triangle : list
+        List of list of binomial coefficients.
+        The binomial coefficient :math:`(k, n)` is ``triangle[n][k]``.
+    """
+    toret = [[1]] # a container to collect the rows
+    for _ in range(1, n_rows+1):
+        row = [1]
+        last_row = toret[-1] # reference the previous row
+        # this is the complicated part, it relies on the fact that zip
+        # stops at the shortest iterable, so for the second row, we have
+        # nothing in this list comprension, but the third row sums 1 and 1
+        # and the fourth row sums in pairs. It's a sliding window.
+        row += [sum(pair) for pair in zip(last_row, last_row[1:])]
+        # finally append the final 1 to the outside
+        row.append(1)
+        toret.append(row) # add the row to the results.
+    return toret
+
+
+def joint_occurences(nrealizations=128, max_occurences=None, case='zerotruncated'):
+    """
+    Return expected value of inverse counts, i.e. eq. 21 of arXiv:1912.08803.
+
+    Parameters
+    ----------
+    nrealizations : int
+        Number of realizations (including current realization).
+
+    max_occurences : int, default=None
+        Maximum number of occurences, less than or equal to ``nrealizations``.
+        If ``None``, defaults to ``nrealizations``.
+
+    case : string, default='zerotruncated'
+        Refers to the "zero truncated estimator" of arXiv:1912.08803:
+        current realization included in bitwise weights and ``nrealizations``.
+
+    Returns
+    -------
+    occurences : list
+        Expected value of inverse counts.
+    """
+    # gk(c1, c2)
+    offset = {'zerotruncated':1, 'all':0}[case]
+    if max_occurences is None: max_occurences = nrealizations
+
+    binomial_coeffs = pascal_triangle(nrealizations)
+
+    def prob(c12, c1, c2):
+        return binomial_coeffs[c1 - offset][c12 - offset] * binomial_coeffs[nrealizations - c1][c2 - c12] / binomial_coeffs[nrealizations - offset][c2 - offset]
+
+    toret = [[0]] if offset else []
+    for c1 in range(offset, max_occurences + 1):
+        row = [[0]] if offset else []
+        for c2 in range(offset, c1 + 1):
+            # we have c12 <= c1, c2 and nrealizations >= c1 + c2 + c12
+            row.append(sum(nrealizations / c12 * prob(c12, c1, c2) for c12 in range(max(offset, c1 + c2 - nrealizations), min(c1, c2) + 1)))
+        toret.append(row)
+
     return toret
 
 
