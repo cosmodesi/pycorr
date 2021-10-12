@@ -59,10 +59,11 @@ class BaseTwoPointCounter(BaseClass):
         positions2 : list, array, default=None
             Optionally, for cross-pair counts, positions in the second catalog. See ``positions1``.
 
-        weights1 : array, default=None
+        weights1 : array, list, default=None
             Weights of the first catalog. Not required if ``weight_type`` is either ``None`` or "auto".
+            See ``weight_type``.
 
-        weights2 : array, default=None
+        weights2 : array, list, default=None
             Optionally, for cross-pair counts, weights in the second catalog. See ``weights1``.
 
         bin_type : string, default='auto'
@@ -87,15 +88,16 @@ class BaseTwoPointCounter(BaseClass):
             - "xyz": Cartesian positions
 
         weight_type : string, default='auto'
-            The type of weighting to apply. One of:
+            The type of weighting to apply with ``weights1`` and ``weights2``. One of:
 
             - ``None``: no weights are applied.
             - "product_individual": each pair is weighted by the product of weights :math:`w_{1} w_{2}`.
             - "inverse_bitwise": each pair is weighted by :math:`1/(1 + \mathrm{popcount}(w_{1} & w_{2}))`.
+               Multiple bitwise weights can be provided as a list.
                Individual weights can additionally be provided as float arrays, and angular upweights with ``twopoint_weights``.
             - "auto": automatically choose weighting based on input ``weights1`` and ``weights2``,
-               i.e. set to ``None`` when ``weights1`` and ``weights2`` are ``None``,
-               else ``product_individual``.
+               i.e. ``None`` when ``weights1`` and ``weights2`` are ``None``,
+               "inverse_bitwise" if list of weights contains integer weights, else "product_individual".
 
         nrealizations : int, default=None
             In case ``weight_type`` is "inverse_bitwise", the number of realizations,

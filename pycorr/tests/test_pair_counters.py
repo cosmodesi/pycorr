@@ -155,6 +155,7 @@ def test_pair_counter(mode='s'):
     list_options = []
     if mode not in ['theta', 'rp']:
         list_options.append({'boxsize':boxsize})
+        list_options.append({'autocorr':True, 'boxsize':boxsize})
     list_options.append({'autocorr':True})
     list_options.append({'n_individual_weights':1, 'bin_type':'custom'})
     list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2})
@@ -198,7 +199,7 @@ def test_pair_counter(mode='s'):
 
             assert np.allclose(test.wcounts, ref)
             with tempfile.TemporaryDirectory() as tmp_dir:
-                fn = os.path.join(tmp_dir,'tmp.npy')
+                fn = os.path.join(tmp_dir, 'tmp.npy')
                 test.save(fn)
                 test = BaseTwoPointCounter.load(fn)
                 assert np.allclose(test.wcounts, ref)
@@ -229,7 +230,7 @@ def test_analytic_pair_counter(mode='s'):
         ratio = np.absolute(test.wcounts/ref - 1)
         assert np.all(ratio < 0.1)
         with tempfile.TemporaryDirectory() as tmp_dir:
-            fn = os.path.join(tmp_dir,'tmp.npy')
+            fn = os.path.join(tmp_dir, 'tmp.npy')
             test.save(fn)
             test = BaseTwoPointCounter.load(fn)
             ratio = np.absolute(test.wcounts/ref - 1)
@@ -264,7 +265,7 @@ if __name__ == '__main__':
 
     for mode in ['theta','s','smu','rppi','rp']:
         test_pair_counter(mode=mode)
-    
+
     for mode in ['s','smu','rppi']:
         test_analytic_pair_counter(mode=mode)
 

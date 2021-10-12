@@ -193,13 +193,13 @@ def project_to_multipoles(estimator, ells=(0,2,4)):
     if np.ndim(ells) == 0:
         ells = (ells,)
     ells = tuple(ells)
-    sep = np.mean(self.sep, axis=-1)
+    sep = np.mean(estimator.sep, axis=-1)
     toret = []
     for ill,ell in enumerate(ells):
-        dmu = np.diff(self.edges[1], axis=-1)
-        poly = special.legendre(ell)(edges)
+        dmu = np.diff(estimator.edges[1], axis=-1)
+        poly = special.legendre(ell)(estimator.edges[1])
         legendre = (2*ell + 1) * (poly[1:] + poly[:-1])/2. * dmu
-        toret.append(np.sum(self.corr*legendre, axis=-1)/np.sum(dmu))
+        toret.append(np.sum(estimator.corr*legendre, axis=-1)/np.sum(dmu))
     return sep, toret
 
 

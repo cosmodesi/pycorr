@@ -59,10 +59,11 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                     toret[2] = -positions[1]
                 return toret
 
-            r1 = rotate(self.positions1)
+            positions1 = rotate(self.positions1)
+            positions2 = [None]*3
             if not self.autocorr:
-                r2 = rotate(self.positions2)
-            return r1, r2
+                positions2 = rotate(self.positions2)
+            return positions1, positions2
 
         def sky_positions():
             positions1 = utils.cartesian_to_sky(self.positions1)

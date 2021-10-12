@@ -97,16 +97,16 @@ def test_pack_unpack():
         for test_, ref_ in zip(test, bits):
             assert test_.shape == ref_.shape
             assert np.all(test_ == ref_)
+
     """
     size = 8
     bits = [rng.randint(0, 2, size) for i in range(64)]
     ref = pack_bitweights(np.array(bits).T)
     test = utils.pack_bitarrays(*bits, dtype=np.uint64)
-    #print(ref)
-    #print(ref.view(dtype=np.uint64))
-    #print(test)
+    print(ref)
+    print(ref.view(dtype=np.uint64))
+    print(test)
     """
-
 
 def get_bitweight_normalization(weights1, weights2=None):
     w1 = np.bincount(utils.popcount(*bitweights1) + 1, weights=indweights1, minlength=nrealizations+1)

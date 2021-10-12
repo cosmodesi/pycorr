@@ -52,6 +52,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
 
     data_weights1 : array, default=None
         Weights of the first catalog. Not required if ``weight_type`` is either ``None`` or "auto".
+        See ``weight_type`` in :class:`BaseTwoPointCounter`.
 
     data_weights2 : array, default=None
         Optionally, for cross-pair counts, weights in the second catalog. See ``data_weights1``.
@@ -109,21 +110,15 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     Estimator = get_estimator(estimator, has_cross=has_randoms)
     if log: logger.info('Using estimator {}.'.format(Estimator.__name__))
 
-    autocorr = data_positions2 is None or (data_positions2 is data_positions1 and data_weights2 is data_weights1)
-
-    if autocorr:
-        data_positions2 = data_positions1
-        data_weights2 = data_weights1
-        randoms_positions2 = randoms_positions1
-        randoms_weights2 = randoms_weights1
+    autocorr = data_positions2 is None
 
     positions = {'D1':data_positions1, 'D2':data_positions2, 'R1':randoms_positions1, 'R2':randoms_positions2}
     weights = {'D1':data_weights1, 'D2':data_weights2, 'R1':randoms_weights1, 'R2':randoms_weights2}
     twopoint_weights = {'D1D2':D1D2_twopoint_weights, 'D1R2':D1R2_twopoint_weights, 'D2R1':D2R1_twopoint_weights, 'R1R2':R1R2_twopoint_weights}
-    precomputed = {'R1R2': R1R2}
+    precomputed = {'R1R2':R1R2}
 
     pairs = {}
-    for label1,label2 in Estimator.requires(autocorr=True):
+    for label1,label2 in Estimator.requires(autocorr=(not has_randoms) or randoms_positions2 is None):
         label12 = label1 + label2
         pre = precomputed.get(label12, None)
         if pre is not None:
@@ -132,11 +127,13 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
             continue
         if label12 == 'R1R2' and not has_randoms:
             if log: logger.info('Analytically computing pair counts {}.'.format(label12))
-            pairs[label12] = AnalyticTwoPointCounter(mode, edges, boxsize,
-                                                           n1=positions[label1][0].size, positions2=positions[label2][0].size)
+            size2 = size1 = len(positions[label1.replace('R','D')][0])
+            if not autocorr:
+                size2 = len(positions[label2.replace('R','D')][0])
+            pairs[label12] = AnalyticTwoPointCounter(mode, edges, boxsize, size1=size1, size2=size2)
         else:
             if log: logger.info('Computing pair counts {}.'.format(label12))
             pairs[label12] = TwoPointCounter(mode, edges, positions[label1], positions2=positions[label2],
                                                    weights1=weights[label1], weights2=weights[label2], twopoint_weights=twopoint_weights[label12],
-                                                   mpicomm=mpicomm, **kwargs)
+                                                   boxsize=boxsize, mpicomm=mpicomm, **kwargs)
     return Estimator(**pairs)
