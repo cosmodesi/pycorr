@@ -3,18 +3,18 @@
 import numpy as np
 from Corrfunc import theory, mocks
 
-from .pair_counter import BaseTwoPointCounterEngine, PairCounterError
+from .pair_counter import BaseTwoPointCounter, PairCounterError
 from . import utils
 
 
-class CorrfuncTwoPointCounterEngine(BaseTwoPointCounterEngine):
+class CorrfuncTwoPointCounter(BaseTwoPointCounter):
 
-    """Extend :class:`BaseTwoPointCounterEngine` for Corrfunc pair counting code."""
+    """Extend :class:`BaseTwoPointCounter` for Corrfunc pair counting code."""
 
     def run(self):
         """Compute the pair counts and set :attr:`wcounts` and :attr:`sep`."""
 
-        output_weightavg = self.weight_type is not None
+        output_weightavg = self.weights1 is not None
 
         def boxsize():
             if self.periodic:
@@ -59,9 +59,9 @@ class CorrfuncTwoPointCounterEngine(BaseTwoPointCounterEngine):
                     toret[2] = -positions[1]
                 return toret
 
-            r1 = rotate(positions1)
+            r1 = rotate(self.positions1)
             if not self.autocorr:
-                r2 = rotate(positions2)
+                r2 = rotate(self.positions2)
             return r1, r2
 
         def sky_positions():
@@ -71,9 +71,32 @@ class CorrfuncTwoPointCounterEngine(BaseTwoPointCounterEngine):
                 positions2 = utils.cartesian_to_sky(self.positions2)
             return positions1, positions2
 
+        weight_type = None
+        weights1, weights2 = self.weights1, self.weights2
+        if self.n_bitwise_weights:
+            weight_type = 'inverse_bitwise'
+            dtype = {4:np.int32, 8:np.int64}[self.dtype.itemsize]
 
-        kwargs = {'weights1': self.weights1, 'weights2': self.weights2,
-                  'bin_type':self.bin_type, 'weight_type':self.weight_type}
+            def reformat_bitweights(weights):
+                return utils.reformat_bitarrays(*weights[:self.n_bitwise_weights], dtype=dtype) + weights[self.n_bitwise_weights:]
+
+            weights2 = weights1 = reformat_bitweights(self.weights1)
+            if not self.autocorr:
+                weights2 = reformat_bitweights(self.weights2)
+        elif self.weights1 is not None:
+            weight_type = 'pair_product'
+
+        pair_weights, sep_pair_weights = None, None
+        if self.twopoint_weights is not None:
+            weight_type = 'inverse_bitwise'
+            pair_weights = self.twopoint_weights.weight
+            sep_pair_weights = self.twopoint_weights.sep
+
+        kwargs = {'weights1': weights1, 'weights2': weights2,
+                  'bin_type': self.bin_type, 'weight_type': weight_type,
+                  'pair_weights': pair_weights, 'sep_pair_weights':sep_pair_weights,
+                  'verbose': False,
+                  'isa': 'fallback'} # to be set to 'fastest' when bitwise weights included in all kernels
 
         positions2 = self.positions2
         if self.autocorr:
@@ -143,20 +166,31 @@ class CorrfuncTwoPointCounterEngine(BaseTwoPointCounterEngine):
         elif self.mode == 'rp':
             key_sep = 'rpavg'
             if self.los in ['x','y','z']:
+                raise PairCounterError('Corrfunc does not provide (cross-) xi(rp) for periodic boundary conditions')
                 positions1, positions2 = rotated_positions()
-                result = theory.wp(self.autocorr, nthreads=self.nthreads, binfile=self.edges[0],
-                                   X1=positions1[0], Y1=positions1[1], Z1=positions1[2],
-                                   X2=positions2[0], Y2=positions2[1], Z2=positions2[2],
-                                   periodic=self.periodic, boxsize=boxsize(),
-                                   output_rpavg=self.output_sepavg, **kwargs)
+                boxsize = boxsize()
+                pimax = boxsize + 1. # los axis is z
+                result = theory.DDrppi(self.autocorr, nthreads=self.nthreads,
+                                       binfile=self.edges[0], pimax=pimax,
+                                       X1=positions1[0], Y1=positions1[1], Z1=positions1[2],
+                                       X2=positions2[0], Y2=positions2[1], Z2=positions2[2],
+                                       periodic=self.periodic, boxsize=boxsize,
+                                       output_rpavg=self.output_sepavg, **kwargs)
             else:
                 check_los()
                 positions1, positions2 = sky_positions()
                 # \pi = \hat{\ell} \cdot (r_{1} - r_{2}) < r_{1} + r_{2}
+                #if self.autocorr:
+                #    pimax = 2*positions1[0].max()
+                #else:
+                #    pimax = 2*max(positions1[0].max(),positions2[0].max()
+                # local calculation, since integrated over pi
+                # \pi = \hat{\ell} \cdot (r_{1} - r_{2}) < | r_{1} - r_{2} | < boxsize
                 if self.autocorr:
-                    pimax = 2*positions1[0].max()
+                    boxsize = [p.max() - p.min() for p in self.positions1]
                 else:
-                    pimax = 2*max(positions1[0].max(),positions2[0].max())
+                    boxsize = [max(p1.max(), p2.max()) - min(p1.min(), p2.min()) for p1, p2 in zip(self.positions1, self.positions2)]
+                pimax = sum(p**2 for p in boxsize)**0.5
                 result = mocks.DDrppi_mocks(self.autocorr, cosmology=1, nthreads=self.nthreads,
                                             pimax=pimax, binfile=self.edges[0],
                                             RA1=positions1[1], DEC1=positions1[2], CZ1=positions1[0],
@@ -164,21 +198,22 @@ class CorrfuncTwoPointCounterEngine(BaseTwoPointCounterEngine):
                                             is_comoving_dist=True,
                                             output_rpavg=self.output_sepavg, **kwargs)
 
-                # sum over pi to keep only rp
-                result = {key:result[key] for key in ['npairs','weightavg',key_sep]}
-                result[key_sep].shape = result['weightavg'].shape = result['npairs'].shape = self.shape + (-1,)
-                npairs = result['npairs']
-                result['weightavg'][npairs == 0] = 0.
-                result['npairs'] = np.sum(result['npairs'],axis=-1)
-                sumnpairs = np.maximum(result['npairs'], 1e-9) # just to avoid division by 0
-                result[key_sep] = np.sum(result[key_sep]*npairs,axis=-1)/sumnpairs
-                result['weightavg'] = np.sum(result['weightavg']*npairs,axis=-1)/sumnpairs
+            # sum over pi to keep only rp
+            result = {key:result[key] for key in ['npairs','weightavg',key_sep]}
+            result[key_sep].shape = result['weightavg'].shape = result['npairs'].shape = self.shape + (-1,)
+            npairs = result['npairs']
+            result['weightavg'][npairs == 0] = 0.
+            result['npairs'] = np.sum(result['npairs'], axis=-1)
+            sumnpairs = np.maximum(result['npairs'], 1e-9) # just to avoid division by 0
+            result[key_sep] = np.sum(result[key_sep]*npairs, axis=-1)/sumnpairs
+            result['weightavg'] = np.sum(result['weightavg']*npairs, axis=-1)/sumnpairs
 
         else:
             raise PairCounterError('Corrfunc does not support mode {}'.format(self.mode))
 
         self.npairs = result['npairs']
-        self.wcounts = self.npairs*(result['weightavg'] if output_weightavg else 1)
+        self.wcounts = self.npairs*(result['weightavg'] if output_weightavg else 1)\
+                       *(self.nrealizations + 1 if self.n_bitwise_weights else 1)
         self.wcounts[self.npairs == 0] = 0.
         self.sep = result[key_sep]
         self.sep.shape = self.wcounts.shape = self.npairs.shape = self.shape

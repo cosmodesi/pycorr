@@ -1,7 +1,7 @@
 import numpy as np
 
 from mpi4py import MPI
-from pgrid.domain import GridND
+from pmesh.domain import GridND
 
 from . import utils
 
@@ -246,7 +246,7 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
     """
     Adapted from https://github.com/bccp/nbodykit/blob/master/nbodykit/algorithms/pair_counters/domain.py.
     Decompose positions and weights on a grid of MPI processes.
-    Requires mpi4py and pgrid.
+    Requires mpi4py and pmesh.
 
     Parameters
     ----------
@@ -264,10 +264,10 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
     positions2 : list, array, default=None
         Optionally, for cross-pair counts, positions in the second catalog. See ``positions1``.
 
-    weights1 : array, default=None
+    weights1 : list, array, default=None
         Optionally, weights of the first catalog.
 
-    weights2 : array, default=None
+    weights2 : list, array, default=None
         Optionally, weights in the second catalog.
 
     boxsize : array, default=None
@@ -373,19 +373,23 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
     # exchange first particles
     layout = domain.decompose(cpositions1, smoothing=0)
     positions1 = layout.exchange(*positions1, pack=False) # exchange takes a list of arrays
-    if weights1 is not None: weights1 = layout.exchange(weights1, pack=False)
+    if weights1 is not None: weights1 = layout.exchange(*weights1, pack=False)
 
     boxsize = posmax - posmin
 
     # exchange second particles
     if smoothing > boxsize.max() * 0.25:
-        positions2 = [gather_array(pos, root=Ellipsis, mpicomm=mpicomm) for pos in positions2]
-        if weights2 is not None: weights2 = mpi.gather_array(weights2, root=Ellipsis, mpicomm=mpicomm)
+        positions2 = [gather_array(p, root=Ellipsis, mpicomm=mpicomm) for p in positions2]
+        if weights2 is not None: weights2 = [gather_array(w, root=Ellipsis, mpicomm=mpicomm) for w in weights2]
     else:
         layout = domain.decompose(cpositions2, smoothing=smoothing)
         positions2 = layout.exchange(*positions2, pack=False)
-        if weights2 is not None: weights2 = layout.exchange(weights2, pack=False)
+        if weights2 is not None: weights2 = layout.exchange(*weights2, pack=False)
 
     assert mpicomm.allreduce(len(positions1[0])) == size1, 'some particles disappeared...'
 
+    positions1 = list(positions1) # exchange returns tuple
+    positions2 = list(positions2)
+    if weights1 is not None: weights1 = list(weights1)
+    if weights2 is not None: weights2 = list(weights2)
     return (positions1, weights1), (positions2, weights2)

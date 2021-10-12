@@ -1,6 +1,8 @@
+import os
+import tempfile
 import numpy as np
 
-from pycorr import TwoPointCorrelationFunction
+from pycorr import TwoPointCorrelationFunction, setup_logging
 
 
 def generate_catalogs(size=100, boxsize=(1000,)*3, n_individual_weights=1, n_bitwise_weights=0, seed=42):
@@ -14,36 +16,57 @@ def generate_catalogs(size=100, boxsize=(1000,)*3, n_individual_weights=1, n_bit
     return toret
 
 
-def test(mode='s'):
+def test_estimator(mode='s'):
     list_engine = ['corrfunc']
-    list_options = []
-    list_options.append({'autocorr':True,'weight_type':None})
-    list_options.append({'weight_type':'pair_product'})
-    #list_options.append({'weight_type':'inverse_bitwise','n_bitwise_weights':2})
-    edges = np.linspace(1e-9,100,10)
+    edges = np.linspace(1,100,10)
+    size = 100
     boxsize = (1000,)*3
+    list_options = []
+    if mode not in ['theta', 'rp']:
+        list_options.append({'estimator':'natural','boxsize':boxsize})
+    list_options.append({'estimator':'weight'})
+    list_options.append({'autocorr':True})
+    list_options.append({'n_individual_weights':1})
+    if mode not in ['theta', 'rp']:
+        list_options.append({'estimator':'natural','boxsize':boxsize})
+
+    #list_options.append({'weight_type':'inverse_bitwise','n_bitwise_weights':2})
+    edges = np.linspace(1e-9,100,11)
     if mode == 'smu':
-        edges = (edges, np.linspace(0,1,100))
+        edges = (edges, np.linspace(0,1,101))
     elif mode == 'rppi':
         edges = (edges, np.linspace(0,100,101))
     elif mode == 'theta':
-        edges = np.linspace(1e-5,10,10) # below 1e-5, self pairs are counted by Corrfunc
+        edges = np.linspace(1e-5,10,11) # below 1e-5, self pairs are counted by Corrfunc
     for engine in list_engine:
         for options in list_options:
             options = options.copy()
-            data1, randoms1 = generate_catalogs(boxsize=boxsize, n_individual_weights=options.get('n_individual_weights',1), n_bitwise_weights=options.get('n_bitwise_weights',0))
-            data2, randoms2 = generate_catalogs(boxsize=boxsize, n_individual_weights=options.get('n_individual_weights',1), n_bitwise_weights=options.get('n_bitwise_weights',0))
+            data1, randoms1 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=options.get('n_individual_weights',1), n_bitwise_weights=options.get('n_bitwise_weights',0))
+            data2, randoms2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=options.get('n_individual_weights',1), n_bitwise_weights=options.get('n_bitwise_weights',0))
             autocorr = options.pop('autocorr',False)
-            options['boxsize'] = boxsize if options.pop('periodic',False) else None
+            options.setdefault('boxsize', None)
             options['los'] = 'z' if options['boxsize'] is not None else 'midpoint'
-            test = TwoPointCorrelationFunction(mode=mode, edges=edges, engine=engine, data_positions1=data1[:3], data_positions2=None if autocorr else data2[:3],
-                                               data_weights1=data1[3], data_weights2=None if autocorr else data2[3],
-                                               randoms_positions1=randoms1[:3], randoms_positions2=None if autocorr else randoms2[:3],
-                                               randoms_weights1=randoms1[3], randoms_weights2=None if autocorr else randoms2[3],
-                                               position_type='xyz', **options)
+
+            def run(**kwargs):
+                return TwoPointCorrelationFunction(mode=mode, edges=edges, engine=engine, data_positions1=data1[:3], data_positions2=None if autocorr else data2[:3],
+                                                   data_weights1=data1[3:], data_weights2=None if autocorr else data2[3:],
+                                                   randoms_positions1=randoms1[:3], randoms_positions2=None if autocorr else randoms2[:3],
+                                                   randoms_weights1=randoms1[3:], randoms_weights2=None if autocorr else randoms2[3:],
+                                                   position_type='xyz', **options, **kwargs)
+
+            test = run()
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                fn = os.path.join(tmp_dir,'tmp.npy')
+                test.save(fn)
+                test2 = test.__class__.load(fn)
+                test2.rebin((2,5) if len(edges) == 2 else (2,))
+                test2 = run(R1R2=test.R1R2)
+                mask = np.isfinite(test2.corr) & np.isfinite(test.corr)
+                assert np.allclose(test2.corr[mask], test.corr[mask])
 
 
 if __name__ == '__main__':
 
+    setup_logging()
     for mode in ['theta','s','smu','rppi','rp']:
-        test(mode=mode)
+        test_estimator(mode=mode)

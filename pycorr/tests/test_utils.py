@@ -138,10 +138,19 @@ def test_normalization():
     utils.joint_occurences(nrealizations=512)
 
 
+def test_rebin():
+    array = np.ones((4,10), dtype='i4')
+    shape = (2, 2)
+    rarray = utils.rebin(array, shape, statistic=np.sum)
+    assert rarray.shape == shape
+    assert np.all(rarray == 10)
+
+
 if __name__ == '__main__':
 
-     test_packbit()
-     test_popcount()
-     test_reformatbit()
-     test_pack_unpack()
-     test_normalization()
+    test_packbit()
+    test_popcount()
+    test_reformatbit()
+    test_pack_unpack()
+    test_normalization()
+    test_rebin()

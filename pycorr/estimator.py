@@ -3,6 +3,7 @@
 import numpy as np
 from scipy import special
 
+from .pair_counter import BaseTwoPointCounter
 from .utils import BaseClass
 
 
@@ -28,16 +29,16 @@ class BaseTwoPointEstimator(BaseClass):
 
         Parameters
         ----------
-        D1D2 : BaseTwoPointCounterEngine, default=None
+        D1D2 : BaseTwoPointCounter, default=None
             D1D2 pair counts.
 
-        R1R2 : BaseTwoPointCounterEngine, default=None
+        R1R2 : BaseTwoPointCounter, default=None
             R1R2 pair counts.
 
-        D1R2 : BaseTwoPointCounterEngine, default=None
+        D1R2 : BaseTwoPointCounter, default=None
             D1R2 pair counts, e.g. for :class:`LandySzalayTwoPointEstimator`.
 
-        D2R1 : BaseTwoPointCounterEngine, default=None
+        D2R1 : BaseTwoPointCounter, default=None
             D2R1 pair counts, e.g. for :class:`LandySzalayTwoPointEstimator`,
             in case of cross-correlation.
         """
@@ -76,21 +77,21 @@ class BaseTwoPointEstimator(BaseClass):
         yield 'R1','R2'
 
     def rebin(self, *args, **kwargs):
-        """Rebin estimator, by rebinning all pair counts. See :meth:`BaseTwoPointCounterEngine.rebin`."""
+        """Rebin estimator, by rebinning all pair counts. See :meth:`BaseTwoPointCounter.rebin`."""
         for pair in self.requires(autocorr=self.autocorr):
-            getattr(self,pair).rebin(*args, **kwargs)
+            getattr(self, ''.join(pair)).rebin(*args, **kwargs)
         self.run()
 
     def __getstate__(self):
         state = {}
         for pair in self.requires(autocorr=self.autocorr):
-            state[pair] = getattr(self, pair).__getstate__()
+            state[''.join(pair)] = getattr(self, ''.join(pair)).__getstate__()
         return state
 
     def __setstate__(self, state):
         kwargs = {}
         for pair, pair_state in state.items():
-            kwargs[pair] = BaseTwoPointCounterEngine.from_state(pair_state)
+            kwargs[pair] = BaseTwoPointCounter.from_state(pair_state)
         self.__init__(**kwargs)
 
 
@@ -103,7 +104,7 @@ class NaturalTwoPointEstimator(BaseTwoPointEstimator):
         """
         nonzero = self.R1R2.wcounts != 0
         # init
-        corr = np.empty_like(self.R1R2.wcounts,dtype='f8')
+        corr = np.empty_like(self.R1R2.wcounts, dtype='f8')
         corr[...] = np.nan
 
         # the natural estimator
@@ -130,7 +131,7 @@ class LandySzalayTwoPointEstimator(BaseTwoPointEstimator):
         """
         nonzero = self.R1R2.wcounts != 0
         # init
-        corr = np.empty_like(self.R1R2.wcounts,dtype='f8')
+        corr = np.empty_like(self.R1R2.wcounts, dtype='f8')
         corr[...] = np.nan
 
         # the Landy - Szalay estimator
@@ -142,6 +143,31 @@ class LandySzalayTwoPointEstimator(BaseTwoPointEstimator):
         tmp = (DD - DR - RD)/RR + 1
         corr[nonzero] = tmp[...]
         self.corr = corr
+
+
+class WeightTwoPointEstimator(NaturalTwoPointEstimator):
+
+    def run(self):
+        """
+        Set weight estimate :attr:`corr` following :math:`RR/DD`,
+        typically used for angular weights, with RR parent sample and DD fibered sample.
+        """
+        nonzero = self.D1D2.wcounts != 0
+        # init
+        corr = np.ones_like(self.R1R2.wcounts, dtype='f8')
+
+        # the natural estimator
+        # (DD - RR) / RR
+        DD = self.D1D2.normalized_wcounts()[nonzero]
+        RR = self.R1R2.normalized_wcounts()[nonzero]
+        tmp = RR/DD
+        corr[nonzero] = tmp[...]
+        self.corr = corr
+
+    @property
+    def weight(self):
+        """Another name for :attr:`corr`."""
+        return self.corr
 
 
 def project_to_multipoles(estimator, ells=(0,2,4)):
@@ -205,6 +231,9 @@ def get_estimator(estimator='auto', has_cross=True):
 
         if estimator.lower() == 'natural':
             return NaturalTwoPointEstimator
+
+        if estimator.lower() == 'weight':
+            return WeightTwoPointEstimator
 
         if estimator.lower() == 'landyszalay':
             return LandySzalayTwoPointEstimator

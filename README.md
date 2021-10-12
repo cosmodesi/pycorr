@@ -11,7 +11,7 @@ Strict requirements are:
 
 To use Corrfunc as pair-counting engine (only engine linked so far):
 
-  - Corrfunc
+  - git+https://github.com/adematti/Corrfunc@pipweights
 
 To perform MPI parallelization:
 

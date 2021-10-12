@@ -95,12 +95,12 @@ class BaseMetaClass(type):
 
             @classmethod
             def logger(cls, *args, **kwargs):
-                getattr(cls.logger,level)(*args,**kwargs)
+                return getattr(cls.logger, level)(*args, **kwargs)
 
             return logger
 
         for level in ['debug','info','warning','error','critical']:
-            setattr(cls,'log_{}'.format(level),make_logger(level))
+            setattr(cls, 'log_{}'.format(level), make_logger(level))
 
 
 class BaseClass(object,metaclass=BaseMetaClass):
@@ -123,12 +123,12 @@ class BaseClass(object,metaclass=BaseMetaClass):
 
     @classmethod
     def from_state(cls, state):
-        new = cls.__new__(cls.__class__)
+        new = cls.__new__(cls)
         new.__setstate__(state)
         return new
 
     def save(self, filename):
-        cls.log_info('Saving {}.'.format(filename))
+        self.log_info('Saving {}.'.format(filename))
         np.save(filename, self.__getstate__())
 
     @classmethod
@@ -242,7 +242,7 @@ def rebin(ndarray, new_shape, statistic=np.sum):
     pairs = []
     for d, c in zip(new_shape, ndarray.shape):
         if c % d != 0:
-            raise ValueError('New shape should divide current shape, but {:d} % {:d}'.format(c, d))
+            raise ValueError('New shape should divide current shape, but {:d} % {:d} = {:d}'.format(c, d, c % d))
         pairs.append((d, c//d))
 
     flattened = [l for p in pairs for l in p]

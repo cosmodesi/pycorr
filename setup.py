@@ -9,6 +9,6 @@ setup(name='pycorr',
       license='GPL3',
       url='http://github.com/adematti/pycorr',
       install_requires=['numpy', 'scipy'],
-      extras_require={'mpi':['mpi4py','pmesh'],'corrfunc':['Corrfunc']},
+      extras_require={'mpi':['mpi4py','pmesh'],'corrfunc':['Corrfunc @ git+https://github.com/adematti/Corrfunc@pipweights']},
       packages=['pycorr']
 )
