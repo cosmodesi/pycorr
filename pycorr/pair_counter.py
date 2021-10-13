@@ -384,7 +384,7 @@ class BaseTwoPointCounter(BaseClass):
                 if n_bitwise_weights2 != self.n_bitwise_weights:
 
                     def iip(weights):
-                        return self.nrealizations/(1. + utils.popcount(*weights))
+                        return (1. + self.nrealizations)/(1. + utils.popcount(*weights))
 
                     if n_bitwise_weights2 == 0:
                         self.weights1 = [iip(self.weights1[:self.n_bitwise_weights])*self.weights1[-1]]
