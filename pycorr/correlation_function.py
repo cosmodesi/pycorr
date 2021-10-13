@@ -9,9 +9,9 @@ from .utils import BaseClass
 
 
 def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=None, randoms_positions1=None, randoms_positions2=None,
-                                data_weights1=None, data_weights2=None, randoms_weights1=None, randoms_weights2=None,
+                                data_weights1=None, data_weights2=None, randoms_weights1=None, randoms_weights2=None, R1R2=None, estimator='auto',
                                 D1D2_twopoint_weights=None, D1R2_twopoint_weights=None, D2R1_twopoint_weights=None, R1R2_twopoint_weights=None,
-                                R1R2=None, estimator='auto', boxsize=None, mpicomm=None, **kwargs):
+                                boxsize=None, mpicomm=None, **kwargs):
     r"""
     Compute pair counts and correlation function estimation.
 
@@ -20,13 +20,11 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     mode : string
         Type of correlation function, one of:
 
-        - "theta": as a function of angle (in degree) between two particles
-        - "s": as a function of distance between two particles
-        - "smu": as a function of distance between two particles and cosine angle :math:`\mu`
-                 w.r.t. the line-of-sight
-        - "rppi": as a function of distance transverse (:math:`r_{p}`) and parallel (:math:`\pi`)
-                 to the line-of-sight
-        - "rp": same as "rppi", without binning in :math:`\pi`
+            - "theta": as a function of angle (in degree) between two particles
+            - "s": as a function of distance between two particles
+            - "smu": as a function of distance between two particles and cosine angle :math:`\mu` w.r.t. the line-of-sight
+            - "rppi": as a function of distance transverse (:math:`r_{p}`) and parallel (:math:`\pi`) to the line-of-sight
+            - "rp": same as "rppi", without binning in :math:`\pi`
 
     edges : tuple, array
         Tuple of bin edges (arrays), for the first (e.g. :math:`r_{p}`)
@@ -52,7 +50,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
 
     data_weights1 : array, default=None
         Weights of the first catalog. Not required if ``weight_type`` is either ``None`` or "auto".
-        See ``weight_type`` in :class:`BaseTwoPointCounter`.
+        See ``weight_type``.
 
     data_weights2 : array, default=None
         Optionally, for cross-pair counts, weights in the second catalog. See ``data_weights1``.
@@ -63,6 +61,53 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     randoms_weights2 : array, default=None
         Optionally, for cross-correlations, weights of the random catalog representing the second selection function.
         See ``randoms_weights1``.
+
+    R1R2 : BaseTwoPointCounter, default=None
+        Precomputed R1R2 pairs; e.g. useful when running on many mocks with same randoms catalog.
+
+    estimator : string, default='auto'
+        Estimator name, one of ["auto", "natural", "landyszalay", "weight"].
+        If "auto", "landyszalay" will be chosen if random catalog(s) is/are provided.
+
+    bin_type : string, default='auto'
+        Binning type for first dimension, e.g. :math:`r_{p}` when ``mode`` is "rppi".
+        Set to ``lin`` for speed-up in case of linearly-spaced bins.
+        In this case, the bin number for a pair separated by a (3D, projected, angular...) separation
+        ``sep`` is given by ``(sep - edges[0])/(edges[-1] - edges[0])*(len(edges) - 1)``,
+        i.e. only the first and last bins of input edges are considered.
+        Then setting ``output_sepavg`` is virtually costless.
+        For non-linear binning, set to "custom".
+        "auto" allows for auto-detection of the binning type:
+        linear binning will be chosen if input edges are
+        within ``rtol = 1e-05`` (relative tolerance) *or* ``atol = 1e-08``
+        (absolute tolerance) of the array
+        ``np.linspace(edges[0], edges[-1], len(edges))``.
+
+    position_type : string, default='auto'
+        Type of input positions, one of:
+
+            - "rd": RA/Dec in degree, only if ``mode`` is "theta"
+            - "rdd": RA/Dec in degree, distance, for any ``mode``
+            - "xyz": Cartesian positions
+
+    weight_type : string, default='auto'
+        The type of weighting to apply to provided weights. One of:
+
+            - ``None``: no weights are applied.
+            - "product_individual": each pair is weighted by the product of weights :math:`w_{1} w_{2}`.
+            - "inverse_bitwise": each pair is weighted by :math:`(1 + \mathrm{nrealizations})/(1 + \mathrm{popcount}(w_{1} \& w_{2}))`.
+               Multiple bitwise weights can be provided as a list.
+               Individual weights can additionally be provided as float arrays, and angular upweights with ``twopoint_weights``.
+               In case of cross-correlations with floating weights, bitwise weights are automatically turned to IIP weights,
+               i.e. :math:`(1 + \mathrm{nrealizations})/(1 + \mathrm{popcount}(w_{1}))`.
+            - "auto": automatically choose weighting based on input ``weights1`` and ``weights2``,
+               i.e. ``None`` when ``weights1`` and ``weights2`` are ``None``,
+               "inverse_bitwise" if onf of input weights is integer, else "product_individual".
+
+    nrealizations : int, default=None
+        In case ``weight_type`` is "inverse_bitwise", the number of realizations,
+        *not* counting in current realization.
+        If ``None``, will be set to the number of bits in input weights.
 
     D1D2_twopoint_weights : WeightTwoPointEstimator, default=None
         Weights to be applied to each pair of particles between first and second data catalogs.
@@ -81,21 +126,32 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         Weights to be applied to each pair of particles between first and second randoms catalogs.
         See ``D1D2_twopoint_weights``.
 
-    R1R2 : BaseTwoPointCounter, default=None
-        Precomputed R1R2 pairs; e.g. useful when running on many mocks with same randoms catalog.
+    los : string, default='midpoint'
+        Line-of-sight to be used when ``mode`` is "smu", "rppi" or "rp"; one of:
 
-    estimator : string, default='auto'
-        Estimator name, one of ["auto", "natural", "landyszalay", "weight"].
-        If "auto", "landyszalay" will be chosen if random catalog(s) is/are provided.
+            - "midpoint": the mean position of the pair: :math:`\mathbf{\eta} = (\mathbf{r}_{1} + \mathbf{r}_{2})/2`
+            - "x", "y" or "z": cartesian axis
 
     boxsize : array, float, default=None
         For periodic wrapping, the side-length(s) of the periodic cube.
 
+    output_sepavg : bool, default=True
+        Set to ``False`` to *not* calculate the average separation for each bin.
+        This can make the pair counts faster if ``bin_type`` is "custom".
+        In this case, :attr:`sep` will be set the midpoint of input edges.
+
+    dtype : string, np.dtype, default=None
+        Array type for positions and weights.
+        If ``None``, defaults to type of first array of positions.
+
+    nthreads : int
+        Number of OpenMP threads to use.
+
     mpicomm : MPI communicator, default=None
-        The MPI communicator, when running over multiple MPI processes.
+        The MPI communicator, if input positions and weights are MPI-scattered.
 
     kwargs : dict
-        Other arguments for pair counter, see :class:`BaseTwoPointCounter`.
+        Pair-counter engine-specific options.
 
     Returns
     -------

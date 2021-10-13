@@ -103,13 +103,11 @@ class BaseTwoPointCounter(BaseClass):
         mode : string
             Type of pair counts, one of:
 
-            - "theta": as a function of angle (in degree) between two particles
-            - "s": as a function of distance between two particles
-            - "smu": as a function of distance between two particles and cosine angle :math:`\mu`
-                     w.r.t. the line-of-sight
-            - "rppi": as a function of distance transverse (:math:`r_{p}`) and parallel (:math:`\pi`)
-                     to the line-of-sight
-            - "rp": same as "rppi", without binning in :math:`\pi`
+                - "theta": as a function of angle (in degree) between two particles
+                - "s": as a function of distance between two particles
+                - "smu": as a function of distance between two particles and cosine angle :math:`\mu` w.r.t. the line-of-sight
+                - "rppi": as a function of distance transverse (:math:`r_{p}`) and parallel (:math:`\pi`) to the line-of-sight
+                - "rp": same as "rppi", without binning in :math:`\pi`
 
         edges : tuple, array
             Tuple of bin edges (arrays), for the first (e.g. :math:`r_{p}`)
@@ -147,21 +145,23 @@ class BaseTwoPointCounter(BaseClass):
         position_type : string, default='auto'
             Type of input positions, one of:
 
-            - "rd": RA/Dec in degree, only if ``mode`` is "theta"
-            - "rdd": RA/Dec in degree, distance, for any ``mode``
-            - "xyz": Cartesian positions
+                - "rd": RA/Dec in degree, only if ``mode`` is "theta"
+                - "rdd": RA/Dec in degree, distance, for any ``mode``
+                - "xyz": Cartesian positions
 
         weight_type : string, default='auto'
-            The type of weighting to apply with ``weights1`` and ``weights2``. One of:
+            The type of weighting to apply to provided weights. One of:
 
-            - ``None``: no weights are applied.
-            - "product_individual": each pair is weighted by the product of weights :math:`w_{1} w_{2}`.
-            - "inverse_bitwise": each pair is weighted by :math:`1/(1 + \mathrm{popcount}(w_{1} & w_{2}))`.
-               Multiple bitwise weights can be provided as a list.
-               Individual weights can additionally be provided as float arrays, and angular upweights with ``twopoint_weights``.
-            - "auto": automatically choose weighting based on input ``weights1`` and ``weights2``,
-               i.e. ``None`` when ``weights1`` and ``weights2`` are ``None``,
-               "inverse_bitwise" if list of weights contains integer weights, else "product_individual".
+                - ``None``: no weights are applied.
+                - "product_individual": each pair is weighted by the product of weights :math:`w_{1} w_{2}`.
+                - "inverse_bitwise": each pair is weighted by :math:`(1 + \mathrm{nrealizations})/(1 + \mathrm{popcount}(w_{1} \& w_{2}))`.
+                   Multiple bitwise weights can be provided as a list.
+                   Individual weights can additionally be provided as float arrays, and angular upweights with ``twopoint_weights``.
+                   In case of cross-correlations with floating weights, bitwise weights are automatically turned to IIP weights,
+                   i.e. :math:`(1 + \mathrm{nrealizations})/(1 + \mathrm{popcount}(w_{1}))`.
+                - "auto": automatically choose weighting based on input ``weights1`` and ``weights2``,
+                   i.e. ``None`` when ``weights1`` and ``weights2`` are ``None``,
+                   "inverse_bitwise" if onf of input weights is integer, else "product_individual".
 
         nrealizations : int, default=None
             In case ``weight_type`` is "inverse_bitwise", the number of realizations,
@@ -176,8 +176,8 @@ class BaseTwoPointCounter(BaseClass):
         los : string, default='midpoint'
             Line-of-sight to be used when ``mode`` is "smu", "rppi" or "rp"; one of:
 
-            - "midpoint": the mean position of the pair: :math:`\eta = (\mathbf{r}_{1} + \mathbf{r}_{2})/2`
-            - "x", "y" or "z": cartesian axis
+                - "midpoint": the mean position of the pair: :math:`\mathbf{\eta} = (\mathbf{r}_{1} + \mathbf{r}_{2})/2`
+                - "x", "y" or "z": cartesian axis
 
         boxsize : array, float, default=None
             For periodic wrapping, the side-length(s) of the periodic cube.
@@ -195,7 +195,7 @@ class BaseTwoPointCounter(BaseClass):
             Number of OpenMP threads to use.
 
         mpicomm : MPI communicator, default=None
-            The MPI communicator, when running over multiple MPI processes.
+            The MPI communicator, if input positions and weights are MPI-scattered.
 
         kwargs : dict
             Pair-counter engine-specific options.
@@ -552,7 +552,7 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
     name = 'analytic'
 
     def __init__(self, mode, edges, boxsize, size1=10, size2=None, los='z'):
-        """
+        r"""
         Initialize :class:`AnalyticTwoPointCounter`, and set :attr:`wcounts` and :attr:`sep`.
 
         Parameters
@@ -560,12 +560,10 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
         mode : string
             Pair counting mode, one of:
 
-            - "s": pair counts as a function of distance between two particles
-            - "smu": pair counts as a function of distance between two particles and cosine angle :math:`\mu`
-                     w.r.t. the line-of-sight
-            - "rppi": pair counts as a function of distance transverse (:math:`r_{p}`) and parallel (:math:`\pi`)
-                     to the line-of-sight
-            - "rp": same as "rppi", without binning in :math:`\pi`
+                - "s": pair counts as a function of distance between two particles
+                - "smu": pair counts as a function of distance between two particles and cosine angle :math:`\mu` w.r.t. the line-of-sight
+                - "rppi": pair counts as a function of distance transverse (:math:`r_{p}`) and parallel (:math:`\pi`) to the line-of-sight
+                - "rp": same as "rppi", without binning in :math:`\pi`
 
         edges : tuple, array
             Tuple of bin edges (arrays), for the first (e.g. :math:`r_{p}`)
