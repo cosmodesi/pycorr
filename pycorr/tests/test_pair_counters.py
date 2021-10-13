@@ -2,7 +2,7 @@ import os
 import tempfile
 import numpy as np
 
-from pycorr import BaseTwoPointCounter, TwoPointCounter, AnalyticTwoPointCounter,\
+from pycorr import TwoPointCounter, AnalyticTwoPointCounter,\
                    utils, HAS_MPI, setup_logging
 
 
@@ -165,6 +165,7 @@ def test_pair_counter(mode='s'):
     TwoPointWeight = namedtuple('TwoPointWeight', ['sep', 'weight'])
     twopoint_weights = TwoPointWeight(np.logspace(-4, 0, 40), np.linspace(4., 1., 40))
     list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights})
+    list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'dtype':'f4'})
     if HAS_MPI:
         from pycorr import mpi
         list_options.append({'mpicomm':mpi.COMM_WORLD})
@@ -175,7 +176,7 @@ def test_pair_counter(mode='s'):
     elif mode == 'rppi':
         edges = (edges, np.linspace(0,140,141))
     elif mode == 'theta':
-        edges = np.linspace(1e-5,10,11) # below 1e-5, self pairs are counted by Corrfunc
+        edges = np.linspace(1e-1,10,11) # below 1e-5 for float64 (1e-1 for float32), self pairs are counted by Corrfunc
     for engine in list_engine:
         for options in list_options:
             options = options.copy()
@@ -189,9 +190,17 @@ def test_pair_counter(mode='s'):
             refoptions = options.copy()
             nrealizations = refoptions.pop('nrealizations', n_bitwise_weights * 64)
             twopoint_weights = refoptions.pop('twopoint_weights', None)
+            refdata1 = data1.copy()
+            refdata2 = data2.copy()
+            dtype = refoptions.pop('dtype', None)
+            if dtype is not None:
+                for ii in range(len(data1)):
+                    if np.issubdtype(data1[ii].dtype, np.floating):
+                        refdata1[ii] = np.asarray(data1[ii], dtype=dtype)
+                        refdata2[ii] = np.asarray(data2[ii], dtype=dtype)
             if twopoint_weights is not None:
-                twopoint_weights = TwoPointWeight(np.cos(np.radians(twopoint_weights.sep[::-1])), twopoint_weights.weight[::-1])
-            ref = ref_func(edges, data1, data2=None if autocorr else data2, nrealizations=nrealizations, n_bitwise_weights=n_bitwise_weights, twopoint_weights=twopoint_weights, **refoptions)
+                twopoint_weights = TwoPointWeight(np.cos(np.radians(twopoint_weights.sep[::-1], dtype=dtype)), np.asarray(twopoint_weights.weight[::-1], dtype=dtype))
+            ref = ref_func(edges, refdata1, data2=None if autocorr else refdata2, nrealizations=nrealizations, n_bitwise_weights=n_bitwise_weights, twopoint_weights=twopoint_weights, **refoptions)
             if mpicomm is not None:
                 data1 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data1]
                 data2 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data2]
@@ -199,12 +208,14 @@ def test_pair_counter(mode='s'):
             test = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:3], positions2=None if autocorr else data2[:3],
                                    weights1=data1[3:], weights2=None if autocorr else data2[3:], position_type='xyz', bin_type=bin_type, mpicomm=mpicomm, **options)
 
-            assert np.allclose(test.wcounts, ref)
+            itemsize = np.dtype(dtype).itemsize
+            tol = {'atol':1e-8, 'rtol':1e-3} if itemsize <= 4 else {'atol':1e-8, 'rtol':1e-6}
+            assert np.allclose(test.wcounts, ref, **tol)
             with tempfile.TemporaryDirectory() as tmp_dir:
                 fn = os.path.join(tmp_dir, 'tmp.npy')
                 test.save(fn)
-                test = BaseTwoPointCounter.load(fn)
-                assert np.allclose(test.wcounts, ref)
+                test = TwoPointCounter.load(fn)
+                assert np.allclose(test.wcounts, ref, **tol)
                 test.rebin((2,2) if len(edges) == 2 else (2,))
                 assert np.allclose(np.sum(test.wcounts), np.sum(ref))
 
@@ -250,7 +261,7 @@ def test_analytic_pair_counter(mode='s'):
         with tempfile.TemporaryDirectory() as tmp_dir:
             fn = os.path.join(tmp_dir, 'tmp.npy')
             test.save(fn)
-            test = BaseTwoPointCounter.load(fn)
+            test = TwoPointCounter.load(fn)
             ratio = np.absolute(test.wcounts/ref - 1)
             assert np.all(ratio < 0.1)
             ref = test.copy()

@@ -27,8 +27,30 @@ Welcome to pycorr's documentation!
 Introduction
 ************
 
-**pycorr** is a Python package to compute correlation function with various pair-counting engines.
+**pycorr** is a wrapper for correlation function estimation, designed to handle different pair counter engines (currently only Corrfunc).
+It currently supports:
 
+  - theta (angular), s, s-mu, rp-pi binning schemes
+  - analytical pair counts with periodic boundary conditions
+  - inverse bitwise weights (in any integer format) and (angular) upweighting
+  - MPI parallelization (further requires mpi4py and pmesh)
+
+A typicall auto-correlation function estimation is as simple as:
+
+.. code-block:: python
+
+  import numpy as np
+  from pycorr import TwoPointCorrelationFunction
+
+  edges = (np.linspace(1, 100, 51), np.linspace(0, 50, 51))
+  # pass e.g. mpicomm = MPI.COMM_WORLD if input positions and weights are MPI-scattered
+  result = TwoPointCorrelationFunction('rppi', edges, data_positions1=data_positions1, data_weights1=data_weights1,
+                                       randoms_positions1=randoms_positions1, randoms_weights1=randoms_weights1,
+                                       engine='corrfunc', nthreads=4)
+  # separation array in result.sep
+  # correlation function in result.corr
+
+Example notebooks are provided in :root:`pycorr/nb`.
 
 **************
 Code structure

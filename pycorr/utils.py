@@ -75,7 +75,7 @@ def setup_logging(level=logging.INFO, stream=sys.stdout, filename=None, filemode
 
 class BaseMetaClass(type):
 
-    """Meta class to add logging attributes to :class:`BaseClass` derived classes."""
+    """Metaclass to add logging attributes to :class:`BaseClass` derived classes."""
 
     def __new__(meta, name, bases, class_dict):
         cls = super().__new__(meta, name, bases, class_dict)

@@ -118,7 +118,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     precomputed = {'R1R2':R1R2}
 
     pairs = {}
-    for label1,label2 in Estimator.requires(autocorr=(not has_randoms) or randoms_positions2 is None):
+    for label1, label2 in Estimator.requires(autocorr=(not has_randoms) or randoms_positions2 is None):
         label12 = label1 + label2
         pre = precomputed.get(label12, None)
         if pre is not None:

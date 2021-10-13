@@ -3,13 +3,88 @@
 import numpy as np
 from scipy import special
 
-from .pair_counter import BaseTwoPointCounter
-from .utils import BaseClass
+from .pair_counter import get_pair_counter
+from .utils import BaseClass, BaseMetaClass
 
 
 class EstimatorError(Exception):
 
     """Exception raised when issue with estimator."""
+
+
+def get_estimator(estimator='auto', has_cross=True):
+    """
+    Return :class:`BaseTwoPointEstimator` subclass corresponding
+    to input estimator name.
+
+    Parameters
+    ----------
+    estimator : string, default='auto'
+        Estimator name, one of ["auto", "natural", "landyszalay"].
+        If "auto", "landyszalay" will be chosen if ``has_cross``,
+        else "natural".
+
+    has_randoms : bool, default=True
+        If estimator will be provided with pair counts from data x randoms
+        catalogs. See above.
+
+    Returns
+    -------
+    estimator : type
+        Estimator class.
+    """
+    if estimator == 'auto':
+        estimator = {True:'landyszalay', False:'natural'}[has_cross]
+
+    if isinstance(estimator, str):
+
+        if estimator.lower() == 'natural':
+            return NaturalTwoPointEstimator
+
+        if estimator.lower() == 'weight':
+            return WeightTwoPointEstimator
+
+        if estimator.lower() == 'landyszalay':
+            return LandySzalayTwoPointEstimator
+
+        raise EstimatorError('Unknown estimator {}.'.format(estimator))
+
+    return estimator
+
+
+class MetaTwoPointEstimator(BaseMetaClass):
+
+    """Metaclass to return correct estimator."""
+
+    def __call__(cls, *args, estimator='landyszalay', **kwargs):
+        return get_estimator(estimator=estimator)(*args, **kwargs)
+
+
+class TwoPointEstimator(metaclass=MetaTwoPointEstimator):
+    """
+    Entry point to two point estimators.
+
+    Parameters
+    ----------
+    estimator : string, default='landyszalay'
+        Estimator name, one of ["natural", "landyszalay"].
+
+    args : list
+        Arguments for two point estimator, see :class:`TwoPointEstimator`.
+
+    kwargs : dict
+        Arguments for two point estimator, see :class:`TwoPointEstimator`.
+
+    Returns
+    -------
+    estimator : BaseTwoPointEstimator
+        Estimator instance.
+    """
+    @classmethod
+    def load(cls, filename):
+        cls.log_info('Loading {}.'.format(filename))
+        state = np.load(filename, allow_pickle=True)[()]
+        return get_estimator(state.pop('name')).from_state(state)
 
 
 class BaseTwoPointEstimator(BaseClass):
@@ -64,38 +139,52 @@ class BaseTwoPointEstimator(BaseClass):
 
     @property
     def autocorr(self):
-        """Whether correlation function is an autocorrelation, i.e. :attr:`D2R1` is :attr:`D1R2`."""
-        return self.D2R1 is self.D1R2
+        return self.D1D2.autocorr
 
     @classmethod
-    def requires(cls, autocorr=False):
+    def requires(cls, autocorr=False, join=None):
         """Yield required pair counts."""
-        yield 'D1','D2'
-        yield 'D1','R2'
-        if not autocorr:
-            yield 'D2','R1'
-        yield 'R1','R2'
+
+        def gen():
+            yield 'D1','D2'
+            yield 'D1','R2'
+            if not autocorr:
+                yield 'D2','R1'
+            yield 'R1','R2'
+
+        for pair in gen():
+            if join is not None:
+                yield join.join(pair)
+            else:
+                yield pair
 
     def rebin(self, *args, **kwargs):
         """Rebin estimator, by rebinning all pair counts. See :meth:`BaseTwoPointCounter.rebin`."""
-        for pair in self.requires(autocorr=self.autocorr):
-            getattr(self, ''.join(pair)).rebin(*args, **kwargs)
+        for pair in self.requires(autocorr=self.autocorr, join=''):
+            getattr(self, pair).rebin(*args, **kwargs)
         self.run()
 
     def __getstate__(self):
         state = {}
-        for pair in self.requires(autocorr=self.autocorr):
-            state[''.join(pair)] = getattr(self, ''.join(pair)).__getstate__()
+        for name in ['name']:
+            if hasattr(self, name):
+                state[name] = getattr(self, name)
+        for pair in self.requires(autocorr=self.autocorr, join=''):
+            state[pair] = getattr(self, pair).__getstate__()
         return state
 
     def __setstate__(self, state):
         kwargs = {}
-        for pair, pair_state in state.items():
-            kwargs[pair] = BaseTwoPointCounter.from_state(pair_state)
+        for pair in self.requires(autocorr=False, join=''):
+            if pair in state:
+                pair_state = state[pair].copy()
+                kwargs[pair] = get_pair_counter(pair_state.pop('name')).from_state(pair_state)
         self.__init__(**kwargs)
 
 
 class NaturalTwoPointEstimator(BaseTwoPointEstimator):
+
+    name = 'natural'
 
     def run(self):
         """
@@ -115,14 +204,27 @@ class NaturalTwoPointEstimator(BaseTwoPointEstimator):
         corr[nonzero] = tmp[...]
         self.corr = corr
 
-    @classmethod
-    def requires(cls, autocorr=False):
-        """Yield required pair counts."""
-        yield 'D1','D2'
-        yield 'R1','R2'
+    @property
+    def autocorr(self):
+        return self.D1D2.autocorr
 
+    @classmethod
+    def requires(cls, autocorr=False, join=None):
+        """Yield required pair counts."""
+
+        def gen():
+            yield 'D1','D2'
+            yield 'R1','R2'
+
+        for pair in gen():
+            if join is not None:
+                yield join.join(pair)
+            else:
+                yield pair
 
 class LandySzalayTwoPointEstimator(BaseTwoPointEstimator):
+
+    name = 'landyszalay'
 
     def run(self):
         """
@@ -146,6 +248,8 @@ class LandySzalayTwoPointEstimator(BaseTwoPointEstimator):
 
 
 class WeightTwoPointEstimator(NaturalTwoPointEstimator):
+
+    name = 'weight'
 
     def run(self):
         """
@@ -179,7 +283,7 @@ def project_to_multipoles(estimator, ells=(0,2,4)):
     estimator : BaseTwoPointEstimator
         Estimator for :math:`(s, \mu)` correlation function.
 
-    ells : tuple, int
+    ells : tuple, int, default=(0,2,4)
         Order of Legendre polynomial.
 
     Returns
@@ -193,7 +297,7 @@ def project_to_multipoles(estimator, ells=(0,2,4)):
     if np.ndim(ells) == 0:
         ells = (ells,)
     ells = tuple(ells)
-    sep = np.mean(estimator.sep, axis=-1)
+    sep = np.nanmean(estimator.sep, axis=-1)
     toret = []
     for ill,ell in enumerate(ells):
         dmu = np.diff(estimator.edges[1], axis=-1)
@@ -203,65 +307,30 @@ def project_to_multipoles(estimator, ells=(0,2,4)):
     return sep, toret
 
 
-def get_estimator(estimator='auto', has_cross=True):
-    """
-    Return :class:`BaseTwoPointEstimator` subclass corresponding
-    to input estimator name.
+def project_to_wp(estimator, pimax=None):
+    r"""
+    Integrate :math:`(r_{p}, \pi)` correlation function over :math:`\pi`
+    to obtain :math:`w_{p}(r_{p})`.
 
     Parameters
     ----------
-    estimator : string, default='auto'
-        Estimator name, one of ["auto", "natural", "landyszalay"].
-        If "auto", "landyszalay" will be chosen if ``has_cross``,
-        else "natural".
-
-    has_randoms : bool, default=True
-        If estimator will be provided with pair counts from data x randoms
-        catalogs. See above.
-
-    Returns
-    -------
-    estimator : type
-        Estimator class.
-    """
-    if estimator == 'auto':
-        estimator = {True:'landyszalay', False:'natural'}[has_cross]
-
-    if isinstance(estimator, str):
-
-        if estimator.lower() == 'natural':
-            return NaturalTwoPointEstimator
-
-        if estimator.lower() == 'weight':
-            return WeightTwoPointEstimator
-
-        if estimator.lower() == 'landyszalay':
-            return LandySzalayTwoPointEstimator
-
-        raise EstimatorError('Unknown estimator {}.'.format(estimator))
-
-    return estimator
-
-
-def TwoPointEstimator(*args, estimator='landyszalay', **kwargs):
-    """
-    Return :class:`BaseTwoPointEstimator` instance corresponding
-    to input estimator name.
-
-    Parameters
-    ----------
-    estimator : string, default='landyszalay'
-        Estimator name, one of ["natural", "landyszalay"].
-
-    args : list
-        Arguments for pair counter engine, see :class:`TwoPointEstimator`.
-
-    kwargs : dict
-        Arguments for pair counter engine, see :class:`TwoPointEstimator`.
-
-    Returns
-    -------
     estimator : BaseTwoPointEstimator
-        Estimator instance.
+        Estimator for :math:`(r_{p}, \pi)` correlation function.
+
+    pimax : float, default=None
+        Upper bound for summation of :math:`\pi`.
+
+    Returns
+    -------
+    sep : array
+        Array of separation values.
+
+    toret : array
+        Estimated :math:`w_{p}(r_{p})`.
     """
-    return get_estimator(estimator=estimator)(*args, **kwargs)
+    mask = Ellipsis
+    if pimax is not None:
+        mask = (estimator.edges[1] <= pimax)[:-1]
+    sep = np.nanmean(estimator.sep[:,mask], axis=-1)
+    wp = 2.*np.sum(estimator.corr[:,mask]*np.diff(estimator.edges[1])[mask], axis=-1)
+    return sep, wp

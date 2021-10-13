@@ -6,7 +6,8 @@ try:
 except ImportError:
     HAS_MPI = False
 
-from .pair_counter import TwoPointCounter, AnalyticTwoPointCounter, BaseTwoPointCounter
-from .estimator import TwoPointEstimator, NaturalTwoPointEstimator, LandySzalayTwoPointEstimator, project_to_multipoles
+from .pair_counter import TwoPointCounter, AnalyticTwoPointCounter
+from .estimator import TwoPointEstimator, NaturalTwoPointEstimator, LandySzalayTwoPointEstimator,\
+                       project_to_multipoles, project_to_wp
 from .correlation_function import TwoPointCorrelationFunction
 from .utils import setup_logging

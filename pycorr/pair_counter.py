@@ -3,14 +3,78 @@
 import os
 import numpy as np
 
-from .utils import BaseClass
+from .utils import BaseClass, BaseMetaClass
 from . import utils, HAS_MPI
 if HAS_MPI:
     from . import mpi
 
+
 class PairCounterError(Exception):
 
     """Exception raised when issue with pair counting."""
+
+
+def get_pair_counter(engine='corrfunc'):
+    """
+    Return :class:`BaseTwoPointCounter` subclass corresponding
+    to input engine name.
+
+    Parameters
+    ----------
+    engine : string, default='corrfunc'
+        Name of pair counter engine, one of ["corrfunc", "analytical"].
+
+    Returns
+    -------
+    pair_counter : type
+        Pair counter class.
+    """
+    if isinstance(engine, str):
+
+        if engine.lower() == 'analytic':
+            return AnalyticTwoPointCounter
+
+        if engine.lower() == 'corrfunc':
+            from .corrfunc import CorrfuncTwoPointCounter
+            return CorrfuncTwoPointCounter
+
+        raise PairCounterError('Unknown engine {}.'.format(engine))
+
+    return engine
+
+
+class MetaTwoPointCounter(BaseMetaClass):
+
+    """Metaclass to return correct pair counter engine."""
+
+    def __call__(cls, *args, engine='corrfunc', **kwargs):
+        return get_pair_counter(engine)(*args, **kwargs)
+
+
+class TwoPointCounter(metaclass=MetaTwoPointCounter):
+    """
+    Entry point to pair counter engines.
+
+    Parameters
+    ----------
+    engine : string, default='corrfunc'
+        Name of pair counter engine, one of ["corrfunc", "analytical"].
+
+    args : list
+        Arguments for pair counter engine, see :class:`BaseTwoPointCounter`.
+
+    kwargs : dict
+        Arguments for pair counter engine, see :class:`BaseTwoPointCounter`.
+
+    Returns
+    -------
+    engine : BaseTwoPointCounter
+    """
+    @classmethod
+    def load(cls, filename):
+        cls.log_info('Loading {}.'.format(filename))
+        state = np.load(filename, allow_pickle=True)[()]
+        return get_pair_counter(state.pop('name')).from_state(state)
 
 
 class BaseTwoPointCounter(BaseClass):
@@ -466,40 +530,11 @@ class BaseTwoPointCounter(BaseClass):
 
     def __getstate__(self):
         state = {}
-        for name in ['sep', 'wcounts', 'norm', 'edges', 'mode', 'bin_type',
+        for name in ['name', 'autocorr', 'sep', 'wcounts', 'norm', 'edges', 'mode', 'bin_type',
                      'boxsize', 'los', 'output_sepavg', 'attrs']:
-            state[name] = getattr(self, name)
+            if hasattr(self, name):
+                state[name] = getattr(self, name)
         return state
-
-
-def TwoPointCounter(*args, engine='corrfunc', **kwargs):
-    """
-    Entry point to pair counter engines.
-
-    Parameters
-    ----------
-    engine : string
-        Name of pair counter engine, one of ["corrfunc"].
-
-    args : list
-        Arguments for pair counter engine, see :class:`BaseTwoPointCounter`.
-
-    kwargs : dict
-        Arguments for pair counter engine, see :class:`BaseTwoPointCounter`.
-
-    Returns
-    -------
-    engine : BaseTwoPointCounter
-    """
-    if isinstance(engine, str):
-
-        if engine.lower() == 'corrfunc':
-            from .corrfunc import CorrfuncTwoPointCounter
-            return CorrfuncTwoPointCounter(*args, **kwargs)
-
-        raise PairCounterError('Unknown engine {}.'.format(engine))
-
-    return engine
 
 
 class AnalyticTwoPointCounter(BaseTwoPointCounter):
@@ -514,6 +549,8 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
     wcounts : array
         Analytical pair counts.
     """
+    name = 'analytic'
+
     def __init__(self, mode, edges, boxsize, size1=10, size2=None, los='z'):
         """
         Initialize :class:`AnalyticTwoPointCounter`, and set :attr:`wcounts` and :attr:`sep`.
@@ -588,10 +625,3 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
         if self.autocorr:
             return self.size1 * (self.size1 - 1)
         return self.size1 * self.size2
-
-    def __getstate__(self):
-        state = {}
-        for name in ['sep', 'wcounts', 'norm', 'edges', 'mode',
-                     'boxsize', 'los']:
-            state[name] = getattr(self, name)
-        return state

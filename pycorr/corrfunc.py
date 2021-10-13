@@ -11,6 +11,8 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
 
     """Extend :class:`BaseTwoPointCounter` for Corrfunc pair counting code."""
 
+    name = 'corrfunc'
+
     def run(self):
         """Compute the pair counts and set :attr:`wcounts` and :attr:`sep`."""
 

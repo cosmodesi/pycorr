@@ -2,7 +2,8 @@ import os
 import tempfile
 import numpy as np
 
-from pycorr import TwoPointCorrelationFunction, setup_logging
+from pycorr import TwoPointCorrelationFunction, TwoPointEstimator, project_to_multipoles,\
+                    project_to_wp, setup_logging
 
 
 def generate_catalogs(size=100, boxsize=(1000,)*3, n_individual_weights=1, n_bitwise_weights=0, seed=42):
@@ -55,10 +56,17 @@ def test_estimator(mode='s'):
                                                    position_type='xyz', **options, **kwargs)
 
             test = run()
+            if test.D1D2.mode == 'smu':
+                sep, xiell = project_to_multipoles(test, ells=(0,2,4))
+            if test.D1D2.mode == 'rppi':
+                sep, wp = project_to_wp(test)
+                sep, wp = project_to_wp(test, pimax=40)
             with tempfile.TemporaryDirectory() as tmp_dir:
                 fn = os.path.join(tmp_dir,'tmp.npy')
                 test.save(fn)
-                test2 = test.__class__.load(fn)
+                test2 = TwoPointEstimator.load(fn)
+                assert test2.__class__ is test.__class__
+                assert test2.autocorr is test.autocorr
                 test2.rebin((2,5) if len(edges) == 2 else (2,))
                 test2 = run(R1R2=test.R1R2)
                 mask = np.isfinite(test2.corr) & np.isfinite(test.corr)
