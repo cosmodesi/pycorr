@@ -3,7 +3,7 @@ import tempfile
 import numpy as np
 
 from pycorr import BaseTwoPointCounter, TwoPointCounter, AnalyticTwoPointCounter,\
-                   HAS_MPI, setup_logging
+                   utils, HAS_MPI, setup_logging
 
 
 def diff(position1, position2):
@@ -140,7 +140,9 @@ def generate_catalogs(size=100, boxsize=(1000,)*3, n_individual_weights=1, n_bit
     toret = []
     for i in range(2):
         positions = [rng.uniform(0., 1., size)*b for b in boxsize]
-        weights = [rng.randint(0, 0xffffffff, size, dtype='i8') for i in range(n_bitwise_weights)]
+        weights = utils.pack_bitarrays(*[rng.randint(0, 2, size) for i in range(64*n_bitwise_weights)], dtype=np.uint64)
+        #weights = utils.pack_bitarrays(*[rng.randint(0, 2, size) for i in range(33)], dtype=np.uint64)
+        #weights = [rng.randint(0, 0xffffffff, size, dtype=np.uint64) for i in range(n_bitwise_weights)]
         weights += [rng.uniform(0.5, 1., size) for i in range(n_individual_weights)]
         toret.append(positions+weights)
     return toret
@@ -158,11 +160,11 @@ def test_pair_counter(mode='s'):
         list_options.append({'autocorr':True, 'boxsize':boxsize})
     list_options.append({'autocorr':True})
     list_options.append({'n_individual_weights':1, 'bin_type':'custom'})
-    list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2})
+    list_options.append({'n_individual_weights':2, 'n_bitwise_weights':1})
     from collections import namedtuple
     TwoPointWeight = namedtuple('TwoPointWeight', ['sep', 'weight'])
     twopoint_weights = TwoPointWeight(np.logspace(-4, 0, 40), np.linspace(4., 1., 40))
-    list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights})
+    list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights})
     if HAS_MPI:
         from pycorr import mpi
         list_options.append({'mpicomm':mpi.COMM_WORLD})
@@ -205,6 +207,22 @@ def test_pair_counter(mode='s'):
                 assert np.allclose(test.wcounts, ref)
                 test.rebin((2,2) if len(edges) == 2 else (2,))
                 assert np.allclose(np.sum(test.wcounts), np.sum(ref))
+
+
+def test_pip_normalization(mode='s'):
+    edges = np.linspace(50,100,5)
+    size = 10000
+    boxsize = (1000,)*3
+    autocorr = False
+    data1, data2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=0, n_bitwise_weights=3)
+    test = TwoPointCounter(mode=mode, edges=edges, positions1=data1[:3], positions2=None if autocorr else data2[:3],
+                           weights1=None, weights2=None, position_type='xyz')
+
+    test = TwoPointCounter(mode=mode, edges=edges, positions1=data1[:3], positions2=None if autocorr else data2[:3],
+                           weights1=data1[3:], weights2=None if autocorr else data2[3:], position_type='xyz')
+    wiip = (1. + test.nrealizations)/(1. + utils.popcount(*data1[3:]))
+    ratio = abs(test.norm / sum(wiip)**2 - 1)
+    assert ratio < 0.1
 
 
 def test_analytic_pair_counter(mode='s'):
@@ -270,3 +288,4 @@ if __name__ == '__main__':
         test_analytic_pair_counter(mode=mode)
 
     test_rebin()
+    test_pip_normalization()

@@ -412,7 +412,7 @@ class BaseTwoPointCounter(BaseClass):
                 if self.with_mpi:
                     w = self.mpicomm.allreduce(w)
                 c = np.flatnonzero(w)
-                return w, c
+                return w[c], c
 
             w1, c1 = binned_weights(self.weights1)
             if self.autocorr:
@@ -427,23 +427,23 @@ class BaseTwoPointCounter(BaseClass):
             sumw_auto = 0
             if self.autocorr:
                 w1sq = np.bincount(utils.popcount(*self.weights1[:self.n_bitwise_weights]) + 1,
-                                   weights=self.weights1[-1], minlength=self.nrealizations + 2)
+                                   weights=self.weights1[-1]**2, minlength=self.nrealizations + 2)[c1]
                 if self.with_mpi:
                     w1sq = self.mpicomm.allreduce(w1sq)
                 for c1_, w1sq_ in zip(c1, w1sq):
-                    sumw_auto += joint[c1_, c1_] * w1sq_
+                    sumw_auto += joint[c1_][c1_] * w1sq_
             return sumw_cross - sumw_auto
 
         # individual_weights
         if self.autocorr:
-            sum1, sum2 = self.weights1[0].sum()**2, (self.weights1[0]**2).sum()
+            sumw_cross, sumw_auto = self.weights1[0].sum(), (self.weights1[0]**2).sum()
             if self.with_mpi:
-                sum1, sum2 = self.mpicomm.allreduce(sum1), self.mpicomm.allreduce(sum2)
-            return sum1**2 - sum2
-        sum1, sum2 = self.weights1[0].sum(), self.weights2[0].sum()
+                sumw_cross, sumw_auto = self.mpicomm.allreduce(sumw_cross), self.mpicomm.allreduce(sumw_auto)
+            return sumw_cross**2 - sumw_auto
+        sumw1, sumw2 = self.weights1[0].sum(), self.weights2[0].sum()
         if self.with_mpi:
-            sum1, sum2 = self.mpicomm.allreduce(sum1), self.mpicomm.allreduce(sum2)
-        return sum1 * sum2
+            sumw1, sumw2 = self.mpicomm.allreduce(sumw1), self.mpicomm.allreduce(sumw2)
+        return sumw1 * sumw2
 
     def normalized_wcounts(self):
         """Return normalized pair counts, i.e. :attr:`wcounts` divided by :meth:`normalization`."""

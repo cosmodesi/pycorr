@@ -290,6 +290,8 @@ def pack_bitarrays(*arrays, dtype=np.uint64):
     arrays : list
         List of integer arrays of type ``dtype``, representing input boolean arrays.
     """
+    if not arrays:
+        return []
     return reformat_bitarrays(*np.packbits(arrays, axis=0, bitorder='little'), dtype=dtype)
 
 

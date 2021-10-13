@@ -20,6 +20,15 @@ def test_popcount():
         a = np.array(255, dtype=dtype)
         assert np.all(utils.popcount(a) == 8)
 
+    num = 8564071463
+    a = np.array(num, dtype=np.uint64)
+    print(utils.popcount(a), bin(num).count('1'))
+
+    a = utils.pack_bitarrays(*[np.array([1], dtype='?') for i in range(33)], dtype=np.uint64)
+    num = a[0][0]
+    print(num)
+    print(utils.popcount(*a), bin(num).count('1'))
+
 
 def test_reformatbit():
     rng = np.random.RandomState(42)
@@ -133,9 +142,14 @@ def get_bitweight_normalization(weights1, weights2=None):
 
 
 def test_normalization():
-    #print(pascals_triangle(4))
-    #pascals_triangle(512)
-    utils.joint_occurences(nrealizations=512)
+    #print(utils.pascal_triangle(4))
+    size = 42
+    tri = utils.pascal_triangle(size)
+    a, b = 7, 32
+    from scipy import special
+    assert tri[b][a] == special.comb(b, a, exact=True)
+    tmp = utils.joint_occurences(nrealizations=64)
+    print(tmp[30][30])
 
 
 def test_rebin():
@@ -148,6 +162,9 @@ def test_rebin():
 
 if __name__ == '__main__':
 
+    test_popcount()
+    exit()
+    test_normalization()
     test_packbit()
     test_popcount()
     test_reformatbit()
