@@ -12,6 +12,7 @@ doc/_build/
 **/dist
 **/eggs
 **/build
+**/_catalogs
 **/.ipynb_checkpoints
 
 # Unit test / coverage reports

@@ -182,13 +182,16 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
             pairs[label12] = pre
             continue
         if label12 == 'R1R2' and not has_randoms:
-            if log: logger.info('Analytically computing pair counts {}.'.format(label12))
-            size2 = size1 = len(positions[label1.replace('R','D')][0])
-            if not autocorr:
-                size2 = len(positions[label2.replace('R','D')][0])
-            pairs[label12] = AnalyticTwoPointCounter(mode, edges, boxsize, size1=size1, size2=size2)
+                if log: logger.info('Analytically computing pair counts {}.'.format(label12))
+                size2 = size1 = len(positions[label1.replace('R','D')][0])
+                if not autocorr:
+                    size2 = len(positions[label2.replace('R','D')][0])
+                pairs[label12] = AnalyticTwoPointCounter(mode, edges, boxsize, size1=size1, size2=size2)
         else:
             if log: logger.info('Computing pair counts {}.'.format(label12))
+            # label12 is D1R2, but we only have R1, so swith label2 to R1
+            if autocorr and label12 == 'D1R2':
+                label2 = 'R1'
             pairs[label12] = TwoPointCounter(mode, edges, positions[label1], positions2=positions[label2],
                                                    weights1=weights[label1], weights2=weights[label2], twopoint_weights=twopoint_weights[label12],
                                                    boxsize=boxsize, mpicomm=mpicomm, **kwargs)

@@ -414,7 +414,6 @@ class BaseTwoPointCounter(BaseClass):
             (self.positions1, self.weights1), (self.positions2, self.weights2) = \
              mpi.domain_decompose(self.mpicomm, smoothing, self.positions1, weights1=self.weights1,
                                   positions2=self.positions2, weights2=self.weights2, boxsize=self.boxsize)
-            self.autocorr = False
 
     def _set_default_sep(self):
         edges = self.edges[0]
