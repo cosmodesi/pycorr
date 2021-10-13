@@ -292,7 +292,7 @@ class BaseTwoPointCounter(BaseClass):
                     raise PairCounterError('For mode = {}, please provide a list of 2 arrays for positions'.format(self.mode))
             else:
                 if position_type == 'rdd':
-                    positions = utils.sky_to_cartesian(positions, degree=True)
+                    positions = utils.sky_to_cartesian(positions[2], positions[0], positions[1], degree=True)
                 elif position_type != 'xyz':
                     raise PairCounterError('For mode = {}, position type should be one of ["xyz", "rdd"]'.format(self.mode))
                 if len(positions) != 3:

@@ -68,10 +68,10 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             return positions1, positions2
 
         def sky_positions():
-            positions1 = utils.cartesian_to_sky(self.positions1)
+            positions1 = utils.cartesian_to_sky(self.positions1, degree=True)
             positions2 = [None]*3
             if not self.autocorr:
-                positions2 = utils.cartesian_to_sky(self.positions2)
+                positions2 = utils.cartesian_to_sky(self.positions2, degree=True)
             return positions1, positions2
 
         weight_type = None
