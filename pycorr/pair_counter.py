@@ -4,9 +4,7 @@ import os
 import numpy as np
 
 from .utils import BaseClass, BaseMetaClass
-from . import utils, HAS_MPI
-if HAS_MPI:
-    from . import mpi
+from . import utils
 
 
 class PairCounterError(Exception):
@@ -204,13 +202,13 @@ class BaseTwoPointCounter(BaseClass):
         self.nthreads = nthreads
         if nthreads is None:
             self.nthreads = int(os.getenv('OMP_NUM_THREADS','1'))
-
+        self.mpicomm = mpicomm
         self._set_positions(positions1, positions2, position_type=position_type, dtype=dtype)
         self._set_weights(weights1, weights2, weight_type=weight_type, nrealizations=nrealizations, twopoint_weights=twopoint_weights)
         self._set_edges(edges, bin_type=bin_type)
         self._set_boxsize(boxsize)
         self._set_los(los)
-        self._mpi_decompose(mpicomm=mpicomm)
+        self._mpi_decompose()
 
         self.output_sepavg = output_sepavg
         self.attrs = kwargs
@@ -281,22 +279,6 @@ class BaseTwoPointCounter(BaseClass):
             for ip, p in enumerate(positions):
                 # cast to the input dtype if exists (may be set by previous weights)
                 positions[ip] = np.asarray(p, dtype=self.dtype)
-            if self.mode == 'theta':
-                if position_type == 'xyz':
-                    positions = list(utils.cartesian_to_sky(positions, degree=True)[1:])
-                elif position_type == 'rdz':
-                    positions = list(positions[:2])
-                elif position_type != 'rd':
-                    raise PairCounterError('For mode = {}, position type should be one of ["xyz", "rdz", "rd"]'.format(self.mode))
-                if len(positions) != 2:
-                    raise PairCounterError('For mode = {}, please provide a list of 2 arrays for positions'.format(self.mode))
-            else:
-                if position_type == 'rdd':
-                    positions = utils.sky_to_cartesian(positions[2], positions[0], positions[1], degree=True)
-                elif position_type != 'xyz':
-                    raise PairCounterError('For mode = {}, position type should be one of ["xyz", "rdd"]'.format(self.mode))
-                if len(positions) != 3:
-                    raise PairCounterError('For mode = {}, please provide a list of 3 arrays for positions'.format(self.mode))
             size = len(positions[0])
             self.dtype = positions[0].dtype
             if not np.issubdtype(self.dtype, np.floating):
@@ -305,7 +287,23 @@ class BaseTwoPointCounter(BaseClass):
                 if len(p) != size:
                     raise PairCounterError('All position arrays should be of the same size')
                 if p.dtype != self.dtype:
-                    raise PairCounterError('All position arrays should be of the same type')
+                    raise PairCounterError('All position arrays should be of the same type, you can e.g. provide dtype')
+            if self.mode == 'theta':
+                if position_type == 'xyz':
+                    positions = utils.cartesian_to_sky(positions, degree=True)[:2]
+                elif position_type in ['rdd', 'rdz']:
+                    positions = list(positions[:2])
+                elif position_type != 'rd':
+                    raise PairCounterError('For mode = {}, position type should be one of ["xyz", "rdz", "rd"]'.format(self.mode))
+                if len(positions) != 2:
+                    raise PairCounterError('For mode = {}, please provide a list of 2 arrays for positions'.format(self.mode))
+            else:
+                if position_type == 'rdd':
+                    positions = utils.sky_to_cartesian(positions, degree=True)
+                elif position_type != 'xyz':
+                    raise PairCounterError('For mode = {}, position type should be one of ["xyz", "rdd"]'.format(self.mode))
+                if len(positions) != 3:
+                    raise PairCounterError('For mode = {}, please provide a list of 3 arrays for positions'.format(self.mode))
             return positions
 
         self.positions1 = list(positions1)
@@ -383,14 +381,19 @@ class BaseTwoPointCounter(BaseClass):
 
                 if n_bitwise_weights2 != self.n_bitwise_weights:
 
-                    def iip(weights):
+                    def wiip(weights):
                         return (1. + self.nrealizations)/(1. + utils.popcount(*weights))
 
                     if n_bitwise_weights2 == 0:
-                        self.weights1 = [iip(self.weights1[:self.n_bitwise_weights])*self.weights1[-1]]
+                        indweights = self.weights1[self.n_bitwise_weights:]
+                        self.weights1 = [wiip(self.weights1[:self.n_bitwise_weights])*(indweights or 1)]
                         self.n_bitwise_weights = 0
+                        self.log_info('Setting IIP weights for first catalog.')
                     elif self.n_bitwise_weights == 0:
-                        self.weights2 = [iip(self.weights2[:n_bitwise_weights2])*self.weights2[-1]]
+                        self.nrealizations = n_bitwise_weights2 * 8
+                        indweights = self.weights2[n_bitwise_weights2:]
+                        self.weights2 = [wiip(self.weights2[:n_bitwise_weights2])*(indweights or 1)]
+                        self.log_info('Setting IIP weights for second catalog.')
                     else:
                         raise PairCounterError('Incompatible length of bitwise weights: {:d} and {:d} bytes'.format(self.n_bitwise_weights, n_bitwise_weights2))
 
@@ -403,14 +406,16 @@ class BaseTwoPointCounter(BaseClass):
                                                    weight=np.array(twopoint_weights.weight[::-1], dtype=self.dtype))
 
 
-    def _mpi_decompose(self, mpicomm=None):
-        self.mpicomm = mpicomm
+    def _mpi_decompose(self):
         if self.with_mpi:
             smoothing = np.max(self.edges[0])
-            if self.mode == 'pimax':
-                smoothing = np.sqrt(smoothing**2 + np.max(self.edges[1])**2)
-            elif self.mode == 'theta':
+            if self.mode == 'theta':
                 smoothing = 2 * np.sin(0.5 * np.deg2rad(smoothing))
+            elif self.mode == 'rppi':
+                smoothing = np.sqrt(smoothing**2 + np.max(self.edges[1])**2)
+            elif self.mode == 'rp':
+                smoothing = np.inf
+            from . import mpi
             (self.positions1, self.weights1), (self.positions2, self.weights2) = \
              mpi.domain_decompose(self.mpicomm, smoothing, self.positions1, weights1=self.weights1,
                                   positions2=self.positions2, weights2=self.weights2, boxsize=self.boxsize)

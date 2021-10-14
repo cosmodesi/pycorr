@@ -3,7 +3,7 @@ import tempfile
 import numpy as np
 
 from pycorr import TwoPointCounter, AnalyticTwoPointCounter,\
-                   utils, HAS_MPI, setup_logging
+                   utils, setup_logging
 
 
 def diff(position1, position2):
@@ -47,7 +47,7 @@ def ref_theta(edges, data1, data2=None, boxsize=None, los='midpoint', **kwargs):
     for xyzw1 in zip(*data1):
         for xyzw2 in zip(*data2):
             xyz1, xyz2 = xyzw2[:3], xyzw1[:3]
-            dist = np.rad2deg(np.arccos(min(dotproduct_normalized(xyz1, xyz2),1))) # min to avoid rounding errors
+            dist = np.rad2deg(np.arccos(min(dotproduct_normalized(xyz1, xyz2), 1))) # min to avoid rounding errors
             if edges[0] <= dist < edges[-1]:
                 ind = np.searchsorted(edges, dist, side='right', sorter=None) - 1
                 weights1, weights2 = xyzw1[3:], xyzw2[3:]
@@ -160,16 +160,29 @@ def test_pair_counter(mode='s'):
         list_options.append({'autocorr':True, 'boxsize':boxsize})
     list_options.append({'autocorr':True})
     list_options.append({'n_individual_weights':1, 'bin_type':'custom'})
-    list_options.append({'n_individual_weights':2, 'n_bitwise_weights':1})
+    list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1})
+    list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'iip':1})
+    list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'position_type':'rdd'})
+    if mode == 'theta':
+        list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'position_type':'rd'})
     from collections import namedtuple
     TwoPointWeight = namedtuple('TwoPointWeight', ['sep', 'weight'])
     twopoint_weights = TwoPointWeight(np.logspace(-4, 0, 40), np.linspace(4., 1., 40))
     list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights})
     list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'dtype':'f4'})
-    if HAS_MPI:
+
+    has_mpi = True
+    try:
+        import mpi4py
+        import pmesh
+    except ImportError:
+        has_mpi = False
+    if has_mpi:
         from pycorr import mpi
+        print('Has MPI')
         list_options.append({'mpicomm':mpi.COMM_WORLD})
         list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'mpicomm':mpi.COMM_WORLD})
+
     #list_options.append({'weight_type':'inverse_bitwise','n_bitwise_weights':2})
     if mode == 'smu':
         edges = (edges, np.linspace(0,1,101))
@@ -182,31 +195,70 @@ def test_pair_counter(mode='s'):
             options = options.copy()
             n_bitwise_weights = options.pop('n_bitwise_weights',0)
             data1, data2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=options.pop('n_individual_weights',0), n_bitwise_weights=n_bitwise_weights)
+
             autocorr = options.pop('autocorr', False)
             options.setdefault('boxsize', None)
             options['los'] = 'x' if options['boxsize'] is not None else 'midpoint'
             bin_type = options.pop('bin_type', 'auto')
             mpicomm = options.pop('mpicomm', None)
+            iip = options.pop('iip', False)
+            position_type = options.pop('position_type', 'xyz')
             refoptions = options.copy()
             nrealizations = refoptions.pop('nrealizations', n_bitwise_weights * 64)
-            twopoint_weights = refoptions.pop('twopoint_weights', None)
-            refdata1 = data1.copy()
-            refdata2 = data2.copy()
+            refdata1, refdata2 = data1.copy(), data2.copy()
+
+            def wiip(weights):
+                return (1. + nrealizations)/(1. + utils.popcount(*weights))
+
+            def dataiip(data):
+                return data[:3] + [wiip(data[3:3+n_bitwise_weights])] + data[3+n_bitwise_weights:]
+
+            if iip:
+                refdata1 = dataiip(refdata1)
+                refdata2 = dataiip(refdata2)
+            if iip == 1:
+                data1 = dataiip(data1)
+            elif iip == 2:
+                data2 = dataiip(data2)
+            if iip:
+                n_bitwise_weights = 0
+                nrealizations = 0
+
             dtype = refoptions.pop('dtype', None)
             if dtype is not None:
                 for ii in range(len(data1)):
                     if np.issubdtype(data1[ii].dtype, np.floating):
                         refdata1[ii] = np.asarray(data1[ii], dtype=dtype)
                         refdata2[ii] = np.asarray(data2[ii], dtype=dtype)
+
+            twopoint_weights = refoptions.pop('twopoint_weights', None)
             if twopoint_weights is not None:
                 twopoint_weights = TwoPointWeight(np.cos(np.radians(twopoint_weights.sep[::-1], dtype=dtype)), np.asarray(twopoint_weights.weight[::-1], dtype=dtype))
+
             ref = ref_func(edges, refdata1, data2=None if autocorr else refdata2, nrealizations=nrealizations, n_bitwise_weights=n_bitwise_weights, twopoint_weights=twopoint_weights, **refoptions)
+
+            npos = 3
+            if position_type != 'xyz':
+
+                if position_type == 'rd': npos = 2
+
+                def datapos(data):
+                    rdd = list(utils.cartesian_to_sky(data[:3]))
+                    if position_type == 'rdd':
+                        return rdd + data[3:]
+                    if position_type == 'rd':
+                        return rdd[:2] + data[3:]
+                    raise ValueError('Unknown position type {}'.format(position_type))
+
+                data1 = datapos(data1)
+                data2 = datapos(data2)
+
             if mpicomm is not None:
                 data1 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data1]
                 data2 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data2]
 
-            test = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:3], positions2=None if autocorr else data2[:3],
-                                   weights1=data1[3:], weights2=None if autocorr else data2[3:], position_type='xyz', bin_type=bin_type, mpicomm=mpicomm, **options)
+            test = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:npos], positions2=None if autocorr else data2[:npos],
+                                   weights1=data1[npos:], weights2=None if autocorr else data2[npos:], position_type=position_type, bin_type=bin_type, mpicomm=mpicomm, **options)
 
             itemsize = np.dtype(dtype).itemsize
             tol = {'atol':1e-8, 'rtol':1e-3} if itemsize <= 4 else {'atol':1e-8, 'rtol':1e-6}

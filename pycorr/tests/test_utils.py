@@ -3,6 +3,13 @@ import numpy as np
 from pycorr import utils
 
 
+def test_sky_cartesian():
+    rng = np.random.RandomState(seed=42)
+    positions = [rng.uniform(0., 2., 100) for i in range(3)]
+    rdd = utils.cartesian_to_sky(positions)
+    assert np.allclose(utils.sky_to_cartesian(rdd), positions)
+
+
 def test_packbit():
     n = 63
     a = np.array([[0,1]*(n//2),[1,0]*(n//2)], dtype='?')
@@ -22,12 +29,11 @@ def test_popcount():
 
     num = 8564071463
     a = np.array(num, dtype=np.uint64)
-    print(utils.popcount(a), bin(num).count('1'))
+    assert np.allclose(utils.popcount(a), bin(num).count('1'))
 
     a = utils.pack_bitarrays(*[np.array([1], dtype='?') for i in range(33)], dtype=np.uint64)
     num = a[0][0]
-    print(num)
-    print(utils.popcount(*a), bin(num).count('1'))
+    assert np.allclose(utils.popcount(*a), bin(num).count('1'))
 
 
 def test_reformatbit():
@@ -162,8 +168,7 @@ def test_rebin():
 
 if __name__ == '__main__':
 
-    test_popcount()
-    exit()
+    test_sky_cartesian()
     test_normalization()
     test_packbit()
     test_popcount()

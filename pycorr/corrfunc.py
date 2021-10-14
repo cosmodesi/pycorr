@@ -47,7 +47,10 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             if len(lin) != len(edges) or not np.allclose(edges,lin):
                 raise PairCounterError('Corrfunc only supports linear pi binning, with n = int(pimax) bins')
 
+        autocorr = self.autocorr and not self.with_mpi
+
         def rotated_positions():
+
             # rotating coordinates to put los along z
             def rotate(positions):
                 toret = list(positions)
@@ -63,20 +66,19 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
 
             positions1 = rotate(self.positions1)
             positions2 = [None]*3
-            if not self.autocorr:
+            if not autocorr:
                 positions2 = rotate(self.positions2)
             return positions1, positions2
 
         def sky_positions():
             positions1 = utils.cartesian_to_sky(self.positions1, degree=True)
             positions2 = [None]*3
-            if not self.autocorr:
+            if not autocorr:
                 positions2 = utils.cartesian_to_sky(self.positions2, degree=True)
             return positions1, positions2
 
         weight_type = None
         weights1, weights2 = self.weights1, self.weights2
-        autocorr = self.autocorr or self.with_mpi
         if self.n_bitwise_weights:
             weight_type = 'inverse_bitwise'
             dtype = {4:np.int32, 8:np.int64}[self.dtype.itemsize]
@@ -85,7 +87,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                 return utils.reformat_bitarrays(*weights[:self.n_bitwise_weights], dtype=dtype) + weights[self.n_bitwise_weights:]
 
             weights2 = weights1 = reformat_bitweights(self.weights1)
-            if not self.autocorr:
+            if not autocorr:
                 weights2 = reformat_bitweights(self.weights2)
         elif self.weights1 is not None:
             weight_type = 'pair_product'
@@ -103,7 +105,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                   'isa': 'fallback'} # to be set to 'fastest' when bitwise weights included in all kernels
 
         positions2 = self.positions2
-        if self.autocorr:
+        if autocorr:
             positions2 = [None]*3
 
         if self.mode == 'theta':
@@ -138,8 +140,8 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                 positions1, positions2 = sky_positions()
                 result = mocks.DDsmu_mocks(autocorr, cosmology=1, nthreads=self.nthreads,
                                            mu_max=self.edges[1].max(), nmu_bins=len(self.edges[1]) - 1, binfile=self.edges[0],
-                                           RA1=positions1[1], DEC1=positions1[2], CZ1=positions1[0],
-                                           RA2=positions2[1], DEC2=positions2[2], CZ2=positions2[0],
+                                           RA1=positions1[0], DEC1=positions1[1], CZ1=positions1[2],
+                                           RA2=positions2[0], DEC2=positions2[1], CZ2=positions2[2],
                                            is_comoving_dist=True,
                                            output_savg=self.output_sepavg, **kwargs)
 
@@ -160,8 +162,8 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                 positions1, positions2 = sky_positions()
                 result = mocks.DDrppi_mocks(autocorr, cosmology=1, nthreads=self.nthreads,
                                             pimax=self.edges[1].max(), binfile=self.edges[0],
-                                            RA1=positions1[1], DEC1=positions1[2], CZ1=positions1[0],
-                                            RA2=positions2[1], DEC2=positions2[2], CZ2=positions2[0],
+                                            RA1=positions1[0], DEC1=positions1[1], CZ1=positions1[2],
+                                            RA2=positions2[0], DEC2=positions2[1], CZ2=positions2[2],
                                             is_comoving_dist=True,
                                             output_rpavg=self.output_sepavg, **kwargs)
 
@@ -170,7 +172,6 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
         elif self.mode == 'rp':
             key_sep = 'rpavg'
             if self.los in ['x','y','z']:
-                raise PairCounterError('Corrfunc does not provide (cross-) xi(rp) for periodic boundary conditions')
                 positions1, positions2 = rotated_positions()
                 boxsize = boxsize()
                 pimax = boxsize + 1. # los axis is z
@@ -184,21 +185,21 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                 check_los()
                 positions1, positions2 = sky_positions()
                 # \pi = \hat{\ell} \cdot (r_{1} - r_{2}) < r_{1} + r_{2}
-                #if self.autocorr:
+                #if autocorr:
                 #    pimax = 2*positions1[0].max()
                 #else:
                 #    pimax = 2*max(positions1[0].max(),positions2[0].max()
                 # local calculation, since integrated over pi
                 # \pi = \hat{\ell} \cdot (r_{1} - r_{2}) < | r_{1} - r_{2} | < boxsize
-                if self.autocorr:
+                if autocorr:
                     boxsize = [p.max() - p.min() for p in self.positions1]
                 else:
                     boxsize = [max(p1.max(), p2.max()) - min(p1.min(), p2.min()) for p1, p2 in zip(self.positions1, self.positions2)]
-                pimax = sum(p**2 for p in boxsize)**0.5
+                pimax = sum(p**2 for p in boxsize)**0.5 + 1.
                 result = mocks.DDrppi_mocks(autocorr, cosmology=1, nthreads=self.nthreads,
                                             pimax=pimax, binfile=self.edges[0],
-                                            RA1=positions1[1], DEC1=positions1[2], CZ1=positions1[0],
-                                            RA2=positions2[1], DEC2=positions2[2], CZ2=positions2[0],
+                                            RA1=positions1[0], DEC1=positions1[1], CZ1=positions1[2],
+                                            RA2=positions2[0], DEC2=positions2[1], CZ2=positions2[2],
                                             is_comoving_dist=True,
                                             output_rpavg=self.output_sepavg, **kwargs)
 

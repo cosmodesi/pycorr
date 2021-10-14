@@ -150,8 +150,8 @@ def cartesian_to_sky(positions, wrap=True, degree=True):
 
     Parameters
     ----------
-    positions : array of shape (3,N)
-        Position in cartesian coordinates.
+    positions : array of shape (3, N), list of 3 arrays
+        Positions in cartesian coordinates.
 
     wrap : bool, default=True
         Whether to wrap RA in :math:`[0, 2 \pi]`.
@@ -161,57 +161,42 @@ def cartesian_to_sky(positions, wrap=True, degree=True):
 
     Returns
     -------
-    dist : array
-        Distance.
-
-    ra : array
-        Right Ascension.
-
-    dec : array
-        Declination.
+    rdd : list of 3 arrays
+        Right ascension, declination and distance.
     """
     dist = distance(positions)
-    ra = np.arctan2(positions[1],positions[0])
+    ra = np.arctan2(positions[1], positions[0])
     if wrap: ra %= 2.*np.pi
     dec = np.arcsin(positions[2]/dist)
     conversion = np.pi/180. if degree else 1.
-    return dist, ra/conversion, dec/conversion
+    return [ra/conversion, dec/conversion, dist]
 
 
-def sky_to_cartesian(dist, ra, dec, degree=True, dtype=None):
+def sky_to_cartesian(rdd, degree=True, dtype=None):
     """
     Transform distance, RA, Dec into cartesian coordinates.
 
     Parameters
     ----------
-    dist : array
-        Distance.
-
-    ra : array
-        Right Ascension.
-
-    dec : array
-        Declination.
+    rdd : array of shape (3, N), list of 3 arrays
+        Right ascension, declination and distance.
 
     degree : default=True
         Whether RA, Dec are in degrees (``True``) or radians (``False``).
 
-    dtype : numpy.dtype, default=None
-        :class:`numpy.dtype` for returned array.
-
     Returns
     -------
-    position : array
-        position in cartesian coordinates; of shape (3,len(dist)).
+    positions : list of 3 arrays
+        Positions x, y, z in cartesian coordinates.
     """
     conversion = 1.
     if degree: conversion = np.pi/180.
-    positions = np.empty_like(dist,shape=(3,len(dist)))
+    ra, dec, dist = rdd
     cos_dec = np.cos(dec*conversion)
-    positions[0] = dist*cos_dec*np.cos(ra*conversion)
-    positions[1] = dist*cos_dec*np.sin(ra*conversion)
-    positions[2] = dist*np.sin(dec*conversion)
-    return positions
+    x = dist*cos_dec*np.cos(ra*conversion)
+    y = dist*cos_dec*np.sin(ra*conversion)
+    z = dist*np.sin(dec*conversion)
+    return [x, y, z]
 
 
 def rebin(ndarray, new_shape, statistic=np.sum):

@@ -328,11 +328,11 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
     cpositions2 = positions2
     if angular:
         # project to unit sphere
-        cpositions1 = utils.sky_to_cartesian(np.ones_like(positions1[0]), *positions1, degree=True)
+        cpositions1 = utils.sky_to_cartesian([*positions1, np.ones_like(positions1[0])], degree=True)
         if auto:
             cpositions2 = cpositions1
         else:
-            cpositions2 = utils.sky_to_cartesian(np.ones_like(positions2[0]), *positions2, degree=True)
+            cpositions2 = utils.sky_to_cartesian([*positions2, np.ones_like(positions2[0])], degree=True)
 
     cpositions1 = np.array(cpositions1).T
     if periodic:
