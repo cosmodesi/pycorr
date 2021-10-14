@@ -181,6 +181,7 @@ def test_pair_counter(mode='s'):
         from pycorr import mpi
         print('Has MPI')
         list_options.append({'mpicomm':mpi.COMM_WORLD})
+        list_options.append({'n_individual_weights':1, 'mpicomm':mpi.COMM_WORLD})
         list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'mpicomm':mpi.COMM_WORLD})
 
     #list_options.append({'weight_type':'inverse_bitwise','n_bitwise_weights':2})
@@ -193,8 +194,9 @@ def test_pair_counter(mode='s'):
     for engine in list_engine:
         for options in list_options:
             options = options.copy()
+            n_individual_weights = options.pop('n_individual_weights',0)
             n_bitwise_weights = options.pop('n_bitwise_weights',0)
-            data1, data2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=options.pop('n_individual_weights',0), n_bitwise_weights=n_bitwise_weights)
+            data1, data2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights)
 
             autocorr = options.pop('autocorr', False)
             options.setdefault('boxsize', None)
@@ -203,6 +205,7 @@ def test_pair_counter(mode='s'):
             mpicomm = options.pop('mpicomm', None)
             iip = options.pop('iip', False)
             position_type = options.pop('position_type', 'xyz')
+            dtype = options.pop('dtype', None)
             refoptions = options.copy()
             nrealizations = refoptions.pop('nrealizations', n_bitwise_weights * 64)
             refdata1, refdata2 = data1.copy(), data2.copy()
@@ -224,7 +227,9 @@ def test_pair_counter(mode='s'):
                 n_bitwise_weights = 0
                 nrealizations = 0
 
-            dtype = refoptions.pop('dtype', None)
+            itemsize = np.dtype('f8' if dtype is None else dtype).itemsize
+            tol = {'atol':1e-8, 'rtol':1e-3} if itemsize <= 4 else {'atol':1e-8, 'rtol':1e-6}
+
             if dtype is not None:
                 for ii in range(len(data1)):
                     if np.issubdtype(data1[ii].dtype, np.floating):
@@ -253,23 +258,50 @@ def test_pair_counter(mode='s'):
                 data1 = datapos(data1)
                 data2 = datapos(data2)
 
+            def run(**kwargs):
+                return TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:npos], positions2=None if autocorr else data2[:npos],
+                                       weights1=data1[npos:], weights2=None if autocorr else data2[npos:], position_type=position_type, bin_type=bin_type,
+                                       dtype=dtype, **kwargs, **options)
+
+            test = run()
+
+            if n_bitwise_weights == 0:
+                if n_individual_weights == 0:
+                    size1, size2 = len(refdata1[0]), len(refdata2[0])
+                    if autocorr:
+                        refnorm = size1**2 - size1
+                    else:
+                        refnorm = size1*size2
+                else:
+                    w1 = np.prod(refdata1[3:], axis=0)
+                    w2 = np.prod(refdata2[3:], axis=0)
+                    if autocorr:
+                        refnorm = np.sum(w1)**2 - np.sum(w1**2)
+                    else:
+                        refnorm = np.sum(w1)*np.sum(w2)
+            else:
+                refnorm = test.norm # too lazy to recode
+
+            assert np.allclose(test.norm, refnorm, **tol)
+
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                fn = os.path.join(tmp_dir, 'tmp.npy')
+                test.save(fn)
+                test2 = TwoPointCounter.load(fn)
+                assert np.allclose(test2.wcounts, ref, **tol)
+                assert np.allclose(test2.norm, refnorm, **tol)
+                test2.rebin((2,2) if len(edges) == 2 else (2,))
+                assert np.allclose(np.sum(test2.wcounts), np.sum(ref))
+
             if mpicomm is not None:
                 data1 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data1]
                 data2 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data2]
 
-            test = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:npos], positions2=None if autocorr else data2[:npos],
-                                   weights1=data1[npos:], weights2=None if autocorr else data2[npos:], position_type=position_type, bin_type=bin_type, mpicomm=mpicomm, **options)
+                test_mpi = run(mpicomm=mpicomm)
+                assert np.allclose(test_mpi.wcounts, test.wcounts, **tol)
+                assert np.allclose(test_mpi.norm, test.norm, **tol)
 
-            itemsize = np.dtype(dtype).itemsize
-            tol = {'atol':1e-8, 'rtol':1e-3} if itemsize <= 4 else {'atol':1e-8, 'rtol':1e-6}
             assert np.allclose(test.wcounts, ref, **tol)
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                fn = os.path.join(tmp_dir, 'tmp.npy')
-                test.save(fn)
-                test = TwoPointCounter.load(fn)
-                assert np.allclose(test.wcounts, ref, **tol)
-                test.rebin((2,2) if len(edges) == 2 else (2,))
-                assert np.allclose(np.sum(test.wcounts), np.sum(ref))
 
 
 def test_pip_normalization(mode='s'):

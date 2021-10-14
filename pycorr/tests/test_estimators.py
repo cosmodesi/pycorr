@@ -30,6 +30,16 @@ def test_estimator(mode='s'):
     list_options.append({'n_individual_weights':1})
     if mode not in ['theta', 'rp']:
         list_options.append({'estimator':'natural','boxsize':boxsize})
+    has_mpi = True
+    try:
+        import mpi4py
+        import pmesh
+    except ImportError:
+        has_mpi = False
+    if has_mpi:
+        from pycorr import mpi
+        print('Has MPI')
+        list_options.append({'mpicomm':mpi.COMM_WORLD})
 
     #list_options.append({'weight_type':'inverse_bitwise','n_bitwise_weights':2})
     edges = np.linspace(1e-9,100,11)
@@ -44,7 +54,8 @@ def test_estimator(mode='s'):
             options = options.copy()
             data1, randoms1 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=options.get('n_individual_weights',1), n_bitwise_weights=options.get('n_bitwise_weights',0))
             data2, randoms2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=options.get('n_individual_weights',1), n_bitwise_weights=options.get('n_bitwise_weights',0))
-            autocorr = options.pop('autocorr',False)
+            autocorr = options.pop('autocorr', False)
+            mpicomm = options.pop('mpicomm', None)
             options.setdefault('boxsize', None)
             options['los'] = 'z' if options['boxsize'] is not None else 'midpoint'
 
@@ -56,6 +67,7 @@ def test_estimator(mode='s'):
                                                    position_type='xyz', **options, **kwargs)
 
             test = run()
+
             if test.D1D2.mode == 'smu':
                 sep, xiell = project_to_multipoles(test, ells=(0,2,4))
             if test.D1D2.mode == 'rppi':
@@ -71,6 +83,16 @@ def test_estimator(mode='s'):
                 test2 = run(R1R2=test.R1R2)
                 mask = np.isfinite(test2.corr) & np.isfinite(test.corr)
                 assert np.allclose(test2.corr[mask], test.corr[mask])
+
+            if mpicomm is not None:
+                data1 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data1]
+                data2 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data2]
+                randoms1 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in randoms1]
+                randoms2 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in randoms2]
+                test_mpi = run(mpicomm=mpicomm)
+                mask = np.isfinite(test.corr)
+                assert np.allclose(test_mpi.corr[mask], test.corr[mask])
+                assert np.allclose(test_mpi.sep[mask], test.sep[mask])
 
 
 if __name__ == '__main__':

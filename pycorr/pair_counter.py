@@ -208,6 +208,8 @@ class BaseTwoPointCounter(BaseClass):
         self._set_edges(edges, bin_type=bin_type)
         self._set_boxsize(boxsize)
         self._set_los(los)
+        # setting normalization *before* mpi_decompose, as weight arrays are not scattered after this step
+        self.norm = self.normalization()
         self._mpi_decompose()
 
         self.output_sepavg = output_sepavg
@@ -217,8 +219,6 @@ class BaseTwoPointCounter(BaseClass):
 
         if not self.output_sepavg:
             self._set_default_sep()
-
-        self.norm = self.normalization()
 
     def run(self):
         """

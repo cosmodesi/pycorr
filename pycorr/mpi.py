@@ -373,7 +373,11 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
     # exchange first particles
     layout = domain.decompose(cpositions1, smoothing=0)
     positions1 = layout.exchange(*positions1, pack=False) # exchange takes a list of arrays
-    if weights1 is not None: weights1 = layout.exchange(*weights1, pack=False)
+    if weights1 is not None:
+        multiple_weights = len(weights1) > 1
+        weights1 = layout.exchange(*weights1, pack=False)
+        if multiple_weights: weights1 = list(weights1)
+        else: weights1 = [weights1]
 
     boxsize = posmax - posmin
 
@@ -384,12 +388,14 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
     else:
         layout = domain.decompose(cpositions2, smoothing=smoothing)
         positions2 = layout.exchange(*positions2, pack=False)
-        if weights2 is not None: weights2 = layout.exchange(*weights2, pack=False)
+        if weights2 is not None:
+            multiple_weights = len(weights2) > 1
+            weights2 = layout.exchange(*weights2, pack=False)
+            if multiple_weights: weights2 = list(weights2)
+            else: weights2 = [weights2]
 
     assert mpicomm.allreduce(len(positions1[0])) == size1, 'some particles disappeared...'
 
     positions1 = list(positions1) # exchange returns tuple
     positions2 = list(positions2)
-    if weights1 is not None: weights1 = list(weights1)
-    if weights2 is not None: weights2 = list(weights2)
     return (positions1, weights1), (positions2, weights2)

@@ -78,6 +78,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
         weight_type = None
         output_weightavg = False
         weights1, weights2 = self.weights1, self.weights2
+
         if self.n_bitwise_weights:
             output_weightavg = True
             weight_type = 'inverse_bitwise'
