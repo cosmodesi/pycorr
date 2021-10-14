@@ -16,8 +16,6 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
     def run(self):
         """Compute the pair counts and set :attr:`wcounts` and :attr:`sep`."""
 
-        output_weightavg = self.weights1 is not None
-
         def boxsize():
             if self.periodic:
                 toret = self.boxsize[0]
@@ -78,8 +76,10 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             return positions1, positions2
 
         weight_type = None
+        output_weightavg = False
         weights1, weights2 = self.weights1, self.weights2
         if self.n_bitwise_weights:
+            output_weightavg = True
             weight_type = 'inverse_bitwise'
             dtype = {4:np.int32, 8:np.int64}[self.dtype.itemsize]
 
@@ -90,10 +90,12 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             if not autocorr:
                 weights2 = reformat_bitweights(self.weights2)
         elif self.weights1 is not None:
+            output_weightavg = True
             weight_type = 'pair_product'
 
         pair_weights, sep_pair_weights = None, None
         if self.twopoint_weights is not None:
+            output_weightavg = True
             weight_type = 'inverse_bitwise'
             pair_weights = self.twopoint_weights.weight
             sep_pair_weights = self.twopoint_weights.sep

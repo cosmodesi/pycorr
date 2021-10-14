@@ -146,7 +146,6 @@ def get_bitweight_normalization(weights1, weights2=None):
     return sumw_cross - sumw_auto
 
 
-
 def test_normalization():
     #print(utils.pascal_triangle(4))
     size = 42
