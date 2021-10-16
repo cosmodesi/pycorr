@@ -39,7 +39,7 @@ def test_estimator(mode='s'):
     if has_mpi:
         from pycorr import mpi
         print('Has MPI')
-        list_options.append({'mpicomm':mpi.COMM_WORLD})
+        list_options.append({'mpicomm': mpi.COMM_WORLD})
 
     #list_options.append({'weight_type':'inverse_bitwise','n_bitwise_weights':2})
     edges = np.linspace(1e-9,100,11)

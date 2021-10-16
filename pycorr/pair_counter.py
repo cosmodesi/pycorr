@@ -209,7 +209,7 @@ class BaseTwoPointCounter(BaseClass):
         self._set_boxsize(boxsize)
         self._set_los(los)
         # setting normalization *before* mpi_decompose, as weight arrays are not scattered after this step
-        self.norm = self.normalization()
+        self.wnorm = self.normalization()
         self._mpi_decompose()
 
         self.output_sepavg = output_sepavg
@@ -515,7 +515,7 @@ class BaseTwoPointCounter(BaseClass):
 
     def normalized_wcounts(self):
         """Return normalized pair counts, i.e. :attr:`wcounts` divided by :meth:`normalization`."""
-        return self.wcounts/self.norm
+        return self.wcounts/self.wnorm
 
     def rebin(self, factor=1):
         """
@@ -534,7 +534,7 @@ class BaseTwoPointCounter(BaseClass):
 
     def __getstate__(self):
         state = {}
-        for name in ['name', 'autocorr', 'sep', 'wcounts', 'norm', 'edges', 'mode', 'bin_type',
+        for name in ['name', 'autocorr', 'sep', 'wcounts', 'wnorm', 'edges', 'mode', 'bin_type',
                      'boxsize', 'los', 'output_sepavg', 'attrs']:
             if hasattr(self, name):
                 state[name] = getattr(self, name)
@@ -597,7 +597,7 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
         self.autocorr = size2 is None
         self.run()
         self._set_default_sep()
-        self.norm = self.normalization()
+        self.wnorm = self.normalization()
 
     def run(self):
         """Set analytical pair counts."""

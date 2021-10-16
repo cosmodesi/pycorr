@@ -162,6 +162,7 @@ def test_pair_counter(mode='s'):
     list_options.append({'n_individual_weights':1, 'bin_type':'custom'})
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1})
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'iip':1})
+    list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'bitwise_type': 'i4', 'iip':1})
     list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'position_type':'rdd'})
     if mode == 'theta':
         list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'position_type':'rd'})
@@ -203,6 +204,7 @@ def test_pair_counter(mode='s'):
             options['los'] = 'x' if options['boxsize'] is not None else 'midpoint'
             bin_type = options.pop('bin_type', 'auto')
             mpicomm = options.pop('mpicomm', None)
+            bitwise_type = options.pop('bitwise_type', None)
             iip = options.pop('iip', False)
             position_type = options.pop('position_type', 'xyz')
             dtype = options.pop('dtype', None)
@@ -242,12 +244,20 @@ def test_pair_counter(mode='s'):
 
             ref = ref_func(edges, refdata1, data2=None if autocorr else refdata2, nrealizations=nrealizations, n_bitwise_weights=n_bitwise_weights, twopoint_weights=twopoint_weights, **refoptions)
 
+            if bitwise_type is not None and n_bitwise_weights > 0:
+
+                def update_bit_type(data):
+                    return data[:3] + utils.reformat_bitarrays(*data[3:3+n_bitwise_weights], dtype=bitwise_type) + data[3+n_bitwise_weights:]
+
+                data1 = update_bit_type(data1)
+                data2 = update_bit_type(data2)
+
             npos = 3
             if position_type != 'xyz':
 
                 if position_type == 'rd': npos = 2
 
-                def datapos(data):
+                def update_pos_type(data):
                     rdd = list(utils.cartesian_to_sky(data[:3]))
                     if position_type == 'rdd':
                         return rdd + data[3:]
@@ -255,8 +265,8 @@ def test_pair_counter(mode='s'):
                         return rdd[:2] + data[3:]
                     raise ValueError('Unknown position type {}'.format(position_type))
 
-                data1 = datapos(data1)
-                data2 = datapos(data2)
+                data1 = update_pos_type(data1)
+                data2 = update_pos_type(data2)
 
             def run(**kwargs):
                 return TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:npos], positions2=None if autocorr else data2[:npos],
@@ -280,16 +290,16 @@ def test_pair_counter(mode='s'):
                     else:
                         refnorm = np.sum(w1)*np.sum(w2)
             else:
-                refnorm = test.norm # too lazy to recode
+                refnorm = test.wnorm # too lazy to recode
 
-            assert np.allclose(test.norm, refnorm, **tol)
+            assert np.allclose(test.wnorm, refnorm, **tol)
 
             with tempfile.TemporaryDirectory() as tmp_dir:
                 fn = os.path.join(tmp_dir, 'tmp.npy')
                 test.save(fn)
                 test2 = TwoPointCounter.load(fn)
                 assert np.allclose(test2.wcounts, ref, **tol)
-                assert np.allclose(test2.norm, refnorm, **tol)
+                assert np.allclose(test2.wnorm, refnorm, **tol)
                 test2.rebin((2,2) if len(edges) == 2 else (2,))
                 assert np.allclose(np.sum(test2.wcounts), np.sum(ref))
 
@@ -299,7 +309,7 @@ def test_pair_counter(mode='s'):
 
                 test_mpi = run(mpicomm=mpicomm)
                 assert np.allclose(test_mpi.wcounts, test.wcounts, **tol)
-                assert np.allclose(test_mpi.norm, test.norm, **tol)
+                assert np.allclose(test_mpi.wnorm, test.wnorm, **tol)
 
             assert np.allclose(test.wcounts, ref, **tol)
 
@@ -316,7 +326,7 @@ def test_pip_normalization(mode='s'):
     test = TwoPointCounter(mode=mode, edges=edges, positions1=data1[:3], positions2=None if autocorr else data2[:3],
                            weights1=data1[3:], weights2=None if autocorr else data2[3:], position_type='xyz')
     wiip = (1. + test.nrealizations)/(1. + utils.popcount(*data1[3:]))
-    ratio = abs(test.norm / sum(wiip)**2 - 1)
+    ratio = abs(test.wnorm / sum(wiip)**2 - 1)
     assert ratio < 0.1
 
 
