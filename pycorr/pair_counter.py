@@ -208,12 +208,9 @@ class BaseTwoPointCounter(BaseClass):
         self._set_edges(edges, bin_type=bin_type)
         self._set_boxsize(boxsize)
         self._set_los(los)
-        # setting normalization *before* mpi_decompose, as weight arrays are not scattered after this step
-        self.wnorm = self.normalization()
-        self._mpi_decompose()
-
         self.output_sepavg = output_sepavg
         self.attrs = kwargs
+        self.wnorm = self.normalization()
 
         self.run()
 
@@ -266,6 +263,8 @@ class BaseTwoPointCounter(BaseClass):
 
     @property
     def with_mpi(self):
+        """Whether to use MPI."""
+        if not hasattr(self, 'mpicomm'): self.mpicomm = None
         return self.mpicomm is not None and self.mpicomm.size > 1
 
     def _set_positions(self, positions1, positions2=None, position_type='auto', dtype=None):
@@ -416,9 +415,9 @@ class BaseTwoPointCounter(BaseClass):
             elif self.mode == 'rp':
                 smoothing = np.inf
             from . import mpi
-            (self.positions1, self.weights1), (self.positions2, self.weights2) = \
-             mpi.domain_decompose(self.mpicomm, smoothing, self.positions1, weights1=self.weights1,
-                                  positions2=self.positions2, weights2=self.weights2, boxsize=self.boxsize)
+            return mpi.domain_decompose(self.mpicomm, smoothing, self.positions1, weights1=self.weights1,
+                                 positions2=self.positions2, weights2=self.weights2, boxsize=self.boxsize)
+        return (self.positions1, self.weights1), (self.positions2, self.weights2)
 
     def _set_default_sep(self):
         edges = self.edges[0]
@@ -539,6 +538,13 @@ class BaseTwoPointCounter(BaseClass):
             if hasattr(self, name):
                 state[name] = getattr(self, name)
         return state
+
+    def save(self, filename):
+        """Save pair counts to ``filename``."""
+        if not self.with_mpi or self.mpicomm.rank == 0:
+            super(BaseTwoPointCounter, self).save(filename)
+        if self.with_mpi:
+            self.mpicomm.Barrier()
 
 
 class AnalyticTwoPointCounter(BaseTwoPointCounter):

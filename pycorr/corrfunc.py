@@ -16,6 +16,8 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
     def run(self):
         """Compute the pair counts and set :attr:`wcounts` and :attr:`sep`."""
 
+        (dpositions1, dweights1), (dpositions2, dweights2) = self._mpi_decompose()
+
         def boxsize():
             if self.periodic:
                 toret = self.boxsize[0]
@@ -62,22 +64,22 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                     toret[2] = -positions[1]
                 return toret
 
-            positions1 = rotate(self.positions1)
+            positions1 = rotate(dpositions1)
             positions2 = [None]*3
             if not autocorr:
-                positions2 = rotate(self.positions2)
+                positions2 = rotate(dpositions2)
             return positions1, positions2
 
         def sky_positions():
-            positions1 = utils.cartesian_to_sky(self.positions1, degree=True)
+            positions1 = utils.cartesian_to_sky(dpositions1, degree=True)
             positions2 = [None]*3
             if not autocorr:
-                positions2 = utils.cartesian_to_sky(self.positions2, degree=True)
+                positions2 = utils.cartesian_to_sky(dpositions2, degree=True)
             return positions1, positions2
 
         weight_type = None
         output_weightavg = False
-        weights1, weights2 = self.weights1, self.weights2
+        weights1, weights2 = dweights1, dweights2
 
         if self.n_bitwise_weights:
             output_weightavg = True
@@ -87,10 +89,10 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             def reformat_bitweights(weights):
                 return utils.reformat_bitarrays(*weights[:self.n_bitwise_weights], dtype=dtype) + weights[self.n_bitwise_weights:]
 
-            weights2 = weights1 = reformat_bitweights(self.weights1)
+            weights2 = weights1 = reformat_bitweights(dweights1)
             if not autocorr:
-                weights2 = reformat_bitweights(self.weights2)
-        elif self.weights1 is not None:
+                weights2 = reformat_bitweights(dweights2)
+        elif dweights1 is not None:
             output_weightavg = True
             weight_type = 'pair_product'
 
@@ -107,7 +109,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                   'verbose': False,
                   'isa': 'fallback'} # to be set to 'fastest' when bitwise weights included in all kernels
 
-        positions2 = self.positions2
+        positions2 = dpositions2
         if autocorr:
             positions2 = [None]*3
 
@@ -115,13 +117,13 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             if self.periodic:
                 raise PairCounterError('Corrfunc does not provide periodic boundary conditions for the angular correlation function')
             result = mocks.DDtheta_mocks(autocorr, nthreads=self.nthreads, binfile=self.edges[0],
-                                         RA1=self.positions1[0], DEC1=self.positions1[1], RA2=positions2[0], DEC2=positions2[1],
+                                         RA1=dpositions1[0], DEC1=dpositions1[1], RA2=positions2[0], DEC2=positions2[1],
                                          output_thetaavg=self.output_sepavg, fast_acos=self.attrs.get('fast_acos',False), **kwargs)
             key_sep = 'thetaavg'
 
         elif self.mode == 's':
             result = theory.DD(autocorr, nthreads=self.nthreads, binfile=self.edges[0],
-                               X1=self.positions1[0], Y1=self.positions1[1], Z1=self.positions1[2],
+                               X1=dpositions1[0], Y1=dpositions1[1], Z1=dpositions1[2],
                                X2=positions2[0], Y2=positions2[1], Z2=positions2[2],
                                periodic=self.periodic, boxsize=boxsize(),
                                output_ravg=self.output_sepavg, **kwargs)
@@ -195,9 +197,9 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                 # local calculation, since integrated over pi
                 # \pi = \hat{\ell} \cdot (r_{1} - r_{2}) < | r_{1} - r_{2} | < boxsize
                 if autocorr:
-                    boxsize = [p.max() - p.min() for p in self.positions1]
+                    boxsize = [p.max() - p.min() for p in dpositions1]
                 else:
-                    boxsize = [max(p1.max(), p2.max()) - min(p1.min(), p2.min()) for p1, p2 in zip(self.positions1, self.positions2)]
+                    boxsize = [max(p1.max(), p2.max()) - min(p1.min(), p2.min()) for p1, p2 in zip(dpositions1, dpositions2)]
                 pimax = sum(p**2 for p in boxsize)**0.5 + 1.
                 result = mocks.DDrppi_mocks(autocorr, cosmology=1, nthreads=self.nthreads,
                                             pimax=pimax, binfile=self.edges[0],
