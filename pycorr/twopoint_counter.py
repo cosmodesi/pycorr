@@ -7,12 +7,12 @@ from .utils import BaseClass, BaseMetaClass
 from . import utils
 
 
-class PairCounterError(Exception):
+class TwoPointCounterError(Exception):
 
     """Exception raised when issue with pair counting."""
 
 
-def get_pair_counter(engine='corrfunc'):
+def get_twopoint_counter(engine='corrfunc'):
     """
     Return :class:`BaseTwoPointCounter` subclass corresponding
     to input engine name.
@@ -36,7 +36,7 @@ def get_pair_counter(engine='corrfunc'):
             from .corrfunc import CorrfuncTwoPointCounter
             return CorrfuncTwoPointCounter
 
-        raise PairCounterError('Unknown engine {}.'.format(engine))
+        raise TwoPointCounterError('Unknown engine {}.'.format(engine))
 
     return engine
 
@@ -46,7 +46,7 @@ class MetaTwoPointCounter(BaseMetaClass):
     """Metaclass to return correct pair counter engine."""
 
     def __call__(cls, *args, engine='corrfunc', **kwargs):
-        return get_pair_counter(engine)(*args, **kwargs)
+        return get_twopoint_counter(engine)(*args, **kwargs)
 
 
 class TwoPointCounter(metaclass=MetaTwoPointCounter):
@@ -72,7 +72,7 @@ class TwoPointCounter(metaclass=MetaTwoPointCounter):
     def load(cls, filename):
         cls.log_info('Loading {}.'.format(filename))
         state = np.load(filename, allow_pickle=True)[()]
-        return get_pair_counter(state.pop('name')).from_state(state)
+        return get_twopoint_counter(state.pop('name')).from_state(state)
 
 
 class BaseTwoPointCounter(BaseClass):
@@ -168,8 +168,11 @@ class BaseTwoPointCounter(BaseClass):
 
         twopoint_weights : WeightTwoPointEstimator, default=None
             Weights to be applied to each pair of particles.
-            A :class:`WeightTwoPointEstimator` instance or any object with attribute arrays ``sep``
-            (separations) and ``weight`` (weight at given separation).
+            A :class:`WeightTwoPointEstimator` instance or any object with arrays ``sep``
+            (separations) and ``weight`` (weight at given separation) as attributes
+            (i.e. to be accessed through ``twopoint_weights.sep``, ``twopoint_weights.weight``)
+            or as keys (i.e. ``twopoint_weights['sep']``, ``twopoint_weights['weight']``)
+            or as element (i.e. ``sep, weight = twopoint_weights``)
 
         los : string, default='midpoint'
             Line-of-sight to be used when ``mode`` is "smu", "rppi" or "rp"; one of:
@@ -196,7 +199,7 @@ class BaseTwoPointCounter(BaseClass):
             The MPI communicator, if input positions and weights are MPI-scattered.
 
         kwargs : dict
-            Pair-counter engine-specific options.
+            Pair counter engine-specific options.
         """
         self.mode = mode
         self.nthreads = nthreads
@@ -213,9 +216,8 @@ class BaseTwoPointCounter(BaseClass):
         self.wnorm = self.normalization()
 
         self.run()
+        self._set_default_sep()
 
-        if not self.output_sepavg:
-            self._set_default_sep()
 
     def run(self):
         """
@@ -230,17 +232,17 @@ class BaseTwoPointCounter(BaseClass):
         self.edges = tuple(edges)
         if self.mode in ['smu','rppi']:
             if not self.ndim == 2:
-                raise PairCounterError('A tuple of edges should be provided to pair counter in mode {}'.format(self.mode))
+                raise TwoPointCounterError('A tuple of edges should be provided to pair counter in mode {}'.format(self.mode))
         else:
             if not self.ndim == 1:
-                raise PairCounterError('Only one edge array should be provided to pair counter in mode {}'.format(self.mode))
+                raise TwoPointCounterError('Only one edge array should be provided to pair counter in mode {}'.format(self.mode))
         self._set_bin_type(bin_type)
 
     def _set_bin_type(self, bin_type):
         self.bin_type = bin_type.lower()
         allowed_bin_types = ['lin', 'custom', 'auto']
         if self.bin_type not in allowed_bin_types:
-            raise PairCounterError('bin type should be one of {}'.format(allowed_bin_types))
+            raise TwoPointCounterError('bin type should be one of {}'.format(allowed_bin_types))
         if self.bin_type == 'auto':
             edges = self.edges[0]
             if np.allclose(edges, np.linspace(edges[0], edges[-1], len(edges))):
@@ -281,28 +283,28 @@ class BaseTwoPointCounter(BaseClass):
             size = len(positions[0])
             self.dtype = positions[0].dtype
             if not np.issubdtype(self.dtype, np.floating):
-                raise PairCounterError('Input position arrays should be of floating type, not {}'.format(self.dtype))
+                raise TwoPointCounterError('Input position arrays should be of floating type, not {}'.format(self.dtype))
             for p in positions[1:]:
                 if len(p) != size:
-                    raise PairCounterError('All position arrays should be of the same size')
+                    raise TwoPointCounterError('All position arrays should be of the same size')
                 if p.dtype != self.dtype:
-                    raise PairCounterError('All position arrays should be of the same type, you can e.g. provide dtype')
+                    raise TwoPointCounterError('All position arrays should be of the same type, you can e.g. provide dtype')
             if self.mode == 'theta':
                 if position_type == 'xyz':
                     positions = utils.cartesian_to_sky(positions, degree=True)[:2]
                 elif position_type in ['rdd', 'rdz']:
                     positions = list(positions[:2])
                 elif position_type != 'rd':
-                    raise PairCounterError('For mode = {}, position type should be one of ["xyz", "rdz", "rd"]'.format(self.mode))
+                    raise TwoPointCounterError('For mode = {}, position type should be one of ["xyz", "rdz", "rd"]'.format(self.mode))
                 if len(positions) != 2:
-                    raise PairCounterError('For mode = {}, please provide a list of 2 arrays for positions'.format(self.mode))
+                    raise TwoPointCounterError('For mode = {}, please provide a list of 2 arrays for positions'.format(self.mode))
             else:
                 if position_type == 'rdd':
                     positions = utils.sky_to_cartesian(positions, degree=True)
                 elif position_type != 'xyz':
-                    raise PairCounterError('For mode = {}, position type should be one of ["xyz", "rdd"]'.format(self.mode))
+                    raise TwoPointCounterError('For mode = {}, position type should be one of ["xyz", "rdd"]'.format(self.mode))
                 if len(positions) != 3:
-                    raise PairCounterError('For mode = {}, please provide a list of 3 arrays for positions'.format(self.mode))
+                    raise TwoPointCounterError('For mode = {}, please provide a list of 3 arrays for positions'.format(self.mode))
             return positions
 
         self.positions1 = list(positions1)
@@ -320,22 +322,22 @@ class BaseTwoPointCounter(BaseClass):
         if weight_type is not None: weight_type = weight_type.lower()
         allowed_weight_types = [None, 'auto', 'product_individual', 'inverse_bitwise']
         if weight_type not in allowed_weight_types:
-            raise PairCounterError('weight_type should be one of {}'.format(allowed_weight_types))
+            raise TwoPointCounterError('weight_type should be one of {}'.format(allowed_weight_types))
 
         if self.autocorr:
             if weights2 is not None:
-                raise PairCounterError('weights2 are provided, but not positions2')
+                raise TwoPointCounterError('weights2 are provided, but not positions2')
 
         if weights1 is None:
             if weights2 is not None:
-                raise PairCounterError('weights2 are provided, but not weights1')
+                raise TwoPointCounterError('weights2 are provided, but not weights1')
         else:
             if self.autocorr:
                 if weights2 is not None:
-                    raise PairCounterError('weights2 are provided, but not positions2')
+                    raise TwoPointCounterError('weights2 are provided, but not positions2')
             else:
                 if weights2 is None:
-                    raise PairCounterError('weights1 are provided, but not weights2')
+                    raise TwoPointCounterError('weights1 are provided, but not weights2')
 
         self.nrealizations = nrealizations
         self.n_bitwise_weights = 0
@@ -352,7 +354,7 @@ class BaseTwoPointCounter(BaseClass):
                 bitwise_weights = []
                 for w in weights:
                     if len(w) != size:
-                        raise PairCounterError('All weight arrays should be of the same size as position arrays')
+                        raise TwoPointCounterError('All weight arrays should be of the same size as position arrays')
                     if np.issubdtype(w.dtype, np.integer):
                         if weight_type == 'product_individual':
                             individual_weights.append(w)
@@ -371,8 +373,8 @@ class BaseTwoPointCounter(BaseClass):
             self.weights1, self.n_bitwise_weights = check_shape(weights1, len(self.positions1[0]))
             if self.nrealizations is None:
                 self.nrealizations = self.n_bitwise_weights * 8
-            elif self.nrealizations > self.n_bitwise_weights * 8:
-                raise PairCounterError('Provided number of realizations is {:d}, '
+            elif self.n_bitwise_weights and self.nrealizations > self.n_bitwise_weights * 8:
+                raise TwoPointCounterError('Provided number of realizations is {:d}, '
                                        'more than actual number of bits in bitwise weights {:d}'.format(self.nrealizations, self.n_bitwise_weights * 8))
             self.weights2 = weights2
             if not self.autocorr:
@@ -394,15 +396,24 @@ class BaseTwoPointCounter(BaseClass):
                         self.weights2 = [wiip(self.weights2[:n_bitwise_weights2])*(indweights or 1)]
                         self.log_info('Setting IIP weights for second catalog.')
                     else:
-                        raise PairCounterError('Incompatible length of bitwise weights: {:d} and {:d} bytes'.format(self.n_bitwise_weights, n_bitwise_weights2))
+                        raise TwoPointCounterError('Incompatible length of bitwise weights: {:d} and {:d} bytes'.format(self.n_bitwise_weights, n_bitwise_weights2))
 
         self.twopoint_weights = twopoint_weights
         if twopoint_weights is not None:
             from collections import namedtuple
             TwoPointWeight = namedtuple('TwoPointWeight', ['sep', 'weight'])
+            try:
+                sep = twopoint_weights.sep
+                weight = twopoint_weights.weight
+            except AttributeError:
+                try:
+                    sep = twopoint_weights['sep']
+                    weight = twopoint_weights['weight']
+                except IndexError:
+                    sep, weight = twopoint_weights
             # just to make sure we use the correct dtype
-            self.twopoint_weights = TwoPointWeight(sep=np.cos(np.radians(twopoint_weights.sep[::-1], dtype=self.dtype), dtype=self.dtype),
-                                                   weight=np.array(twopoint_weights.weight[::-1], dtype=self.dtype))
+            self.twopoint_weights = TwoPointWeight(sep=np.cos(np.radians(sep[::-1], dtype=self.dtype), dtype=self.dtype),
+                                                   weight=np.array(weight[::-1], dtype=self.dtype))
 
 
     def _mpi_decompose(self):
@@ -420,23 +431,21 @@ class BaseTwoPointCounter(BaseClass):
         return (self.positions1, self.weights1), (self.positions2, self.weights2)
 
     def _set_default_sep(self):
-        edges = self.edges[0]
-        sep = (edges[1:] + edges[:-1])/2.
-        if self.ndim == 2:
-            self.sep = np.empty(self.shape, dtype='f8')
-            self.sep[...] = sep[:,None]
-        else:
-            self.sep = sep
+        mid = [(edges[1:] + edges[:-1])/2. for edges in self.edges]
+        sep = list(np.meshgrid(*mid, indexing='ij'))
+        if not self.output_sepavg:
+            sep[0] = self.sep
+        self.sep = sep
 
     def _set_los(self, los):
         self.los = los
         allowed_los = ['midpoint', 'endpoint', 'firstpoint', 'x', 'y', 'z']
         if self.los not in allowed_los:
-            raise PairCounterError('los should be one of {}'.format(allowed_los))
+            raise TwoPointCounterError('los should be one of {}'.format(allowed_los))
         if self.periodic and self.mode != 's':
             allowed_los = ['x', 'y', 'z']
             if self.los not in allowed_los:
-                raise PairCounterError('When boxsize is provided, los should be one of {}'.format(allowed_los))
+                raise TwoPointCounterError('When boxsize is provided, los should be one of {}'.format(allowed_los))
 
     def _set_boxsize(self, boxsize):
         self.boxsize = boxsize
@@ -525,7 +534,7 @@ class BaseTwoPointCounter(BaseClass):
         if np.ndim(factor) == 0:
             factor = (factor,)
         if len(factor) != self.ndim:
-            raise PairCounterError('Provide a rebinning factor for each dimension')
+            raise TwoPointCounterError('Provide a rebinning factor for each dimension')
         new_shape = tuple(s//f for s,f in zip(self.shape, factor))
         wcounts = self.wcounts
         self.wcounts = utils.rebin(wcounts, new_shape, statistic=np.sum)

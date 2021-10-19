@@ -1,0 +1,8 @@
+Reference test to compare pair counters.
+Data and randoms catalogs are in catalogs/.
+Pair counts and correlation function estimations (Landy-Szalay) are saved in twopoint_theta/, twopoint_s/, twopoint_smu/, twopoint_rppi/,
+without weights (*_no_weights), with individual weights (*_individual_weights), with PIP weights (*_bitwise_weights),
+with both (*_individual_bitwise_weights), and with angular weights provided in catalogs/custom_angular_upweights.txt (*_individual_bitwise_angular_upweights).
+Note that bitwise weights are only provided for data, not randoms; and these weights are turned into IIP weights for D1R2, D2R1.
+Angular weights are linearly interpolated (in terms of costheta) in the theta range, set to 1 outside. Those are only applied to D1D2, D1R2, D2R1.
+Angular weights, this time calculated from parent, data and randoms catalogs in catalogs/ are given in angular_upweights/.

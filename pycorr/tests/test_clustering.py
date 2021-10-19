@@ -8,9 +8,9 @@ from pycorr import TwoPointCorrelationFunction, project_to_multipoles,\
                     project_to_wp, setup_logging
 
 
-catalog_dir = '_catalogs'
-data_fn = os.path.join(catalog_dir,'data.fits')
-randoms_fn = os.path.join(catalog_dir,'randoms.fits')
+catalog_dir = os.path.join(os.path.dirname(__file__), '_catalogs')
+data_fn = os.path.join(catalog_dir, 'data.fits')
+randoms_fn = os.path.join(catalog_dir, 'randoms.fits')
 bias = 2.0
 
 

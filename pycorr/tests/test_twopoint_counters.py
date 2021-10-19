@@ -148,7 +148,7 @@ def generate_catalogs(size=100, boxsize=(1000,)*3, n_individual_weights=1, n_bit
     return toret
 
 
-def test_pair_counter(mode='s'):
+def test_twopoint_counter(mode='s'):
     ref_func = {'theta':ref_theta, 's':ref_s, 'smu':ref_smu, 'rppi':ref_rppi, 'rp':ref_rp}[mode]
     list_engine = ['corrfunc']
     edges = np.linspace(1,100,11)
@@ -330,7 +330,7 @@ def test_pip_normalization(mode='s'):
     assert ratio < 0.1
 
 
-def test_analytic_pair_counter(mode='s'):
+def test_analytic_twopoint_counter(mode='s'):
     edges = np.linspace(50,100,5)
     size = 10000
     boxsize = (1000,)*3
@@ -387,10 +387,10 @@ if __name__ == '__main__':
     setup_logging()
 
     for mode in ['theta','s','smu','rppi','rp']:
-        test_pair_counter(mode=mode)
+        test_twopoint_counter(mode=mode)
 
     for mode in ['s','smu','rppi']:
-        test_analytic_pair_counter(mode=mode)
+        test_analytic_twopoint_counter(mode=mode)
 
     test_rebin()
     test_pip_normalization()

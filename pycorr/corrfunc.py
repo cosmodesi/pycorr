@@ -3,7 +3,7 @@
 import numpy as np
 from Corrfunc import theory, mocks
 
-from .pair_counter import BaseTwoPointCounter, PairCounterError
+from .twopoint_counter import BaseTwoPointCounter, TwoPointCounterError
 from . import utils
 
 
@@ -22,30 +22,30 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             if self.periodic:
                 toret = self.boxsize[0]
                 if not np.all(self.boxsize == toret):
-                    raise PairCounterError('Corrfunc does not support non-cubic box')
+                    raise TwoPointCounterError('Corrfunc does not support non-cubic box')
                 return toret
             return None
 
         def check_los():
             if self.los != 'midpoint':
-                raise PairCounterError('Corrfunc only supports midpoint line-of-sight')
+                raise TwoPointCounterError('Corrfunc only supports midpoint line-of-sight')
             return self.los
 
         def check_mu():
             edges = self.edges[1]
             if edges[0] != 0:
-                raise PairCounterError('Corrfunc only supports mu starting at 0')
+                raise TwoPointCounterError('Corrfunc only supports mu starting at 0')
             lin = np.linspace(edges[0],edges[-1],len(edges))
             if not np.allclose(edges,lin):
-                raise PairCounterError('Corrfunc only supports linear mu binning')
+                raise TwoPointCounterError('Corrfunc only supports linear mu binning')
 
         def check_pi():
             edges = self.edges[1]
             if edges[0] != 0:
-                raise PairCounterError('Corrfunc only supports pi starting at 0')
+                raise TwoPointCounterError('Corrfunc only supports pi starting at 0')
             lin = np.linspace(edges[0],edges[-1],int(edges[-1])+1)
             if len(lin) != len(edges) or not np.allclose(edges,lin):
-                raise PairCounterError('Corrfunc only supports linear pi binning, with n = int(pimax) bins')
+                raise TwoPointCounterError('Corrfunc only supports linear pi binning, with n = int(pimax) bins')
 
         autocorr = self.autocorr and not self.with_mpi
 
@@ -115,7 +115,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
 
         if self.mode == 'theta':
             if self.periodic:
-                raise PairCounterError('Corrfunc does not provide periodic boundary conditions for the angular correlation function')
+                raise TwoPointCounterError('Corrfunc does not provide periodic boundary conditions for the angular correlation function')
             result = mocks.DDtheta_mocks(autocorr, nthreads=self.nthreads, binfile=self.edges[0],
                                          RA1=dpositions1[0], DEC1=dpositions1[1], RA2=positions2[0], DEC2=positions2[1],
                                          output_thetaavg=self.output_sepavg, fast_acos=self.attrs.get('fast_acos',False), **kwargs)
@@ -219,7 +219,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             result['weightavg'] = np.sum(result['weightavg']*npairs, axis=-1)/sumnpairs
 
         else:
-            raise PairCounterError('Corrfunc does not support mode {}'.format(self.mode))
+            raise TwoPointCounterError('Corrfunc does not support mode {}'.format(self.mode))
 
         self.npairs = result['npairs']
         self.wcounts = self.npairs*(result['weightavg'] if output_weightavg else 1)\

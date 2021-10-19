@@ -4,7 +4,7 @@ import logging
 import numpy as np
 
 from .estimator import get_estimator
-from .pair_counter import TwoPointCounter, AnalyticTwoPointCounter
+from .twopoint_counter import TwoPointCounter, AnalyticTwoPointCounter
 from .utils import BaseClass
 
 
@@ -111,8 +111,11 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
 
     D1D2_twopoint_weights : WeightTwoPointEstimator, default=None
         Weights to be applied to each pair of particles between first and second data catalogs.
-        A :class:`WeightTwoPointEstimator` instance or any object with attribute arrays ``sep``
-        (separations) and ``weight`` (weight at given separation).
+        A :class:`WeightTwoPointEstimator` instance or any object with arrays ``sep``
+        (separations) and ``weight`` (weight at given separation) as attributes
+        (i.e. to be accessed through ``twopoint_weights.sep``, ``twopoint_weights.weight``)
+        or as keys (i.e. ``twopoint_weights['sep']``, ``twopoint_weights['weight']``)
+        or as element (i.e. ``sep, weight = twopoint_weights``)
 
     D1R2_twopoint_weights : WeightTwoPointEstimator, default=None
         Weights to be applied to each pair of particles between first data catalog and second randoms catalog.

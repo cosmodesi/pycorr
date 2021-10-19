@@ -26,6 +26,14 @@ def exception_handler(exc_type, exc_value, exc_traceback):
         log.critical('An error occured.')
 
 
+def mkdir(dirname):
+    """Try to create ``dirnm`` and catch :class:`OSError`."""
+    try:
+        os.makedirs(dirname) # MPI...
+    except OSError:
+        return
+
+
 def setup_logging(level=logging.INFO, stream=sys.stdout, filename=None, filemode='w', **kwargs):
     """
     Set up logging.
