@@ -11,7 +11,7 @@ from .utils import BaseClass
 def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=None, randoms_positions1=None, randoms_positions2=None,
                                 data_weights1=None, data_weights2=None, randoms_weights1=None, randoms_weights2=None, R1R2=None, estimator='auto',
                                 D1D2_twopoint_weights=None, D1R2_twopoint_weights=None, D2R1_twopoint_weights=None, R1R2_twopoint_weights=None,
-                                boxsize=None, mpicomm=None, **kwargs):
+                                boxsize=None, mpicomm=None, D1D2_weight_type='auto', D1R2_weight_type='auto', D2R1_weight_type='auto', R1R2_weight_type='auto', **kwargs):
     r"""
     Compute pair counts and correlation function estimation.
 
@@ -90,8 +90,8 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
             - "rdd": RA/Dec in degree, distance, for any ``mode``
             - "xyz": Cartesian positions
 
-    weight_type : string, default='auto'
-        The type of weighting to apply to provided weights. One of:
+    D1D2_weight_type : string, default='auto'
+        The type of weighting to apply to provided weights for D1D2 pair counts. One of:
 
             - ``None``: no weights are applied.
             - "product_individual": each pair is weighted by the product of weights :math:`w_{1} w_{2}`.
@@ -103,6 +103,15 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
             - "auto": automatically choose weighting based on input ``weights1`` and ``weights2``,
                i.e. ``None`` when ``weights1`` and ``weights2`` are ``None``,
                "inverse_bitwise" if onf of input weights is integer, else "product_individual".
+
+    D1R2_weight_type : string, default='auto'
+        Same as ``D1D2_weight_type``, for D1R2 pair counts.
+
+    D2R1_weight_type : string, default='auto'
+        Same as ``D1D2_weight_type``, for D2R1 pair counts.
+
+    R1R2_weight_type : string, default='auto'
+        Same as ``D1D2_weight_type``, for R1R2 pair counts.
 
     nrealizations : int, default=None
         In case ``weight_type`` is "inverse_bitwise", the number of realizations,
@@ -174,6 +183,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     positions = {'D1':data_positions1, 'D2':data_positions2, 'R1':randoms_positions1, 'R2':randoms_positions2}
     weights = {'D1':data_weights1, 'D2':data_weights2, 'R1':randoms_weights1, 'R2':randoms_weights2}
     twopoint_weights = {'D1D2':D1D2_twopoint_weights, 'D1R2':D1R2_twopoint_weights, 'D2R1':D2R1_twopoint_weights, 'R1R2':R1R2_twopoint_weights}
+    weight_type = {'D1D2':D1D2_weight_type, 'D1R2':D1R2_weight_type, 'D2R1':D2R1_weight_type, 'R1R2':R1R2_weight_type}
     precomputed = {'R1R2':R1R2}
 
     pairs = {}
@@ -196,6 +206,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
             if autocorr and label12 == 'D1R2':
                 label2 = 'R1'
             pairs[label12] = TwoPointCounter(mode, edges, positions[label1], positions2=positions[label2],
-                                                   weights1=weights[label1], weights2=weights[label2], twopoint_weights=twopoint_weights[label12],
+                                                   weights1=weights[label1], weights2=weights[label2],
+                                                   twopoint_weights=twopoint_weights[label12], weight_type=weight_type[label12],
                                                    boxsize=boxsize, mpicomm=mpicomm, **kwargs)
     return Estimator(**pairs)

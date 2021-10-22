@@ -92,7 +92,7 @@ def test_estimator(mode='s'):
                 test_mpi = run(mpicomm=mpicomm)
                 mask = np.isfinite(test.corr)
                 assert np.allclose(test_mpi.corr[mask], test.corr[mask])
-                assert np.allclose(test_mpi.sep[mask], test.sep[mask])
+                assert np.allclose(test_mpi.sep[0][mask], test.sep[0][mask])
 
 
 if __name__ == '__main__':

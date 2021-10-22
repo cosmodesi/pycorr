@@ -289,22 +289,20 @@ class BaseTwoPointCounter(BaseClass):
                     raise TwoPointCounterError('All position arrays should be of the same size')
                 if p.dtype != self.dtype:
                     raise TwoPointCounterError('All position arrays should be of the same type, you can e.g. provide dtype')
+            if position_type != 'auto' and len(positions) != len(position_type):
+                raise TwoPointCounterError('For position type = {}, please provide a list of {:d} arrays for positions'.format(position_type, len(positions)))
             if self.mode == 'theta':
                 if position_type == 'xyz':
                     positions = utils.cartesian_to_sky(positions, degree=True)[:2]
                 elif position_type in ['rdd', 'rdz']:
-                    positions = list(positions[:2])
+                    positions = list(positions)
                 elif position_type != 'rd':
                     raise TwoPointCounterError('For mode = {}, position type should be one of ["xyz", "rdz", "rd"]'.format(self.mode))
-                if len(positions) != 2:
-                    raise TwoPointCounterError('For mode = {}, please provide a list of 2 arrays for positions'.format(self.mode))
             else:
                 if position_type == 'rdd':
                     positions = utils.sky_to_cartesian(positions, degree=True)
                 elif position_type != 'xyz':
                     raise TwoPointCounterError('For mode = {}, position type should be one of ["xyz", "rdd"]'.format(self.mode))
-                if len(positions) != 3:
-                    raise TwoPointCounterError('For mode = {}, please provide a list of 3 arrays for positions'.format(self.mode))
             return positions
 
         self.positions1 = list(positions1)
@@ -412,8 +410,8 @@ class BaseTwoPointCounter(BaseClass):
                 except IndexError:
                     sep, weight = twopoint_weights
             # just to make sure we use the correct dtype
-            self.twopoint_weights = TwoPointWeight(sep=np.cos(np.radians(sep[::-1], dtype=self.dtype), dtype=self.dtype),
-                                                   weight=np.array(weight[::-1], dtype=self.dtype))
+            self.twopoint_weights = TwoPointWeight(sep=np.cos(np.radians(np.ravel(sep)[::-1]), dtype=self.dtype),
+                                                   weight=np.array(np.ravel(weight)[::-1], dtype=self.dtype))
 
 
     def _mpi_decompose(self):
@@ -433,7 +431,7 @@ class BaseTwoPointCounter(BaseClass):
     def _set_default_sep(self):
         mid = [(edges[1:] + edges[:-1])/2. for edges in self.edges]
         sep = list(np.meshgrid(*mid, indexing='ij'))
-        if not self.output_sepavg:
+        if self.output_sepavg:
             sep[0] = self.sep
         self.sep = sep
 
@@ -538,7 +536,7 @@ class BaseTwoPointCounter(BaseClass):
         new_shape = tuple(s//f for s,f in zip(self.shape, factor))
         wcounts = self.wcounts
         self.wcounts = utils.rebin(wcounts, new_shape, statistic=np.sum)
-        self.sep = utils.rebin(self.sep*wcounts, new_shape, statistic=np.sum)/self.wcounts
+        self.sep = [utils.rebin(sep*wcounts, new_shape, statistic=np.sum)/self.wcounts for sep in self.sep]
 
     def __getstate__(self):
         state = {}
@@ -610,6 +608,7 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
         self.size1 = size1
         self.size2 = size2
         self.autocorr = size2 is None
+        self.output_sepavg = False
         self.run()
         self._set_default_sep()
         self.wnorm = self.normalization()
