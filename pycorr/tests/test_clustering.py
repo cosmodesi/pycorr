@@ -95,7 +95,7 @@ def compute_correlation_function():
             return project_to_multipoles(result, ells=ells)
         if mode == 'wp':
             return project_to_wp(result)
-        return result.sep[0], result.corr
+        return result.sep, result.corr
 
     fig, lax = plt.subplots(ncols=3, nrows=1, sharex=False, sharey=False, figsize=(18,7))
     fig.subplots_adjust(hspace=0.2, wspace=0.2)

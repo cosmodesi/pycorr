@@ -127,10 +127,17 @@ class BaseTwoPointEstimator(BaseClass):
 
     @property
     def sep(self):
-        """Array of separation values, taken from :attr:`R1R2` if provided, else :attr:`D1D2`."""
+        """Array of separation values of first dimension, taken from :attr:`R1R2` if provided, else :attr:`D1D2`."""
         if self.R1R2 is not None:
             return self.R1R2.sep
         return self.D1D2.sep
+
+    @property
+    def seps(self):
+        """Array of separation values, taken from :attr:`R1R2` if provided, else :attr:`D1D2`."""
+        if self.R1R2 is not None:
+            return self.R1R2.seps
+        return self.D1D2.seps
 
     @property
     def edges(self):
@@ -307,7 +314,7 @@ def project_to_multipoles(estimator, ells=(0,2,4)):
     if np.ndim(ells) == 0:
         ells = (ells,)
     ells = tuple(ells)
-    sep = np.nanmean(estimator.sep[0], axis=-1)
+    sep = np.nanmean(estimator.sep, axis=-1)
     toret = []
     for ill,ell in enumerate(ells):
         dmu = np.diff(estimator.edges[1], axis=-1)
@@ -341,6 +348,6 @@ def project_to_wp(estimator, pimax=None):
     mask = Ellipsis
     if pimax is not None:
         mask = (estimator.edges[1] <= pimax)[:-1]
-    sep = np.nanmean(estimator.sep[0][:,mask], axis=-1)
+    sep = np.nanmean(estimator.sep[:,mask], axis=-1)
     wp = 2.*np.sum(estimator.corr[:,mask]*np.diff(estimator.edges[1])[mask], axis=-1)
     return sep, wp

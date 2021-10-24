@@ -2,8 +2,8 @@ import os
 import tempfile
 import numpy as np
 
-from pycorr import TwoPointCorrelationFunction, TwoPointEstimator, project_to_multipoles,\
-                    project_to_wp, setup_logging
+from pycorr import TwoPointCorrelationFunction, TwoPointEstimator, TwoPointCounter,\
+                   project_to_multipoles, project_to_wp, setup_logging
 
 
 def generate_catalogs(size=100, boxsize=(1000,)*3, n_individual_weights=1, n_bitwise_weights=0, seed=42):
@@ -58,16 +58,43 @@ def test_estimator(mode='s'):
             mpicomm = options.pop('mpicomm', None)
             options.setdefault('boxsize', None)
             options['los'] = 'z' if options['boxsize'] is not None else 'midpoint'
+            options['position_type'] = 'xyz'
 
             def run(**kwargs):
                 return TwoPointCorrelationFunction(mode=mode, edges=edges, engine=engine, data_positions1=data1[:3], data_positions2=None if autocorr else data2[:3],
                                                    data_weights1=data1[3:], data_weights2=None if autocorr else data2[3:],
                                                    randoms_positions1=randoms1[:3], randoms_positions2=None if autocorr else randoms2[:3],
                                                    randoms_weights1=randoms1[3:], randoms_weights2=None if autocorr else randoms2[3:],
-                                                   position_type='xyz', **options, **kwargs)
+                                                   **options, **kwargs)
 
             test = run()
 
+            def assert_allclose(res1, res2):
+                assert np.allclose(res2.wcounts, res1.wcounts, rtol=1e-8, atol=1e-8)
+                assert res2.wnorm == res1.wnorm
+
+            options_counts = options.copy()
+            estimator = options_counts.pop('estimator','landyszalay')
+
+            D1D2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:3], positions2=None if autocorr else data2[:3],
+                                   weights1=data1[3:], weights2=None if autocorr else data2[3:], **options_counts)
+            assert_allclose(D1D2, test.D1D2)
+            if estimator not in ['natural','weight']:
+                D1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:3], positions2=randoms2[:3],
+                                       weights1=data1[3:], weights2=randoms2[3:], **options_counts)
+                assert_allclose(D1R2, test.D1R2)
+                if autocorr:
+                    assert_allclose(D1R2, test.D2R1)
+                else:
+                    D2R1 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:3], positions2=data2[:3],
+                                           weights1=randoms1[3:], weights2=data2[3:], **options_counts)
+                    #D2R1 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data2[:3], positions2=randoms1[:3],
+                    #                       weights1=data2[3:], weights2=randoms1[3:], **options_counts)
+                    assert_allclose(D2R1, test.D2R1)
+
+            R1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:3], positions2=None if autocorr else randoms2[:3],
+                                   weights1=randoms1[3:], weights2=None if autocorr else randoms2[3:], **options_counts)
+            assert_allclose(R1R2, test.R1R2)
             if test.D1D2.mode == 'smu':
                 sep, xiell = project_to_multipoles(test, ells=(0,2,4))
             if test.D1D2.mode == 'rppi':
@@ -92,7 +119,7 @@ def test_estimator(mode='s'):
                 test_mpi = run(mpicomm=mpicomm)
                 mask = np.isfinite(test.corr)
                 assert np.allclose(test_mpi.corr[mask], test.corr[mask])
-                assert np.allclose(test_mpi.sep[0][mask], test.sep[0][mask])
+                assert np.allclose(test_mpi.sep[mask], test.sep[mask])
 
 
 if __name__ == '__main__':

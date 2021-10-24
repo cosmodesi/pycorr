@@ -370,7 +370,7 @@ def test_rebin():
     test = AnalyticTwoPointCounter(mode, edges, boxsize)
     ref = test.copy()
     test.rebin(2)
-    assert test.sep[0].shape == test.wcounts.shape == (5,)
+    assert test.sep.shape == test.wcounts.shape == (5,)
     assert np.allclose(np.sum(test.wcounts), np.sum(ref.wcounts))
 
     mode = 'smu'
@@ -378,7 +378,7 @@ def test_rebin():
     test = AnalyticTwoPointCounter(mode, edges, boxsize)
     ref = test.copy()
     test.rebin((2,5))
-    assert test.sep[0].shape == test.wcounts.shape == (5, 1)
+    assert test.sep.shape == test.wcounts.shape == (5, 1)
     assert np.allclose(np.sum(test.wcounts), np.sum(ref.wcounts))
 
 

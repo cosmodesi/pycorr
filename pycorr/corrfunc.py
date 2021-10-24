@@ -225,13 +225,15 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
         self.wcounts = self.npairs*(result['weightavg'] if output_weightavg else 1)\
                        *(self.nrealizations + 1 if self.n_bitwise_weights else 1)
         self.wcounts[self.npairs == 0] = 0.
-        self.sep = result[key_sep]
-        self.sep.shape = self.wcounts.shape = self.npairs.shape = self.shape
+        if self.output_sepavg:
+            self.sep = result[key_sep]
+            self.sep.shape = self.wcounts.shape = self.npairs.shape = self.shape
         #self.wcounts.shape = self.shape[:1] + (1400,)
         #self.wcounts = self.wcounts.sum(axis=-1)
 
         if self.with_mpi:
             self.wcounts = self.mpicomm.allreduce(self.wcounts)
             npairs = np.maximum(self.mpicomm.allreduce(self.npairs), 1e-9) # just to avoid division by 0
-            self.sep = self.mpicomm.allreduce(self.sep * self.npairs)/npairs
+            if self.output_sepavg:
+                self.sep = self.mpicomm.allreduce(self.sep * self.npairs)/npairs
             self.npairs = npairs

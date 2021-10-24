@@ -215,8 +215,8 @@ class BaseTwoPointCounter(BaseClass):
         self.attrs = kwargs
         self.wnorm = self.normalization()
 
+        self._set_default_separation()
         self.run()
-        self._set_default_sep()
 
 
     def run(self):
@@ -410,8 +410,8 @@ class BaseTwoPointCounter(BaseClass):
                 except IndexError:
                     sep, weight = twopoint_weights
             # just to make sure we use the correct dtype
-            self.twopoint_weights = TwoPointWeight(sep=np.cos(np.radians(np.ravel(sep)[::-1]), dtype=self.dtype),
-                                                   weight=np.array(np.ravel(weight)[::-1], dtype=self.dtype))
+            self.twopoint_weights = TwoPointWeight(sep=np.cos(np.radians(sep[::-1]), dtype=self.dtype),
+                                                   weight=np.array(weight[::-1], dtype=self.dtype))
 
 
     def _mpi_decompose(self):
@@ -428,12 +428,9 @@ class BaseTwoPointCounter(BaseClass):
                                  positions2=self.positions2, weights2=self.weights2, boxsize=self.boxsize)
         return (self.positions1, self.weights1), (self.positions2, self.weights2)
 
-    def _set_default_sep(self):
+    def _set_default_separation(self):
         mid = [(edges[1:] + edges[:-1])/2. for edges in self.edges]
-        sep = list(np.meshgrid(*mid, indexing='ij'))
-        if self.output_sepavg:
-            sep[0] = self.sep
-        self.sep = sep
+        self.seps = list(np.meshgrid(*mid, indexing='ij'))
 
     def _set_los(self, los):
         self.los = los
@@ -519,6 +516,15 @@ class BaseTwoPointCounter(BaseClass):
             sumw1, sumw2 = self.mpicomm.allreduce(sumw1), self.mpicomm.allreduce(sumw2)
         return sumw1 * sumw2
 
+    @property
+    def sep(self):
+        """Array of separation values of first dimension (e.g. :math:`s` if :attr:`mode` is "smu")."""
+        return self.seps[0]
+
+    @sep.setter
+    def sep(self, sep):
+        self.seps[0] = sep
+
     def normalized_wcounts(self):
         """Return normalized pair counts, i.e. :attr:`wcounts` divided by :meth:`normalization`."""
         return self.wcounts/self.wnorm
@@ -536,11 +542,11 @@ class BaseTwoPointCounter(BaseClass):
         new_shape = tuple(s//f for s,f in zip(self.shape, factor))
         wcounts = self.wcounts
         self.wcounts = utils.rebin(wcounts, new_shape, statistic=np.sum)
-        self.sep = [utils.rebin(sep*wcounts, new_shape, statistic=np.sum)/self.wcounts for sep in self.sep]
+        self.seps = [utils.rebin(sep*wcounts, new_shape, statistic=np.sum)/self.wcounts for sep in self.seps]
 
     def __getstate__(self):
         state = {}
-        for name in ['name', 'autocorr', 'sep', 'wcounts', 'wnorm', 'edges', 'mode', 'bin_type',
+        for name in ['name', 'autocorr', 'seps', 'wcounts', 'wnorm', 'edges', 'mode', 'bin_type',
                      'boxsize', 'los', 'output_sepavg', 'attrs']:
             if hasattr(self, name):
                 state[name] = getattr(self, name)
@@ -609,8 +615,8 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
         self.size2 = size2
         self.autocorr = size2 is None
         self.output_sepavg = False
+        self._set_default_separation()
         self.run()
-        self._set_default_sep()
         self.wnorm = self.normalization()
 
     def run(self):
