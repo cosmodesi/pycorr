@@ -379,7 +379,7 @@ def pascal_triangle(n_rows):
     return toret
 
 
-def joint_occurences(nrealizations=128, max_occurences=None, case='zerotruncated'):
+def joint_occurences(nrealizations=128, max_occurences=None, noffset=1, default_value=0):
     """
     Return expected value of inverse counts, i.e. eq. 21 of arXiv:1912.08803.
 
@@ -389,12 +389,15 @@ def joint_occurences(nrealizations=128, max_occurences=None, case='zerotruncated
         Number of realizations (including current realization).
 
     max_occurences : int, default=None
-        Maximum number of occurences, less than or equal to ``nrealizations``.
+        Maximum number of occurences (including ``noffset``).
         If ``None``, defaults to ``nrealizations``.
 
-    case : string, default='zerotruncated'
-        Refers to the "zero truncated estimator" of arXiv:1912.08803:
-        current realization included in bitwise weights and ``nrealizations``.
+    noffset : int, default=1
+        The offset added to the bitwise count, typically 0 or 1.
+        See "zero truncated estimator" and "efficient estimator" of arXiv:1912.08803.
+
+    default_value : float, default=0.
+        The default value of pairwise weights if the denominator is zero (defaulting to 0).
 
     Returns
     -------
@@ -402,20 +405,23 @@ def joint_occurences(nrealizations=128, max_occurences=None, case='zerotruncated
         Expected value of inverse counts.
     """
     # gk(c1, c2)
-    offset = {'zerotruncated':1, 'all':0}[case]
     if max_occurences is None: max_occurences = nrealizations
 
     binomial_coeffs = pascal_triangle(nrealizations)
 
     def prob(c12, c1, c2):
-        return binomial_coeffs[c1 - offset][c12 - offset] * binomial_coeffs[nrealizations - c1][c2 - c12] / binomial_coeffs[nrealizations - offset][c2 - offset]
+        return binomial_coeffs[c1 - noffset][c12 - noffset] * binomial_coeffs[nrealizations - c1][c2 - c12] / binomial_coeffs[nrealizations - noffset][c2 - noffset]
 
-    toret = [[0]] if offset else []
-    for c1 in range(offset, max_occurences + 1):
-        row = [[0]] if offset else []
-        for c2 in range(offset, c1 + 1):
+    def fk(c12):
+        if c12 == 0: return default_value
+        return nrealizations / c12
+
+    toret = []
+    for c1 in range(noffset, max_occurences + 1):
+        row = []
+        for c2 in range(noffset, c1 + 1):
             # we have c12 <= c1, c2 and nrealizations >= c1 + c2 + c12
-            row.append(sum(nrealizations / c12 * prob(c12, c1, c2) for c12 in range(max(offset, c1 + c2 - nrealizations), min(c1, c2) + 1)))
+            row.append(sum(fk(c12) * prob(c12, c1, c2) for c12 in range(max(noffset, c1 + c2 - nrealizations), min(c1, c2) + 1)))
         toret.append(row)
 
     return toret

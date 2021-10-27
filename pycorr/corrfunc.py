@@ -80,6 +80,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
         weight_type = None
         output_weightavg = False
         weights1, weights2 = dweights1, dweights2
+        weight_attrs = None
 
         if self.n_bitwise_weights:
             output_weightavg = True
@@ -92,6 +93,8 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             weights2 = weights1 = reformat_bitweights(dweights1)
             if not autocorr:
                 weights2 = reformat_bitweights(dweights2)
+            weight_attrs = (self.weight_attrs['noffset'], self.weight_attrs['default_value']/self.weight_attrs['nrealizations'])
+
         elif dweights1 is not None:
             output_weightavg = True
             weight_type = 'pair_product'
@@ -105,8 +108,8 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
 
         kwargs = {'weights1': weights1, 'weights2': weights2,
                   'bin_type': self.bin_type, 'weight_type': weight_type,
-                  'pair_weights': pair_weights, 'sep_pair_weights':sep_pair_weights,
-                  'verbose': False,
+                  'pair_weights': pair_weights, 'sep_pair_weights': sep_pair_weights,
+                  'attrs_pair_weights': weight_attrs, 'verbose': False,
                   'isa': 'fallback'} # to be set to 'fastest' when bitwise weights included in all kernels
 
         positions2 = dpositions2
@@ -118,7 +121,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                 raise TwoPointCounterError('Corrfunc does not provide periodic boundary conditions for the angular correlation function')
             result = mocks.DDtheta_mocks(autocorr, nthreads=self.nthreads, binfile=self.edges[0],
                                          RA1=dpositions1[0], DEC1=dpositions1[1], RA2=positions2[0], DEC2=positions2[1],
-                                         output_thetaavg=self.output_sepavg, fast_acos=self.attrs.get('fast_acos',False), **kwargs)
+                                         output_thetaavg=self.compute_sepavg, fast_acos=self.attrs.get('fast_acos',False), **kwargs)
             key_sep = 'thetaavg'
 
         elif self.mode == 's':
@@ -126,7 +129,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                                X1=dpositions1[0], Y1=dpositions1[1], Z1=dpositions1[2],
                                X2=positions2[0], Y2=positions2[1], Z2=positions2[2],
                                periodic=self.periodic, boxsize=boxsize(),
-                               output_ravg=self.output_sepavg, **kwargs)
+                               output_ravg=self.compute_sepavg, **kwargs)
 
             key_sep = 'ravg'
 
@@ -139,7 +142,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                                       X1=positions1[0], Y1=positions1[1], Z1=positions1[2],
                                       X2=positions2[0], Y2=positions2[1], Z2=positions2[2],
                                       periodic=self.periodic, boxsize=boxsize(),
-                                      output_savg=self.output_sepavg, **kwargs)
+                                      output_savg=self.compute_sepavg, **kwargs)
             else:
                 check_los()
                 positions1, positions2 = sky_positions()
@@ -148,7 +151,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                                            RA1=positions1[0], DEC1=positions1[1], CZ1=positions1[2],
                                            RA2=positions2[0], DEC2=positions2[1], CZ2=positions2[2],
                                            is_comoving_dist=True,
-                                           output_savg=self.output_sepavg, **kwargs)
+                                           output_savg=self.compute_sepavg, **kwargs)
 
             key_sep = 'savg'
 
@@ -161,7 +164,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                                        X1=positions1[0], Y1=positions1[1], Z1=positions1[2],
                                        X2=positions2[0], Y2=positions2[1], Z2=positions2[2],
                                        periodic=self.periodic, boxsize=boxsize(),
-                                       output_rpavg=self.output_sepavg, **kwargs)
+                                       output_rpavg=self.compute_sepavg, **kwargs)
             else:
                 check_los()
                 positions1, positions2 = sky_positions()
@@ -170,7 +173,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                                             RA1=positions1[0], DEC1=positions1[1], CZ1=positions1[2],
                                             RA2=positions2[0], DEC2=positions2[1], CZ2=positions2[2],
                                             is_comoving_dist=True,
-                                            output_rpavg=self.output_sepavg, **kwargs)
+                                            output_rpavg=self.compute_sepavg, **kwargs)
 
             key_sep = 'rpavg'
 
@@ -185,7 +188,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                                        X1=positions1[0], Y1=positions1[1], Z1=positions1[2],
                                        X2=positions2[0], Y2=positions2[1], Z2=positions2[2],
                                        periodic=self.periodic, boxsize=boxsize,
-                                       output_rpavg=self.output_sepavg, **kwargs)
+                                       output_rpavg=self.compute_sepavg, **kwargs)
             else:
                 check_los()
                 positions1, positions2 = sky_positions()
@@ -206,7 +209,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                                             RA1=positions1[0], DEC1=positions1[1], CZ1=positions1[2],
                                             RA2=positions2[0], DEC2=positions2[1], CZ2=positions2[2],
                                             is_comoving_dist=True,
-                                            output_rpavg=self.output_sepavg, **kwargs)
+                                            output_rpavg=self.compute_sepavg, **kwargs)
 
             # sum over pi to keep only rp
             result = {key:result[key] for key in ['npairs','weightavg',key_sep]}
@@ -223,9 +226,9 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
 
         self.npairs = result['npairs']
         self.wcounts = self.npairs*(result['weightavg'] if output_weightavg else 1)\
-                       *(self.nrealizations + 1 if self.n_bitwise_weights else 1)
+                       *(self.weight_attrs['nrealizations'] if self.n_bitwise_weights else 1)
         self.wcounts[self.npairs == 0] = 0.
-        if self.output_sepavg:
+        if self.compute_sepavg:
             self.sep = result[key_sep]
             self.sep.shape = self.wcounts.shape = self.npairs.shape = self.shape
         #self.wcounts.shape = self.shape[:1] + (1400,)
@@ -234,6 +237,6 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
         if self.with_mpi:
             self.wcounts = self.mpicomm.allreduce(self.wcounts)
             npairs = np.maximum(self.mpicomm.allreduce(self.npairs), 1e-9) # just to avoid division by 0
-            if self.output_sepavg:
+            if self.compute_sepavg:
                 self.sep = self.mpicomm.allreduce(self.sep * self.npairs)/npairs
             self.npairs = npairs

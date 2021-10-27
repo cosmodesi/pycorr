@@ -26,8 +26,12 @@ def dotproduct_normalized(position1, position2):
     return dotproduct(position1, position2)/(norm(position1)*norm(position2))
 
 
-def get_weight(xyz1, xyz2, weights1, weights2, n_bitwise_weights=0, twopoint_weights=None, nrealizations=0):
-    weight = (1 + nrealizations) / (1. + sum(bin(w1 & w2).count('1') for w1, w2 in zip(weights1[:n_bitwise_weights], weights2[:n_bitwise_weights])))
+def get_weight(xyz1, xyz2, weights1, weights2, n_bitwise_weights=0, twopoint_weights=None, nrealizations=None, noffset=1, default_value=0.):
+    if nrealizations is None:
+        weight = 1
+    else:
+        denom = noffset + sum(bin(w1 & w2).count('1') for w1, w2 in zip(weights1[:n_bitwise_weights], weights2[:n_bitwise_weights]))
+        weight = default_value if denom == 0 else nrealizations/denom
     for w1, w2 in zip(weights1[n_bitwise_weights:], weights2[n_bitwise_weights:]):
         weight *= w1 * w2
     if twopoint_weights is not None:
@@ -163,7 +167,8 @@ def test_twopoint_counter(mode='s'):
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1})
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'iip':1})
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'bitwise_type': 'i4', 'iip':1})
-    list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'position_type':'rdd'})
+    list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'position_type':'rdd', 'weight_attrs':{'nrealizations':42,'noffset':3}})
+    list_options.append({'n_individual_weights':1, 'n_bitwise_weights':2, 'iip':2, 'weight_attrs':{'noffset':0,'default_value':0.8}})
     if mode == 'theta':
         list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'position_type':'rd'})
     from collections import namedtuple
@@ -209,11 +214,27 @@ def test_twopoint_counter(mode='s'):
             position_type = options.pop('position_type', 'xyz')
             dtype = options.pop('dtype', None)
             refoptions = options.copy()
-            nrealizations = refoptions.pop('nrealizations', n_bitwise_weights * 64)
+            weight_attrs = refoptions.pop('weight_attrs', {}).copy()
+
+            def setdefaultnone(di, key, value):
+                if di.get(key, None) is None:
+                    di[key] = value
+
+            setdefaultnone(weight_attrs, 'nrealizations', n_bitwise_weights * 64 + 1)
+            setdefaultnone(weight_attrs, 'noffset', 1)
+            set_default_value = 'default_value' in weight_attrs
+            setdefaultnone(weight_attrs, 'default_value', 0)
             refdata1, refdata2 = data1.copy(), data2.copy()
+            if set_default_value:
+                for w in data1[3:3+n_bitwise_weights] + data2[3:3+n_bitwise_weights]: w[:] = 0
 
             def wiip(weights):
-                return (1. + nrealizations)/(1. + utils.popcount(*weights))
+                denom = weight_attrs['noffset'] + utils.popcount(*weights)
+                mask = denom == 0
+                denom[mask] = 1.
+                toret = weight_attrs['nrealizations']/denom
+                toret[mask] = weight_attrs['default_value']
+                return toret
 
             def dataiip(data):
                 return data[:3] + [wiip(data[3:3+n_bitwise_weights])] + data[3+n_bitwise_weights:]
@@ -227,7 +248,7 @@ def test_twopoint_counter(mode='s'):
                 data2 = dataiip(data2)
             if iip:
                 n_bitwise_weights = 0
-                nrealizations = 0
+                weight_attrs['nrealizations'] = None
 
             itemsize = np.dtype('f8' if dtype is None else dtype).itemsize
             tol = {'atol':1e-8, 'rtol':1e-3} if itemsize <= 4 else {'atol':1e-8, 'rtol':1e-6}
@@ -242,7 +263,7 @@ def test_twopoint_counter(mode='s'):
             if twopoint_weights is not None:
                 twopoint_weights = TwoPointWeight(np.cos(np.radians(twopoint_weights.sep[::-1], dtype=dtype)), np.asarray(twopoint_weights.weight[::-1], dtype=dtype))
 
-            ref = ref_func(edges, refdata1, data2=None if autocorr else refdata2, nrealizations=nrealizations, n_bitwise_weights=n_bitwise_weights, twopoint_weights=twopoint_weights, **refoptions)
+            ref = ref_func(edges, refdata1, data2=None if autocorr else refdata2, n_bitwise_weights=n_bitwise_weights, twopoint_weights=twopoint_weights, **refoptions, **weight_attrs)
 
             if bitwise_type is not None and n_bitwise_weights > 0:
 
@@ -293,6 +314,7 @@ def test_twopoint_counter(mode='s'):
                 refnorm = test.wnorm # too lazy to recode
 
             assert np.allclose(test.wnorm, refnorm, **tol)
+            assert np.allclose(test.wcounts, ref, **tol)
 
             with tempfile.TemporaryDirectory() as tmp_dir:
                 fn = os.path.join(tmp_dir, 'tmp.npy')
@@ -311,8 +333,6 @@ def test_twopoint_counter(mode='s'):
                 assert np.allclose(test_mpi.wcounts, test.wcounts, **tol)
                 assert np.allclose(test_mpi.wnorm, test.wnorm, **tol)
 
-            assert np.allclose(test.wcounts, ref, **tol)
-
 
 def test_pip_normalization(mode='s'):
     edges = np.linspace(50,100,5)
@@ -325,7 +345,7 @@ def test_pip_normalization(mode='s'):
 
     test = TwoPointCounter(mode=mode, edges=edges, positions1=data1[:3], positions2=None if autocorr else data2[:3],
                            weights1=data1[3:], weights2=None if autocorr else data2[3:], position_type='xyz')
-    wiip = (1. + test.nrealizations)/(1. + utils.popcount(*data1[3:]))
+    wiip = test.weight_attrs['nrealizations']/(test.weight_attrs['noffset'] + utils.popcount(*data1[3:]))
     ratio = abs(test.wnorm / sum(wiip)**2 - 1)
     assert ratio < 0.1
 

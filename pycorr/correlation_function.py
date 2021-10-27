@@ -102,7 +102,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
                i.e. :math:`(1 + \mathrm{nrealizations})/(1 + \mathrm{popcount}(w_{1}))`.
             - "auto": automatically choose weighting based on input ``weights1`` and ``weights2``,
                i.e. ``None`` when ``weights1`` and ``weights2`` are ``None``,
-               "inverse_bitwise" if onf of input weights is integer, else "product_individual".
+               "inverse_bitwise" if one of input weights is integer, else "product_individual".
 
     D1R2_weight_type : string, default='auto'
         Same as ``D1D2_weight_type``, for D1R2 pair counts.
@@ -113,10 +113,12 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     R1R2_weight_type : string, default='auto'
         Same as ``D1D2_weight_type``, for R1R2 pair counts.
 
-    nrealizations : int, default=None
-        In case ``weight_type`` is "inverse_bitwise", the number of realizations,
-        *not* counting in current realization.
-        If ``None``, will be set to the number of bits in input weights.
+    weight_attrs : dict, default=None
+        Dictionary of weighting scheme attributes. In case ``weight_type`` is "inverse_bitwise",
+        one can provide "nrealizations", the total number of realizations (*including* current one;
+        defaulting to the number of bits in input weights plus one);
+        "noffset", the offset to be added to the bitwise counts in the denominator (defaulting to 1)
+        and "default_value", the default value of pairwise weights if the denominator is zero (defaulting to 0).
 
     D1D2_twopoint_weights : WeightTwoPointEstimator, default=None
         Weights to be applied to each pair of particles between first and second data catalogs.

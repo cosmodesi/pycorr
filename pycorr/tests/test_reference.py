@@ -37,7 +37,7 @@ def save_catalogs(filename, size=1000, boxsize=(100,)*3, offset=(1000,0,0), n_bi
         utils.mkdir(os.path.dirname(filename))
         with open(filename.format(icat+1), 'w') as file:
             header = '#x y z '
-            for iw in range(n_bitwise_weights): header += 'bitwise_weight{:d}(uint32,{:d}realizations) '.format(iw+1,31*n_bitwise_weights)
+            for iw in range(n_bitwise_weights): header += 'bitwise_weight{:d}(uint32,{:d}realizations) '.format(iw+1, 31*n_bitwise_weights)
             header += 'individual_weight\n'
             file.write(header)
             for ii in range(size):
@@ -57,22 +57,28 @@ def save_angular_upweights(filename, size=41):
             file.write(line)
 
 
-def save_readme(filename, catalog_dirname='catalogs', results_dirname='twopoint', angular_upweights_dirname='angular_upweights'):
+def save_readme(filename, catalog_dirname='catalogs', results_dirname='twopoint', angular_upweights_dirname='angular_upweights', nrealizations=62):
     tmp = 'Reference test to compare pair counters.\n'\
           'Data and randoms catalogs are in {0}/.\n'\
+          'These catalogs are purely random; not clustering is expected -- hence flat correlation function.\n'\
+          'Bitwise weights are only provided for data, not randoms; and these weights are turned into IIP weights for D1R2, D2R1.\n'\
+          'The most significant bit (MSB) of each bitwise weight has been set to 0, as some codes ignore it.\n'\
+          'The last to MSB of each bitwise weight has been set to 1, to ensure non zero-probability pairs.\n'\
+          'The total number of realizations is {3:d}, such that each PIP weight is given by {3:d}/popcount(w1 & w2), with w1 and w2 bitwise weights of particles 1 and 2.\n'\
           'Pair counts and correlation function estimations (Landy-Szalay) are saved in {1}_theta/, {1}_s/, {1}_smu/, {1}_rppi/,\n'\
           'without weights (*_no_weights), with individual weights (*_individual_weights), with PIP weights (*_bitwise_weights),\n'\
           'with both (*_individual_bitwise_weights), and with angular weights provided in {0}/custom_angular_upweights.txt (*_individual_bitwise_angular_upweights).\n'\
-          'Note that bitwise weights are only provided for data, not randoms; and these weights are turned into IIP weights for D1R2, D2R1.\n'\
           'Angular weights are linearly interpolated (in terms of costheta) in the theta range, set to 1 outside. Those are only applied to D1D2, D1R2, D2R1.\n'\
-          'Angular weights, this time calculated from parent, data and randoms catalogs in catalogs/ are given in {2}/.\n'.format(catalog_dirname, results_dirname, angular_upweights_dirname)
+          'Separations along the first dimension (e.g. s, rp) are computed as the (unweighted) mean separation in each bin.\n'\
+          'Separations along the second dimension (e.g. mu, pi) are computed as the bin centers.\n'\
+          'Angular weights, this time calculated from parent, data and randoms catalogs in catalogs/ are given in {2}/.\n'.format(catalog_dirname, results_dirname, angular_upweights_dirname, nrealizations)
     utils.mkdir(os.path.dirname(filename))
     with open(filename, 'w') as file:
         file.write(tmp)
 
 
 def save_result(result, filename, header=''):
-    sep = [sep.flatten() for sep in result.sep]
+    sep = [sep.flatten() for sep in result.seps]
     edges = [result.edges[0][:-1], result.edges[0][1:]]
     template = '{:.7g} '*3 + '{:.12g}\n'
     if result.ndim > 1:
@@ -139,10 +145,11 @@ def save_reference(base_dir):
     readme_fn = os.path.join(base_dir, 'README')
 
     n_bitwise_weights = 2
+    nrealizations = 31*n_bitwise_weights
     save_catalogs(data_fn, size=1000, n_bitwise_weights=n_bitwise_weights, seed=42, parent_fn=parent_fn)
     save_catalogs(randoms_fn, size=4000, n_bitwise_weights=0, seed=84)
     save_angular_upweights(angular_upweights_fn, size=41)
-    save_readme(readme_fn, catalog_dirname=catalog_dirname, results_dirname=results_dirname, angular_upweights_dirname=angular_upweights_dirname)
+    save_readme(readme_fn, catalog_dirname=catalog_dirname, results_dirname=results_dirname, angular_upweights_dirname=angular_upweights_dirname, nrealizations=nrealizations)
 
     data1 = load_catalog(data_fn.format(1))
     data2 = load_catalog(data_fn.format(2))
@@ -154,10 +161,10 @@ def save_reference(base_dir):
 
     mode_edges = {}
     mode_edges['theta'] = 'np.logspace(-2, 0, 31)'
-    mode_edges['s'] = 'np.logspace(-2, 1, 31)'
+    mode_edges['s'] = 'np.logspace(-0.5, 1, 31)'
     mode_edges['smu'] = '(np.linspace(1, 41, 41), np.linspace(0, 1, 21))'
     mode_edges['rppi'] = '(np.linspace(1, 41, 41), np.linspace(0, 20, 21))'
-    nrealizations = 31*n_bitwise_weights
+    weight_attrs = {'nrealizations':nrealizations,'noffset':0,'default_value':0.}
 
     for mode, name_edges in mode_edges.items():
         edges = eval(name_edges, {'np':np})
@@ -170,7 +177,7 @@ def save_reference(base_dir):
                 data_weights1, data_weights2, randoms_weights1, randoms_weights2 = data1[3:-1], data2[3:-1], np.ones_like(randoms1[0]), np.ones_like(randoms2[0])
             if 'individual_bitwise_weights' in weight:
                 data_weights1, data_weights2, randoms_weights1, randoms_weights2 = data1[3:], data2[3:], randoms1[3:], randoms2[3:]
-            kwargs = {'nrealizations':nrealizations, 'position_type':'xyz'}
+            kwargs = {'weight_attrs':weight_attrs, 'position_type':'xyz', 'compute_sepavg':True}
             if 'angular' in weight:
                 kwargs['D1D2_twopoint_weights'] = kwargs['D1R2_twopoint_weights'] = kwargs['D2R1_twopoint_weights'] = angular_upweights
             result = TwoPointCorrelationFunction(mode, edges, data_positions1=data1[:3], data_weights1=data_weights1,
@@ -193,7 +200,7 @@ def save_reference(base_dir):
     data_weights1, data_weights2 = data1[3:-1], data2[3:-1]
     randoms_weights1, randoms_weights2 = np.ones_like(randoms1[0]), np.ones_like(randoms2[0])
     parent_weights1, parent_weights2 = np.ones_like(parent1[0]), np.ones_like(parent2[0])
-    kwargs = {'nrealizations':nrealizations, 'position_type':'xyz'}
+    kwargs = {'weight_attrs':weight_attrs, 'position_type':'xyz', 'compute_sepavg':True}
     # D1_parentD2_parent/D1D2_pip
     result = TwoPointCorrelationFunction(mode, edges, data_positions1=data1[:3], data_weights1=data_weights1,
                                          data_positions2=data2[:3], data_weights2=data_weights2,
