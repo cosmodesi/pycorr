@@ -1,3 +1,4 @@
+import os
 import numpy as np
 
 from pycorr import utils
@@ -150,11 +151,57 @@ def test_normalization():
     #print(utils.pascal_triangle(4))
     size = 42
     tri = utils.pascal_triangle(size)
-    a, b = 7, 32
+
     from scipy import special
-    assert tri[b][a] == special.comb(b, a, exact=True)
-    tmp = utils.joint_occurences(nrealizations=64)
-    print(tmp[30][30])
+    for b in range(size+1):
+        for a in range(0,b):
+            assert tri[b][a] == special.comb(b, a, exact=True)
+    #tmp = utils.joint_occurences(nrealizations=64)
+    #print(tmp[30][30])
+
+    nrealizations = 2
+    binomial_coeffs = utils.pascal_triangle(nrealizations)
+    noffset = 0
+
+    def prob(c12, c1, c2):
+        return binomial_coeffs[c1 - noffset][c12 - noffset] * binomial_coeffs[nrealizations - c1][c2 - c12] / binomial_coeffs[nrealizations - noffset][c2 - noffset]
+
+    assert prob(1,1,1) == 0.5
+
+    base_dir = os.path.join(os.path.dirname(__file__), 'ref_pc_analytic')
+    nrealizations = 124
+    fn = os.path.join(base_dir, 'pc_analytic_nbits{:d}_con.dat'.format(nrealizations))
+    tmp = np.loadtxt(fn, usecols=3)
+    ii = 0
+    ref = np.zeros((nrealizations+1,nrealizations+1), dtype='f8')
+    for c1 in range(nrealizations+1):
+        for c2 in range(c1, nrealizations+1):
+            ref[c2,c1] = ref[c1,c2] = tmp[ii]
+            ii += 1
+
+    tmp = utils.joint_occurences(nrealizations=nrealizations, noffset=1, default_value=nrealizations)
+
+    for c1 in range(1,nrealizations):
+        for c2 in range(1,c1+1):
+            if c1 > 0 and c2 > 0:
+                assert np.allclose(tmp[c1-1][c2-1], ref[c1][c2])
+
+
+    fn = os.path.join(base_dir, 'pc_analytic_nbits{:d}_eff.dat'.format(nrealizations))
+    tmp = np.loadtxt(fn, usecols=3)
+    ii = 0
+    ref = np.zeros((nrealizations+1,nrealizations+1), dtype='f8')
+    for c1 in range(nrealizations+1):
+        for c2 in range(c1, nrealizations+1):
+            ref[c2,c1] = ref[c1,c2] = tmp[ii]
+            ii += 1
+
+    tmp = utils.joint_occurences(nrealizations=nrealizations+1, noffset=1, default_value=0)
+
+    for c1 in range(1,nrealizations):
+        for c2 in range(1,c1+1):
+            if c1 > 0 and c2 > 0:
+                assert np.allclose(tmp[c1][c2], ref[c1][c2])
 
 
 def test_rebin():
@@ -175,3 +222,4 @@ if __name__ == '__main__':
     test_pack_unpack()
     test_normalization()
     test_rebin()
+    test_normalization()

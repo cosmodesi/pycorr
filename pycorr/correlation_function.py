@@ -119,6 +119,10 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         defaulting to the number of bits in input weights plus one);
         "noffset", the offset to be added to the bitwise counts in the denominator (defaulting to 1)
         and "default_value", the default value of pairwise weights if the denominator is zero (defaulting to 0).
+        One can also provide "nalways", stating the number of bits systematically set to 1 (defaulting to 0),
+        and "nnever", stating the number of bits systematically set to 0 (defaulting to 0).
+        These will only impact the normalization factors.
+        For example, for the "zero-truncated" estimator (arXiv:1912.08803), one would use noffset = 0, nalways = 1, nnever = 0.
 
     D1D2_twopoint_weights : WeightTwoPointEstimator, default=None
         Weights to be applied to each pair of particles between first and second data catalogs.

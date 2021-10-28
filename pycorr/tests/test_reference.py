@@ -16,9 +16,8 @@ def save_catalogs(filename, size=1000, boxsize=(100,)*3, offset=(1000,0,0), n_bi
     parent_size = int(size*1.2)
     for icat in range(2):
         positions = [o + rng.uniform(-0.5, 0.5, parent_size)*b for b,o in zip(boxsize, offset)]
-        bitwise_weights = [utils.pack_bitarrays(*[rng.randint(0, 2, parent_size) for i in range(30)],\
-                          np.ones(parent_size, dtype='?'), np.zeros(parent_size, dtype='?'), dtype=np.uint32)[0]\
-                          for iw in range(n_bitwise_weights)]
+        bitwise_weights = [utils.pack_bitarrays(*[rng.randint(0, 2, parent_size) for i in range(31)], np.ones(parent_size, dtype='?'), dtype=np.uint32)[0]]
+        bitwise_weights += [utils.pack_bitarrays(*[rng.randint(0, 2, parent_size) for i in range(32)], dtype=np.uint32)[0] for iw in range(n_bitwise_weights-1)]
         individual_weights = rng.uniform(0.5, 1., parent_size)
         mask = rng.choice(parent_size, size, replace=False)
         if parent_fn is not None:
@@ -37,7 +36,7 @@ def save_catalogs(filename, size=1000, boxsize=(100,)*3, offset=(1000,0,0), n_bi
         utils.mkdir(os.path.dirname(filename))
         with open(filename.format(icat+1), 'w') as file:
             header = '#x y z '
-            for iw in range(n_bitwise_weights): header += 'bitwise_weight{:d}(uint32,{:d}realizations) '.format(iw+1, 31*n_bitwise_weights)
+            for iw in range(n_bitwise_weights): header += 'bitwise_weight{:d}(uint32,{:d}realizations) '.format(iw+1, 32*n_bitwise_weights)
             header += 'individual_weight\n'
             file.write(header)
             for ii in range(size):
@@ -62,7 +61,6 @@ def save_readme(filename, catalog_dirname='catalogs', results_dirname='twopoint'
           'Data and randoms catalogs are in {0}/.\n'\
           'These catalogs are purely random; not clustering is expected -- hence flat correlation function.\n'\
           'Bitwise weights are only provided for data, not randoms; and these weights are turned into IIP weights for D1R2, D2R1.\n'\
-          'The most significant bit (MSB) of each bitwise weight has been set to 0, as some codes ignore it.\n'\
           'The last to MSB of each bitwise weight has been set to 1, to ensure non zero-probability pairs.\n'\
           'The total number of realizations is {3:d}, such that each PIP weight is given by {3:d}/popcount(w1 & w2), with w1 and w2 bitwise weights of particles 1 and 2.\n'\
           'Pair counts and correlation function estimations (Landy-Szalay) are saved in {1}_theta/, {1}_s/, {1}_smu/, {1}_rppi/,\n'\
@@ -71,6 +69,8 @@ def save_readme(filename, catalog_dirname='catalogs', results_dirname='twopoint'
           'Angular weights are linearly interpolated (in terms of costheta) in the theta range, set to 1 outside. Those are only applied to D1D2, D1R2, D2R1.\n'\
           'Separations along the first dimension (e.g. s, rp) are computed as the (unweighted) mean separation in each bin.\n'\
           'Separations along the second dimension (e.g. mu, pi) are computed as the bin centers.\n'\
+          'Pair count normalizations are provided on top of the pair count files, #norm = .... .\n'\
+          'For bitwise weights use the zero-truncated estimator, in which case the current realization is included in the bitwise weights (and in the number of realizations = {3:d}).\n'\
           'Angular weights, this time calculated from parent, data and randoms catalogs in catalogs/ are given in {2}/.\n'.format(catalog_dirname, results_dirname, angular_upweights_dirname, nrealizations)
     utils.mkdir(os.path.dirname(filename))
     with open(filename, 'w') as file:
@@ -145,7 +145,7 @@ def save_reference(base_dir):
     readme_fn = os.path.join(base_dir, 'README')
 
     n_bitwise_weights = 2
-    nrealizations = 31*n_bitwise_weights
+    nrealizations = 32*n_bitwise_weights
     save_catalogs(data_fn, size=1000, n_bitwise_weights=n_bitwise_weights, seed=42, parent_fn=parent_fn)
     save_catalogs(randoms_fn, size=4000, n_bitwise_weights=0, seed=84)
     save_angular_upweights(angular_upweights_fn, size=41)
@@ -164,7 +164,7 @@ def save_reference(base_dir):
     mode_edges['s'] = 'np.logspace(-0.5, 1, 31)'
     mode_edges['smu'] = '(np.linspace(1, 41, 41), np.linspace(0, 1, 21))'
     mode_edges['rppi'] = '(np.linspace(1, 41, 41), np.linspace(0, 20, 21))'
-    weight_attrs = {'nrealizations':nrealizations,'noffset':0,'default_value':0.}
+    weight_attrs = {'nrealizations':nrealizations,'noffset':0,'default_value':0.,'nalways':1}
 
     for mode, name_edges in mode_edges.items():
         edges = eval(name_edges, {'np':np})

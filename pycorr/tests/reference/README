@@ -2,13 +2,14 @@ Reference test to compare pair counters.
 Data and randoms catalogs are in catalogs/.
 These catalogs are purely random; not clustering is expected -- hence flat correlation function.
 Bitwise weights are only provided for data, not randoms; and these weights are turned into IIP weights for D1R2, D2R1.
-The most significant bit (MSB) of each bitwise weight has been set to 0, as some codes ignore it.
 The last to MSB of each bitwise weight has been set to 1, to ensure non zero-probability pairs.
-The total number of realizations is 62, such that each PIP weight is given by 62/popcount(w1 & w2), with w1 and w2 bitwise weights of particles 1 and 2.
+The total number of realizations is 64, such that each PIP weight is given by 64/popcount(w1 & w2), with w1 and w2 bitwise weights of particles 1 and 2.
 Pair counts and correlation function estimations (Landy-Szalay) are saved in twopoint_theta/, twopoint_s/, twopoint_smu/, twopoint_rppi/,
 without weights (*_no_weights), with individual weights (*_individual_weights), with PIP weights (*_bitwise_weights),
 with both (*_individual_bitwise_weights), and with angular weights provided in catalogs/custom_angular_upweights.txt (*_individual_bitwise_angular_upweights).
 Angular weights are linearly interpolated (in terms of costheta) in the theta range, set to 1 outside. Those are only applied to D1D2, D1R2, D2R1.
 Separations along the first dimension (e.g. s, rp) are computed as the (unweighted) mean separation in each bin.
 Separations along the second dimension (e.g. mu, pi) are computed as the bin centers.
+Pair count normalizations are provided on top of the pair count files, #norm = .... .
+For bitwise weights use the zero-truncated estimator, in which case the current realization is included in the bitwise weights (and in the number of realizations = 64).
 Angular weights, this time calculated from parent, data and randoms catalogs in catalogs/ are given in angular_upweights/.

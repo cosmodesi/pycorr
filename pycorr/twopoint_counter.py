@@ -167,6 +167,10 @@ class BaseTwoPointCounter(BaseClass):
             defaulting to the number of bits in input weights plus one);
             "noffset", the offset to be added to the bitwise counts in the denominator (defaulting to 1)
             and "default_value", the default value of pairwise weights if the denominator is zero (defaulting to 0).
+            One can also provide "nalways", stating the number of bits systematically set to 1 (defaulting to 0),
+            and "nnever", stating the number of bits systematically set to 0 (defaulting to 0).
+            These will only impact the normalization factors.
+            For example, for the "zero-truncated" estimator (arXiv:1912.08803), one would use noffset = 0, nalways = 1, nnever = 0.
 
         twopoint_weights : WeightTwoPointEstimator, default=None
             Weights to be applied to each pair of particles.
@@ -346,6 +350,11 @@ class BaseTwoPointCounter(BaseClass):
         if weight_type is None:
             self.weights1 = self.weights2 = None
         else:
+            self.weight_attrs.update(nalways=weight_attrs.get('nalways',0), nnever=weight_attrs.get('nnever',0))
+            noffset = weight_attrs.get('noffset', 1)
+            default_value = weight_attrs.get('default_value', 0.)
+            self.weight_attrs.update(noffset=noffset, default_value=default_value)
+
             def check_shape(weights, size):
                 if weights is None or len(weights) == 0:
                     return None, 0
@@ -372,10 +381,6 @@ class BaseTwoPointCounter(BaseClass):
                 return weights, n_bitwise_weights
 
             self.weights1, n_bitwise_weights1 = check_shape(weights1, len(self.positions1[0]))
-
-            noffset = weight_attrs.get('noffset', 1)
-            default_value = weight_attrs.get('default_value', 0.)
-            self.weight_attrs.update(noffset=noffset, default_value=default_value)
 
             def get_nrealizations(n_bitwise_weights):
                 nrealizations = weight_attrs.get('nrealizations', None)
@@ -508,10 +513,11 @@ class BaseTwoPointCounter(BaseClass):
 
             noffset = self.weight_attrs['noffset']
             nrealizations = self.weight_attrs['nrealizations']
+            nalways = self.weight_attrs['nalways'] - self.weight_attrs['nnever']
 
-            def binned_weights(weights):
+            def binned_weights(weights, pow=1):
                 indweights = weights[self.n_bitwise_weights:]
-                if indweights: indweights = np.prod(indweights, axis=0)
+                if indweights: indweights = np.prod(indweights, axis=0)**pow
                 else: indweights = None
                 w = np.bincount(utils.popcount(*weights[:self.n_bitwise_weights]),
                                 weights=indweights, minlength=self.n_bitwise_weights * 8 + 1)
@@ -525,19 +531,16 @@ class BaseTwoPointCounter(BaseClass):
                 w2, c2 = w1, c1
             else:
                 w2, c2 = binned_weights(self.weights2)
-            joint = utils.joint_occurences(nrealizations, max_occurences=noffset+max(c1.max(), c2.max()), noffset=noffset)
+            joint = utils.joint_occurences(nrealizations, max_occurences=noffset+max(c1.max(), c2.max()), noffset=noffset + nalways)
             sumw_cross = 0
             for c1_, w1_ in zip(c1, w1):
                 for c2_, w2_ in zip(c2, w2):
-                    sumw_cross += w1_ * w2_ * (joint[c1_][c2_] if c2_ <= c1_ else joint[c2_][c1_])
+                    sumw_cross += w1_ * w2_ * (joint[c1_ - nalways][c2_ - nalways] if c2_ <= c1_ else joint[c2_- nalways][c1_- nalways])
             sumw_auto = 0
             if self.autocorr:
-                w1sq = np.bincount(utils.popcount(*self.weights1[:self.n_bitwise_weights]),
-                                   weights=self.weights1[-1]**2, minlength=self.n_bitwise_weights * 8 + 1)[c1]
-                if self.with_mpi:
-                    w1sq = self.mpicomm.allreduce(w1sq)
-                for c1_, w1sq_ in zip(c1, w1sq):
-                    sumw_auto += joint[c1_][c1_] * w1sq_
+                w1sq, c1sq = binned_weights(self.weights1, pow=2)
+                for c1sq_, w1sq_ in zip(c1sq, w1sq):
+                    sumw_auto += joint[c1sq_ - nalways][c1sq_ - nalways] * w1sq_
             return sumw_cross - sumw_auto
 
         # individual_weights

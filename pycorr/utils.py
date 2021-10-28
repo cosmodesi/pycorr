@@ -413,7 +413,8 @@ def joint_occurences(nrealizations=128, max_occurences=None, noffset=1, default_
         return binomial_coeffs[c1 - noffset][c12 - noffset] * binomial_coeffs[nrealizations - c1][c2 - c12] / binomial_coeffs[nrealizations - noffset][c2 - noffset]
 
     def fk(c12):
-        if c12 == 0: return default_value
+        if c12 == 0:
+            return default_value
         return nrealizations / c12
 
     toret = []
