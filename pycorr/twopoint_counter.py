@@ -86,7 +86,10 @@ class BaseTwoPointCounter(BaseClass):
         Array of separation values.
 
     wcounts : array
-        (Optionally weighted) pair-counts.
+        (Optionally weighted) pair counts.
+
+    wnorm : float
+        Pair count normalization.
     """
     def __init__(self, mode, edges, positions1, positions2=None, weights1=None, weights2=None,
                 bin_type='auto', position_type='auto', weight_type='auto', weight_attrs=None,
@@ -220,10 +223,8 @@ class BaseTwoPointCounter(BaseClass):
         self.compute_sepavg = compute_sepavg
         self.attrs = kwargs
         self.wnorm = self.normalization()
-
         self._set_default_separation()
         self.run()
-
 
     def run(self):
         """
@@ -235,7 +236,7 @@ class BaseTwoPointCounter(BaseClass):
     def _set_edges(self, edges, bin_type='auto'):
         if np.ndim(edges[0]) == 0:
             edges = (edges,)
-        self.edges = tuple(edges)
+        self.edges = tuple(np.array(edge, dtype='f8') for edge in edges)
         if self.mode in ['smu','rppi']:
             if not self.ndim == 2:
                 raise TwoPointCounterError('A tuple of edges should be provided to pair counter in mode {}'.format(self.mode))
@@ -449,7 +450,6 @@ class BaseTwoPointCounter(BaseClass):
             # just to make sure we use the correct dtype
             self.twopoint_weights = TwoPointWeight(sep=np.cos(np.radians(sep[::-1]), dtype=self.dtype),
                                                    weight=np.array(weight[::-1], dtype=self.dtype))
-
 
     def _mpi_decompose(self):
         if self.with_mpi:
