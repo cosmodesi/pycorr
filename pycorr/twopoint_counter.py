@@ -3,7 +3,7 @@
 import os
 import numpy as np
 
-from .utils import BaseClass, BaseMetaClass
+from .utils import BaseClass
 from . import utils
 
 
@@ -14,13 +14,13 @@ class TwoPointCounterError(Exception):
 
 def get_twopoint_counter(engine='corrfunc'):
     """
-    Return :class:`BaseTwoPointCounter` subclass corresponding
+    Return :class:`BaseTwoPointCounter`-subclass corresponding
     to input engine name.
 
     Parameters
     ----------
     engine : string, default='corrfunc'
-        Name of pair counter engine, one of ["corrfunc", "analytical"].
+        Name of pair counter engine, one of ["corrfunc", "analytic"].
 
     Returns
     -------
@@ -41,7 +41,7 @@ def get_twopoint_counter(engine='corrfunc'):
     return engine
 
 
-class MetaTwoPointCounter(BaseMetaClass):
+class MetaTwoPointCounter(type(BaseClass)):
 
     """Metaclass to return correct pair counter engine."""
 
@@ -351,7 +351,7 @@ class BaseTwoPointCounter(BaseClass):
         if weight_type is None:
             self.weights1 = self.weights2 = None
         else:
-            self.weight_attrs.update(nalways=weight_attrs.get('nalways',0), nnever=weight_attrs.get('nnever',0))
+            self.weight_attrs.update(nalways=weight_attrs.get('nalways', 0), nnever=weight_attrs.get('nnever', 0))
             noffset = weight_attrs.get('noffset', 1)
             default_value = weight_attrs.get('default_value', 0.)
             self.weight_attrs.update(noffset=noffset, default_value=default_value)

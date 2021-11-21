@@ -50,8 +50,8 @@ See [pycorr docs](https://py2pcf.readthedocs.io/en/latest/user/building.html).
 
 ## License
 
-**pycorr** is free software distributed under a BSD3 license. For details see the [LICENSE](https://github.com/adematti/pycorr/blob/main/LICENSE).
+**pycorr** is free software distributed under a GPLv3 license. For details see the [LICENSE](https://github.com/adematti/pycorr/blob/main/LICENSE).
 
 ## Credits
 
-Lehman Garrison and Manodeep Sinha for advice when implementing PIP and angular weights.
+Lehman Garrison and Manodeep Sinha for advice when implementing linear binning, and PIP and angular weights into Corrfunc.
