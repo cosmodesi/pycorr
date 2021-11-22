@@ -103,7 +103,7 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
     """
     name = 'base'
 
-    def __init__(self, D1D2=None, R1R2=None, D1R2=None, D2R1=None, W1W2=None, D1W2=None):
+    def __init__(self, D1D2=None, R1R2=None, D1R2=None, D2R1=None, S1S2=None, D1S2=None, D2S1=None):
         """
         Initialize :class:`BaseTwoPointEstimator`, and set correlation
         estimation :attr:`corr` (calling :meth:`run`).
@@ -123,42 +123,45 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
             D2R1 pair counts, e.g. for :class:`LandySzalayTwoPointEstimator`,
             in case of cross-correlation.
 
-        W1W2 : BaseTwoPointCounter, default=None
-            W1W2 pair counts, e.g. for :class:`LandySzalayTwoPointEstimator`,
-            in case window (W) is different from randoms (R).
-            e.g. with reconstruction, the Landy-Szalay estimator is commonly written:
-            :math:`(DD - 2 DS - SS)/RR`. Within our conventions, this is: :math:`(DD - 2 DR - RR)/WW`
-            (more generally, including cross-correlations, :math:`(D1D2 - D1R2 - D2R1 - R1R2)/W1W2`).
+        S1S2 : BaseTwoPointCounter, default=None
+            S1S2 pair counts, e.g. with reconstruction, the Landy-Szalay estimator is commonly written:
+            :math:`(D1D2 - D1S2 - D2S1 - S1S2)/R1R2`, with S1 and S2 shifted random catalogs.
+            Defaults to ``R1R2``.
 
-        D1W2 : BaseTwoPointCounter, default=None
-            D1W2 pair counts, e.g. for :class:`DavisPeeblesTwoPointEstimator`,
-            in case window (W) is different from randoms (R). See ``W1W2``.
+        D1S2 : BaseTwoPointCounter, default=None
+            D1S2 pair counts, see ``S1S2``. Defaults to ``D1R2``.
+
+        S1D2 : BaseTwoPointCounter, default=None
+            S1D2 pair counts, see ``S1S2``. Defaults to ``D2R1``.
         """
         self.D1D2 = D1D2
         self.R1R2 = R1R2
         self.D1R2 = D1R2
         self.D2R1 = D2R1
-        self.W1W2 = W1W2
-        self.D1W2 = D1W2
+        self.S1S2 = S1S2
+        self.D1S2 = D1S2
+        self.D2S1 = D2S1
         if D2R1 is None: # D1 = D2 and R1 = R2
             self.D2R1 = D1R2
-        if W1W2 is None:
-            self.W1W2 = R1R2
-        if D1W2 is None:
-            self.D1W2 = self.D1R2
+        if S1S2 is None:
+            self.S1S2 = self.R1R2
+        if D1S2 is None:
+            self.D1S2 = self.D1R2
+        if D2S1 is None:
+            self.D2S1 = self.D2R1
         self.run()
 
     @property
     def sep(self):
-        """Array of separation values of first dimension, taken from :attr:`W1W2` (or :attr:`D1R2`) if provided, else :attr:`D1D2`."""
-        if self.W1W2 is not None:
-            return self.W1W2.sep
+        """Array of separation values of first dimension, taken from :attr:`R1R2` if provided, else :attr:`D1D2`."""
+        if self.R1R2 is not None:
+            return self.R1R2.sep
         return self.D1D2.sep
 
     @property
     def seps(self):
-        """Array of separation values, taken from :attr:`W1W2` (or :attr:`D1R2`) if provided, else :attr:`D1D2`."""
-        if self.W1W2 is not None:
+        """Array of separation values, taken from :attr:`R1R2` if provided, else :attr:`D1D2`."""
+        if self.R1R2 is not None:
             return self.R1R2.seps
         return self.D1D2.seps
 
@@ -182,31 +185,32 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
         return self.D1D2.autocorr
 
     @property
-    def with_window(self):
-        return self.W1W2 is not self.R1R2 or self.D1W2 is not self.D1R2
+    def with_shifted(self):
+        return self.S1S2 is not self.R1R2 or self.D1S2 is not self.D1R2 or self.D2S1 is not self.D2R1
 
     @classmethod
-    def requires(cls, autocorr=False, window=False, join=None):
+    def requires(cls, autocorr=False, with_shifted=False, join=None):
         """Yield required pair counts."""
-        for tu in cls._tuple_requires(autocorr=autocorr, window=window):
+        for tu in cls._tuple_requires(autocorr=autocorr, with_shifted=with_shifted):
             if join is not None:
                 yield join.join(tu)
             else:
                 yield tu
 
     @classmethod
-    def _tuple_requires(cls, autocorr=False, window=False, join=None):
+    def _tuple_requires(cls, autocorr=False, with_shifted=False, join=None):
         yield 'D1','D2'
-        yield 'D1','R2'
+        key = 'S' if with_shifted else 'R'
+        yield 'D1','{}2'.format(key)
         if not autocorr:
-            yield 'D2','R1'
-        yield 'R1','R2'
-        if window:
-            yield 'W1','W2'
+            yield 'D2','{}1'.format(key)
+        yield '{}1'.format(key),'{}2'.format(key)
+        if with_shifted:
+            yield 'R1','R2'
 
     def rebin(self, *args, **kwargs):
         """Rebin estimator, by rebinning all pair counts. See :meth:`BaseTwoPointCounter.rebin`."""
-        for pair in self.requires(autocorr=self.autocorr, window=self.with_window, join=''):
+        for pair in self.requires(autocorr=self.autocorr, with_shifted=self.with_shifted, join=''):
             getattr(self, pair).rebin(*args, **kwargs)
         self.run()
 
@@ -215,13 +219,14 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
         for name in ['name']:
             if hasattr(self, name):
                 state[name] = getattr(self, name)
-        for pair in self.requires(autocorr=self.autocorr, window=self.with_window, join=''):
+        for pair in self.requires(autocorr=self.autocorr, with_shifted=self.with_shifted, join=''):
             state[pair] = getattr(self, pair).__getstate__()
         return state
 
     def __setstate__(self, state):
         kwargs = {}
-        for pair in self.requires(autocorr=False, window=True, join=''):
+        pairs = set(self.requires(autocorr=False, with_shifted=True, join='')) | set(self.requires(autocorr=False, with_shifted=False, join='')) # most general list
+        for pair in pairs:
             if pair in state:
                 pair_state = state[pair].copy()
                 kwargs[pair] = get_twopoint_counter(pair_state.pop('name')).from_state(pair_state)
@@ -235,28 +240,29 @@ class NaturalTwoPointEstimator(BaseTwoPointEstimator):
     def run(self):
         """
         Set correlation function estimate :attr:`corr` based on the natural estimator
-        :math:`(D1D2 - R1R2)/W1W2`.
+        :math:`(D1D2 - S1S2)/R1R2`.
         """
-        nonzero = self.W1W2.wcounts != 0
+        nonzero = self.R1R2.wcounts != 0
         # init
-        corr = np.empty_like(self.W1W2.wcounts, dtype='f8')
+        corr = np.empty_like(self.R1R2.wcounts, dtype='f8')
         corr[...] = np.nan
 
         # the natural estimator
         # (DD - RR) / RR
         DD = self.D1D2.normalized_wcounts()[nonzero]
         RR = self.R1R2.normalized_wcounts()[nonzero]
-        WW = self.W1W2.normalized_wcounts()[nonzero]
-        tmp = (DD - RR)/WW
+        SS = self.S1S2.normalized_wcounts()[nonzero]
+        tmp = (DD - SS)/RR
         corr[nonzero] = tmp[...]
         self.corr = corr
 
     @classmethod
-    def _tuple_requires(cls, autocorr=False, window=False, join=None):
+    def _tuple_requires(cls, autocorr=False, with_shifted=False, join=None):
         yield 'D1','D2'
-        yield 'R1','R2'
-        if window:
-            yield 'W1','W2'
+        key = 'S' if with_shifted else 'R'
+        yield '{}1'.format(key),'{}2'.format(key)
+        if with_shifted:
+            yield 'R1','R2'
 
 
 class DavisPeeblesTwoPointEstimator(BaseTwoPointEstimator):
@@ -266,29 +272,30 @@ class DavisPeeblesTwoPointEstimator(BaseTwoPointEstimator):
     def run(self):
         """
         Set correlation function estimate :attr:`corr` based on the Davis-Peebles estimator
-        :math:`(D1D2 - D1R2)/D1W2`.
+        :math:`(D1D2 - D1S2)/D1R2`.
         """
-        nonzero = self.D1W2.wcounts != 0
+        nonzero = self.D1R2.wcounts != 0
         # init
-        corr = np.empty_like(self.D1W2.wcounts, dtype='f8')
+        corr = np.empty_like(self.D1R2.wcounts, dtype='f8')
         corr[...] = np.nan
 
         # the natural estimator
         # (DD - RR) / RR
         DD = self.D1D2.normalized_wcounts()[nonzero]
         DR = self.D1R2.normalized_wcounts()[nonzero]
-        DW = self.D1W2.normalized_wcounts()[nonzero]
-        tmp = (DD - DR)/DW
+        DS = self.D1S2.normalized_wcounts()[nonzero]
+        tmp = (DD - DS)/DR
         corr[nonzero] = tmp[...]
         self.corr = corr
 
     @classmethod
-    def _tuple_requires(cls, autocorr=False, window=False, join=None):
+    def _tuple_requires(cls, autocorr=False, with_shifted=False, join=None):
         """Yield required pair counts."""
         yield 'D1','D2'
-        yield 'D1','R2'
-        if window:
-            yield 'D1','W2'
+        key = 'S' if with_shifted else 'R'
+        yield 'D1','{}2'.format(key)
+        if with_shifted:
+            yield 'D1','R2'
 
 
 class HamiltonTwoPointEstimator(DavisPeeblesTwoPointEstimator):
@@ -298,19 +305,19 @@ class HamiltonTwoPointEstimator(DavisPeeblesTwoPointEstimator):
     def run(self):
         """
         Set correlation function estimate :attr:`corr` based on the Hamilton estimator
-        :math:`(D1D2 - D1R2^{2})/D1W2^{2}`.
+        :math:`(D1D2 - D1S2^{2})/D1R2^{2}`.
         """
-        nonzero = self.D1W2.wcounts != 0
+        nonzero = self.D1R2.wcounts != 0
         # init
-        corr = np.empty_like(self.D1W2.wcounts, dtype='f8')
+        corr = np.empty_like(self.D1R2.wcounts, dtype='f8')
         corr[...] = np.nan
 
         # the natural estimator
         # (DD - RR) / RR
         DD = self.D1D2.normalized_wcounts()[nonzero]
         DR = self.D1R2.normalized_wcounts()[nonzero]
-        DW = self.D1W2.normalized_wcounts()[nonzero]
-        tmp = (DD - DR**2)/DW**2
+        DS = self.D1S2.normalized_wcounts()[nonzero]
+        tmp = (DD - DS**2)/DR**2
         corr[nonzero] = tmp[...]
         self.corr = corr
 
@@ -322,22 +329,22 @@ class LandySzalayTwoPointEstimator(BaseTwoPointEstimator):
     def run(self):
         """
         Set correlation function estimate :attr:`corr` based on the Landy-Szalay estimator
-        :math:`(D1D2 - D1R2 - D2R1 - R1R2)/W1W2`.
+        :math:`(D1D2 - D1S2 - D2S1 - S1S2)/R1R2`.
         """
-        nonzero = self.W1W2.wcounts != 0
+        nonzero = self.R1R2.wcounts != 0
         # init
-        corr = np.empty_like(self.W1W2.wcounts, dtype='f8')
+        corr = np.empty_like(self.R1R2.wcounts, dtype='f8')
         corr[...] = np.nan
 
         # the Landy - Szalay estimator
         # (DD - DR - RD + RR) / RR
         DD = self.D1D2.normalized_wcounts()[nonzero]
         RR = self.R1R2.normalized_wcounts()[nonzero]
-        DR = self.D1R2.normalized_wcounts()[nonzero]
-        RD = self.D2R1.normalized_wcounts()[nonzero]
-        WW = self.W1W2.normalized_wcounts()[nonzero]
+        DS = self.D1S2.normalized_wcounts()[nonzero]
+        SD = self.D2S1.normalized_wcounts()[nonzero]
+        SS = self.R1R2.normalized_wcounts()[nonzero]
 
-        tmp = (DD - DR - RD - RR)/WW
+        tmp = (DD - DS - SD - SS)/RR
         corr[nonzero] = tmp[...]
         self.corr = corr
 
@@ -364,7 +371,7 @@ class WeightTwoPointEstimator(NaturalTwoPointEstimator):
         self.corr = corr
 
     @classmethod
-    def _yield_requires(cls, autocorr=False, window=False, join=None):
+    def _yield_requires(cls, autocorr=False, with_shifted=False, join=None):
         yield 'D1','D2'
         yield 'R1','R2'
 

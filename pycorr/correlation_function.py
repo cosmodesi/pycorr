@@ -8,26 +8,13 @@ from .twopoint_counter import TwoPointCounter, AnalyticTwoPointCounter
 from .utils import BaseClass
 
 
-def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=None, randoms_positions1=None, randoms_positions2=None, window_positions1=None, window_positions2=None,
-                                data_weights1=None, data_weights2=None, randoms_weights1=None, randoms_weights2=None, window_weights1=None, window_weights2=None, R1R2=None, W1W2=None,
-                                D1D2_twopoint_weights=None, D1R2_twopoint_weights=None, D2R1_twopoint_weights=None, R1R2_twopoint_weights=None, W1W2_twopoint_weights=None, D1W2_twopoint_weights=None,
-                                D1D2_weight_type='auto', D1R2_weight_type='auto', D2R1_weight_type='auto', R1R2_weight_type='auto', W1W2_weight_type='auto', D1W2_weight_type='auto',
+def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=None, randoms_positions1=None, randoms_positions2=None, shifted_positions1=None, shifted_positions2=None,
+                                data_weights1=None, data_weights2=None, randoms_weights1=None, randoms_weights2=None, shifted_weights1=None, shifted_weights2=None, R1R2=None,
+                                D1D2_twopoint_weights=None, D1R2_twopoint_weights=None, D2R1_twopoint_weights=None, R1R2_twopoint_weights=None, S1S2_twopoint_weights=None, D1S2_twopoint_weights=None, D2S1_twopoint_weights=None,
+                                D1D2_weight_type='auto', D1R2_weight_type='auto', D2R1_weight_type='auto', R1R2_weight_type='auto', S1S2_weight_type='auto', D1S2_weight_type='auto', D2S1_weight_type='auto',
                                 estimator='auto', boxsize=None, mpicomm=None, **kwargs):
     r"""
     Compute pair counts and correlation function estimation.
-
-    Note
-    ----
-    We typically estimate: :math:`FF/WW`, where FF is the convolution of the density fluctuations :math:`F = W(1+\delta)`,
-    where :math:`\delta` is the density contrast, and :math:`W` is the selection function of which :math:`WW` is the convolution.
-    Typically we do not have access to density fluctuations themselves, but some catalog of clustered particles :math:`D` (``data_positions1``
-    and ``data_weights1`` below), to be compared to another synthetic "random" catalog :math:`R` (``randoms_positions1`` and ``randoms_weights1`` below),
-    such that :math:`FF = (D - R) (D - R) = DD - 2 DR + RR`.
-    In most cases, :math:`W = R` and we obtain the standard Landy-Szalay estimator: :math:`(DD - 2 DR + RR)/RR`.
-    Yet, it does not need be, as in the case of the reconstruction, where positions of the random catalog :math:`R` are shifted.
-    Then, :math:`R` does not represent :math:`W` anymore, and one must typically provide :math:`W` (``window_positions1`` and ``window_weights1`` below)
-    as the random catalog *before* reconstruction.
-    This extends straightforwardly to cross-correlations (:math:`D2 \neq D1`).
 
     Parameters
     ----------
@@ -53,20 +40,20 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         Optionally, for cross-correlations, data positions in the second catalog. See ``data_positions1``.
 
     randoms_positions1 : array, default=None
-        Optionally, positions of the random catalog to compare ``data_positions1`` with.
+        Optionally, positions of the random catalog representing the selection function.
         If no randoms are provided, and estimator is "auto", or "natural",
         :class:`NaturalTwoPointEstimator` will be used to estimate the correlation function,
         with analytical pair counts for R1R2.
 
     randoms_positions2 : array, default=None
-        Optionally, for cross-correlations, positions of the random catalog to compare ``data_positions2`` with.
+        Optionally, for cross-correlations, positions of the random catalog representing the second selection function.
         See ``randoms_positions1``.
 
-    window_positions1 : array, default=None
-        Optionally, positions of the catalog representing the first selection function, if different from ``randoms_positions1``.
+    shifted_positions1 : array, default=None
+        Optionally, in case of BAO reconstruction, positions of the catalog with shifted positions.
 
-    window_positions2 : array, default=None
-        Optionally, positions of the catalog representing the second selection function, if different from ``randoms_positions2``.
+    shifted_positions2 : array, default=None
+        Optionally, in case of BAO reconstruction, positions of the catalog representing the second selection function, if different from ``randoms_positions2``.
 
     data_weights1 : array, default=None
         Weights of the first catalog. Not required if ``weight_type`` is either ``None`` or "auto".
@@ -82,18 +69,15 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         Optionally, for cross-correlations, weights of the second random catalog.
         See ``randoms_weights1``.
 
-    window_weights1 : array, default=None
-        Optionally, weights of the first window catalog. See ``data_weights1``.
+    shifted_weights1 : array, default=None
+        Optionally, weights of the first shifted catalog. See ``data_weights1``.
 
-    window_weights2 : array, default=None
-        Optionally, weights of the second window catalog.
-        See ``window_weights1``.
+    shifted_weights2 : array, default=None
+        Optionally, weights of the second shifted catalog.
+        See ``shifted_weights1``.
 
     R1R2 : BaseTwoPointCounter, default=None
         Precomputed R1R2 pairs; e.g. useful when running on many mocks with same random catalogs.
-
-    W1W2 : BaseTwoPointCounter, default=None
-        Precomputed W1W2 pairs; e.g. useful when running on many mocks with same window catalogs.
 
     D1D2_weight_type : string, default='auto'
         The type of weighting to apply to provided weights for D1D2 pair counts. One of:
@@ -118,12 +102,14 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     R1R2_weight_type : string, default='auto'
         Same as ``D1D2_weight_type``, for R1R2 pair counts.
 
-    W1W2_weight_type : string, default='auto'
-        Same as ``D1D2_weight_type``, for W1W2 pair counts.
+    S1S2_weight_type : string, default='auto'
+        Same as ``D1D2_weight_type``, for S1S2 pair counts.
 
-    D1W2_weight_type : string, default='auto'
-        Same as ``D1D2_weight_type``, for D1W2 pair counts.
-        Only used when ``estimator = 'davispeebles'`` or ``estimator = 'hamilton'``.
+    D1S2_weight_type : string, default='auto'
+        Same as ``D1D2_weight_type``, for D1S2 pair counts.
+
+    D2S1_weight_type : string, default='auto'
+        Same as ``D1D2_weight_type``, for D2S1 pair counts.
 
     D1D2_twopoint_weights : WeightTwoPointEstimator, default=None
         Weights to be applied to each pair of particles between first and second data catalogs.
@@ -145,17 +131,20 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         Weights to be applied to each pair of particles between first and second randoms catalogs.
         See ``D1D2_twopoint_weights``.
 
-    W1W2_twopoint_weights : WeightTwoPointEstimator, default=None
-        Weights to be applied to each pair of particles between first and second window catalogs.
+    S1S2_twopoint_weights : WeightTwoPointEstimator, default=None
+        Weights to be applied to each pair of particles between first and second shifted catalogs.
         See ``D1D2_twopoint_weights``.
 
-    D1W2_twopoint_weights : WeightTwoPointEstimator, default=None
-        Weights to be applied to each pair of particles between first data catalog and second window catalog.
-        Only used when ``estimator = 'davispeebles'`` or ``estimator = 'hamilton'``.
+    D1S2_twopoint_weights : WeightTwoPointEstimator, default=None
+        Weights to be applied to each pair of particles between first data catalog and second shifted catalog.
+        See ``D1D2_twopoint_weights``.
+
+    D2S1_twopoint_weights : WeightTwoPointEstimator, default=None
+        Weights to be applied to each pair of particles between second data catalog and first shifted catalog.
         See ``D1D2_twopoint_weights``.
 
     estimator : string, default='auto'
-        Estimator name, one of ["auto", "natural", "landyszalay", "weight"].
+        Estimator name, one of ["auto", "natural", "landyszalay", "davispeebles", "hamilton", "weight"].
         If "auto", "landyszalay" will be chosen if random catalog(s) is/are provided.
 
     bin_type : string, default='auto'
@@ -227,22 +216,22 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     log = mpicomm is None or mpicomm.rank == 0
 
     has_randoms = randoms_positions1 is not None
-    has_window = window_positions1 is not None
-    if has_window and not has_randoms:
-        raise ValueError('Window catalog W is provided, but no randoms. If density fluctuations are D - W, provide the window catalog W as random catalog.')
+    has_shifted = shifted_positions1 is not None
+    if has_shifted and not has_randoms:
+        raise ValueError('Shifted catalog is provided, but no randoms.')
     Estimator = get_estimator(estimator, with_DR=has_randoms)
     if log: logger.info('Using estimator {}.'.format(Estimator.__name__))
 
     autocorr = data_positions2 is None
 
-    positions = {'D1':data_positions1, 'D2':data_positions2, 'R1':randoms_positions1, 'R2':randoms_positions2, 'W1': window_positions1, 'W2':window_positions2}
-    weights = {'D1':data_weights1, 'D2':data_weights2, 'R1':randoms_weights1, 'R2':randoms_weights2, 'W1':window_weights1, 'W2':window_weights2}
-    twopoint_weights = {'D1D2':D1D2_twopoint_weights, 'D1R2':D1R2_twopoint_weights, 'D2R1':D2R1_twopoint_weights, 'R1R2':R1R2_twopoint_weights, 'W1W2':W1W2_twopoint_weights, 'D1W2':D1W2_twopoint_weights}
-    weight_type = {'D1D2':D1D2_weight_type, 'D1R2':D1R2_weight_type, 'D2R1':D2R1_weight_type, 'R1R2':R1R2_weight_type, 'W1W2':W1W2_weight_type, 'D1W2':D1W2_weight_type}
-    precomputed = {'R1R2':R1R2, 'W1W2':W1W2}
+    positions = {'D1':data_positions1, 'D2':data_positions2, 'R1':randoms_positions1, 'R2':randoms_positions2, 'S1': shifted_positions1, 'S2':shifted_positions2}
+    weights = {'D1':data_weights1, 'D2':data_weights2, 'R1':randoms_weights1, 'R2':randoms_weights2, 'S1':shifted_weights1, 'S2':shifted_weights2}
+    twopoint_weights = {'D1D2':D1D2_twopoint_weights, 'D1R2':D1R2_twopoint_weights, 'D2R1':D2R1_twopoint_weights, 'R1R2':R1R2_twopoint_weights, 'S1S2':S1S2_twopoint_weights, 'D1S2':D1S2_twopoint_weights, 'D2S1':D2S1_twopoint_weights}
+    weight_type = {'D1D2':D1D2_weight_type, 'D1R2':D1R2_weight_type, 'D2R1':D2R1_weight_type, 'R1R2':R1R2_weight_type, 'S1S2':S1S2_weight_type, 'D1S2':D1S2_weight_type, 'D2S1':D1S2_weight_type}
+    precomputed = {'R1R2':R1R2}
 
     pairs = {}
-    for label1, label2 in Estimator.requires(autocorr=(not has_randoms) or randoms_positions2 is None, window=has_window):
+    for label1, label2 in Estimator.requires(autocorr=(not has_randoms) or randoms_positions2 is None, with_shifted=has_shifted):
         label12 = label1 + label2
         pre = precomputed.get(label12, None)
         if pre is not None:
@@ -258,8 +247,9 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         else:
             if log: logger.info('Computing pair counts {}.'.format(label12))
             # label12 is D1R2, but we only have R1, so swith label2 to R1
-            if autocorr and label12 == 'D1R2':
-                label2 = 'R1'
+            if autocorr:
+                if label12 == 'D1R2': label2 = 'R1'
+                if label12 == 'S1S2': label2 = 'S1'
             pairs[label12] = TwoPointCounter(mode, edges, positions[label1], positions2=positions[label2],
                                                    weights1=weights[label1], weights2=weights[label2],
                                                    twopoint_weights=twopoint_weights[label12], weight_type=weight_type[label12],
