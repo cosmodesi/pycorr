@@ -8,10 +8,11 @@ from .twopoint_counter import TwoPointCounter, AnalyticTwoPointCounter
 from .utils import BaseClass
 
 
-def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=None, randoms_positions1=None, randoms_positions2=None,
-                                data_weights1=None, data_weights2=None, randoms_weights1=None, randoms_weights2=None, R1R2=None, estimator='auto',
-                                D1D2_twopoint_weights=None, D1R2_twopoint_weights=None, D2R1_twopoint_weights=None, R1R2_twopoint_weights=None,
-                                boxsize=None, mpicomm=None, D1D2_weight_type='auto', D1R2_weight_type='auto', D2R1_weight_type='auto', R1R2_weight_type='auto', **kwargs):
+def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=None, randoms_positions1=None, randoms_positions2=None, shifted_positions1=None, shifted_positions2=None,
+                                data_weights1=None, data_weights2=None, randoms_weights1=None, randoms_weights2=None, shifted_weights1=None, shifted_weights2=None, R1R2=None,
+                                D1D2_twopoint_weights=None, D1R2_twopoint_weights=None, D2R1_twopoint_weights=None, R1R2_twopoint_weights=None, S1S2_twopoint_weights=None, D1S2_twopoint_weights=None, D2S1_twopoint_weights=None,
+                                D1D2_weight_type='auto', D1R2_weight_type='auto', D2R1_weight_type='auto', R1R2_weight_type='auto', S1S2_weight_type='auto', D1S2_weight_type='auto', D2S1_weight_type='auto',
+                                estimator='auto', boxsize=None, mpicomm=None, **kwargs):
     r"""
     Compute pair counts and correlation function estimation.
 
@@ -39,7 +40,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         Optionally, for cross-correlations, data positions in the second catalog. See ``data_positions1``.
 
     randoms_positions1 : array, default=None
-        Optionally, positions of the random catalog representing the first selection function.
+        Optionally, positions of the random catalog representing the selection function.
         If no randoms are provided, and estimator is "auto", or "natural",
         :class:`NaturalTwoPointEstimator` will be used to estimate the correlation function,
         with analytical pair counts for R1R2.
@@ -48,6 +49,12 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         Optionally, for cross-correlations, positions of the random catalog representing the second selection function.
         See ``randoms_positions1``.
 
+    shifted_positions1 : array, default=None
+        Optionally, in case of BAO reconstruction, positions of the catalog with shifted positions.
+
+    shifted_positions2 : array, default=None
+        Optionally, in case of BAO reconstruction, positions of the catalog representing the second selection function, if different from ``randoms_positions2``.
+
     data_weights1 : array, default=None
         Weights of the first catalog. Not required if ``weight_type`` is either ``None`` or "auto".
         See ``weight_type``.
@@ -55,40 +62,22 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     data_weights2 : array, default=None
         Optionally, for cross-pair counts, weights in the second catalog. See ``data_weights1``.
 
-    randoms_weight1 : array, default=None
-        Optionally, weights of the random catalog representing the first selection function. See ``data_weights1``.
+    randoms_weights1 : array, default=None
+        Optionally, weights of the first random catalog. See ``data_weights1``.
 
     randoms_weights2 : array, default=None
-        Optionally, for cross-correlations, weights of the random catalog representing the second selection function.
+        Optionally, for cross-correlations, weights of the second random catalog.
         See ``randoms_weights1``.
 
+    shifted_weights1 : array, default=None
+        Optionally, weights of the first shifted catalog. See ``data_weights1``.
+
+    shifted_weights2 : array, default=None
+        Optionally, weights of the second shifted catalog.
+        See ``shifted_weights1``.
+
     R1R2 : BaseTwoPointCounter, default=None
-        Precomputed R1R2 pairs; e.g. useful when running on many mocks with same randoms catalog.
-
-    estimator : string, default='auto'
-        Estimator name, one of ["auto", "natural", "landyszalay", "weight"].
-        If "auto", "landyszalay" will be chosen if random catalog(s) is/are provided.
-
-    bin_type : string, default='auto'
-        Binning type for first dimension, e.g. :math:`r_{p}` when ``mode`` is "rppi".
-        Set to ``lin`` for speed-up in case of linearly-spaced bins.
-        In this case, the bin number for a pair separated by a (3D, projected, angular...) separation
-        ``sep`` is given by ``(sep - edges[0])/(edges[-1] - edges[0])*(len(edges) - 1)``,
-        i.e. only the first and last bins of input edges are considered.
-        Then setting ``output_sepavg`` is virtually costless.
-        For non-linear binning, set to "custom".
-        "auto" allows for auto-detection of the binning type:
-        linear binning will be chosen if input edges are
-        within ``rtol = 1e-05`` (relative tolerance) *or* ``atol = 1e-08``
-        (absolute tolerance) of the array
-        ``np.linspace(edges[0], edges[-1], len(edges))``.
-
-    position_type : string, default='auto'
-        Type of input positions, one of:
-
-            - "rd": RA/Dec in degree, only if ``mode`` is "theta"
-            - "rdd": RA/Dec in degree, distance, for any ``mode``
-            - "xyz": Cartesian positions
+        Precomputed R1R2 pairs; e.g. useful when running on many mocks with same random catalogs.
 
     D1D2_weight_type : string, default='auto'
         The type of weighting to apply to provided weights for D1D2 pair counts. One of:
@@ -113,16 +102,14 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     R1R2_weight_type : string, default='auto'
         Same as ``D1D2_weight_type``, for R1R2 pair counts.
 
-    weight_attrs : dict, default=None
-        Dictionary of weighting scheme attributes. In case ``weight_type`` is "inverse_bitwise",
-        one can provide "nrealizations", the total number of realizations (*including* current one;
-        defaulting to the number of bits in input weights plus one);
-        "noffset", the offset to be added to the bitwise counts in the denominator (defaulting to 1)
-        and "default_value", the default value of pairwise weights if the denominator is zero (defaulting to 0).
-        One can also provide "nalways", stating the number of bits systematically set to 1 (defaulting to 0),
-        and "nnever", stating the number of bits systematically set to 0 (defaulting to 0).
-        These will only impact the normalization factors.
-        For example, for the "zero-truncated" estimator (arXiv:1912.08803), one would use noffset = 0, nalways = 1, nnever = 0.
+    S1S2_weight_type : string, default='auto'
+        Same as ``D1D2_weight_type``, for S1S2 pair counts.
+
+    D1S2_weight_type : string, default='auto'
+        Same as ``D1D2_weight_type``, for D1S2 pair counts.
+
+    D2S1_weight_type : string, default='auto'
+        Same as ``D1D2_weight_type``, for D2S1 pair counts.
 
     D1D2_twopoint_weights : WeightTwoPointEstimator, default=None
         Weights to be applied to each pair of particles between first and second data catalogs.
@@ -143,6 +130,54 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     R1R2_twopoint_weights : WeightTwoPointEstimator, default=None
         Weights to be applied to each pair of particles between first and second randoms catalogs.
         See ``D1D2_twopoint_weights``.
+
+    S1S2_twopoint_weights : WeightTwoPointEstimator, default=None
+        Weights to be applied to each pair of particles between first and second shifted catalogs.
+        See ``D1D2_twopoint_weights``.
+
+    D1S2_twopoint_weights : WeightTwoPointEstimator, default=None
+        Weights to be applied to each pair of particles between first data catalog and second shifted catalog.
+        See ``D1D2_twopoint_weights``.
+
+    D2S1_twopoint_weights : WeightTwoPointEstimator, default=None
+        Weights to be applied to each pair of particles between second data catalog and first shifted catalog.
+        See ``D1D2_twopoint_weights``.
+
+    estimator : string, default='auto'
+        Estimator name, one of ["auto", "natural", "landyszalay", "davispeebles", "hamilton", "weight"].
+        If "auto", "landyszalay" will be chosen if random catalog(s) is/are provided.
+
+    bin_type : string, default='auto'
+        Binning type for first dimension, e.g. :math:`r_{p}` when ``mode`` is "rppi".
+        Set to ``lin`` for speed-up in case of linearly-spaced bins.
+        In this case, the bin number for a pair separated by a (3D, projected, angular...) separation
+        ``sep`` is given by ``(sep - edges[0])/(edges[-1] - edges[0])*(len(edges) - 1)``,
+        i.e. only the first and last bins of input edges are considered.
+        Then setting ``output_sepavg`` is virtually costless.
+        For non-linear binning, set to "custom".
+        "auto" allows for auto-detection of the binning type:
+        linear binning will be chosen if input edges are
+        within ``rtol = 1e-05`` (relative tolerance) *or* ``atol = 1e-08``
+        (absolute tolerance) of the array
+        ``np.linspace(edges[0], edges[-1], len(edges))``.
+
+    position_type : string, default='auto'
+        Type of input positions, one of:
+
+            - "rd": RA/Dec in degree, only if ``mode`` is "theta"
+            - "rdd": RA/Dec in degree, distance, for any ``mode``
+            - "xyz": Cartesian positions
+
+    weight_attrs : dict, default=None
+        Dictionary of weighting scheme attributes. In case ``weight_type`` is "inverse_bitwise",
+        one can provide "nrealizations", the total number of realizations (*including* current one;
+        defaulting to the number of bits in input weights plus one);
+        "noffset", the offset to be added to the bitwise counts in the denominator (defaulting to 1)
+        and "default_value", the default value of pairwise weights if the denominator is zero (defaulting to 0).
+        One can also provide "nalways", stating the number of bits systematically set to 1 (defaulting to 0),
+        and "nnever", stating the number of bits systematically set to 0 (defaulting to 0).
+        These will only impact the normalization factors.
+        For example, for the "zero-truncated" estimator (arXiv:1912.08803), one would use noffset = 0, nalways = 1, nnever = 0.
 
     los : string, default='midpoint'
         Line-of-sight to be used when ``mode`` is "smu", "rppi" or "rp"; one of:
@@ -181,19 +216,22 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     log = mpicomm is None or mpicomm.rank == 0
 
     has_randoms = randoms_positions1 is not None
-    Estimator = get_estimator(estimator, has_cross=has_randoms)
+    has_shifted = shifted_positions1 is not None
+    if has_shifted and not has_randoms:
+        raise ValueError('Shifted catalog is provided, but no randoms.')
+    Estimator = get_estimator(estimator, with_DR=has_randoms)
     if log: logger.info('Using estimator {}.'.format(Estimator.__name__))
 
     autocorr = data_positions2 is None
 
-    positions = {'D1':data_positions1, 'D2':data_positions2, 'R1':randoms_positions1, 'R2':randoms_positions2}
-    weights = {'D1':data_weights1, 'D2':data_weights2, 'R1':randoms_weights1, 'R2':randoms_weights2}
-    twopoint_weights = {'D1D2':D1D2_twopoint_weights, 'D1R2':D1R2_twopoint_weights, 'D2R1':D2R1_twopoint_weights, 'R1R2':R1R2_twopoint_weights}
-    weight_type = {'D1D2':D1D2_weight_type, 'D1R2':D1R2_weight_type, 'D2R1':D2R1_weight_type, 'R1R2':R1R2_weight_type}
+    positions = {'D1':data_positions1, 'D2':data_positions2, 'R1':randoms_positions1, 'R2':randoms_positions2, 'S1': shifted_positions1, 'S2':shifted_positions2}
+    weights = {'D1':data_weights1, 'D2':data_weights2, 'R1':randoms_weights1, 'R2':randoms_weights2, 'S1':shifted_weights1, 'S2':shifted_weights2}
+    twopoint_weights = {'D1D2':D1D2_twopoint_weights, 'D1R2':D1R2_twopoint_weights, 'D2R1':D2R1_twopoint_weights, 'R1R2':R1R2_twopoint_weights, 'S1S2':S1S2_twopoint_weights, 'D1S2':D1S2_twopoint_weights, 'D2S1':D2S1_twopoint_weights}
+    weight_type = {'D1D2':D1D2_weight_type, 'D1R2':D1R2_weight_type, 'D2R1':D2R1_weight_type, 'R1R2':R1R2_weight_type, 'S1S2':S1S2_weight_type, 'D1S2':D1S2_weight_type, 'D2S1':D1S2_weight_type}
     precomputed = {'R1R2':R1R2}
 
     pairs = {}
-    for label1, label2 in Estimator.requires(autocorr=(not has_randoms) or randoms_positions2 is None):
+    for label1, label2 in Estimator.requires(autocorr=(not has_randoms) or randoms_positions2 is None, with_shifted=has_shifted):
         label12 = label1 + label2
         pre = precomputed.get(label12, None)
         if pre is not None:
@@ -209,8 +247,9 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         else:
             if log: logger.info('Computing pair counts {}.'.format(label12))
             # label12 is D1R2, but we only have R1, so swith label2 to R1
-            if autocorr and label12 == 'D1R2':
-                label2 = 'R1'
+            if autocorr:
+                if label12 == 'D1R2': label2 = 'R1'
+                if label12 == 'S1S2': label2 = 'S1'
             pairs[label12] = TwoPointCounter(mode, edges, positions[label1], positions2=positions[label2],
                                                    weights1=weights[label1], weights2=weights[label2],
                                                    twopoint_weights=twopoint_weights[label12], weight_type=weight_type[label12],

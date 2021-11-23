@@ -1,5 +1,6 @@
 import os
 import tempfile
+
 import numpy as np
 
 from pycorr import TwoPointCorrelationFunction, TwoPointEstimator, TwoPointCounter,\
@@ -23,13 +24,15 @@ def test_estimator(mode='s'):
     size = 100
     boxsize = (1000,)*3
     list_options = []
+    list_options.append({'estimator':'natural'})
     if mode not in ['theta', 'rp']:
-        list_options.append({'estimator':'natural','boxsize':boxsize})
+        list_options.append({'estimator':'natural', 'boxsize':boxsize, 'with_randoms':False})
+    list_options.append({'estimator':'davispeebles'})
+    list_options.append({'estimator':'hamilton'})
     list_options.append({'estimator':'weight'})
+    list_options.append({'with_shifted':True})
     list_options.append({'autocorr':True})
     list_options.append({'n_individual_weights':1})
-    if mode not in ['theta', 'rp']:
-        list_options.append({'estimator':'natural','boxsize':boxsize})
     has_mpi = True
     try:
         import mpi4py
@@ -52,10 +55,15 @@ def test_estimator(mode='s'):
     for engine in list_engine:
         for options in list_options:
             options = options.copy()
-            data1, randoms1 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=options.get('n_individual_weights',1), n_bitwise_weights=options.get('n_bitwise_weights',0))
-            data2, randoms2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=options.get('n_individual_weights',1), n_bitwise_weights=options.get('n_bitwise_weights',0))
+            n_individual_weights = options.get('n_individual_weights',1)
+            n_bitwise_weights = options.get('n_bitwise_weights',0)
+            data1, data2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights, seed=42)
+            randoms1, randoms2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights, seed=43)
+            shifted1, shifted2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights, seed=44)
             autocorr = options.pop('autocorr', False)
             mpicomm = options.pop('mpicomm', None)
+            with_randoms = options.pop('with_randoms', True)
+            with_shifted = options.pop('with_shifted', False)
             options.setdefault('boxsize', None)
             options['los'] = 'z' if options['boxsize'] is not None else 'midpoint'
             options['position_type'] = 'xyz'
@@ -63,8 +71,10 @@ def test_estimator(mode='s'):
             def run(**kwargs):
                 return TwoPointCorrelationFunction(mode=mode, edges=edges, engine=engine, data_positions1=data1[:3], data_positions2=None if autocorr else data2[:3],
                                                    data_weights1=data1[3:], data_weights2=None if autocorr else data2[3:],
-                                                   randoms_positions1=randoms1[:3], randoms_positions2=None if autocorr else randoms2[:3],
-                                                   randoms_weights1=randoms1[3:], randoms_weights2=None if autocorr else randoms2[3:],
+                                                   randoms_positions1=randoms1[:3] if with_randoms else None, randoms_positions2=None if autocorr else randoms2[:3],
+                                                   randoms_weights1=randoms1[3:] if with_randoms else None, randoms_weights2=None if autocorr else randoms2[3:],
+                                                   shifted_positions1=shifted1[:3] if with_shifted else None, shifted_positions2=None if autocorr else shifted2[:3],
+                                                   shifted_weights1=shifted1[3:] if with_shifted else None, shifted_weights2=None if autocorr else shifted2[3:],
                                                    **options, **kwargs)
 
             test = run()
@@ -74,27 +84,35 @@ def test_estimator(mode='s'):
                 assert res2.wnorm == res1.wnorm
 
             options_counts = options.copy()
-            estimator = options_counts.pop('estimator','landyszalay')
+            estimator = options_counts.pop('estimator', 'landyszalay')
 
             D1D2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:3], positions2=None if autocorr else data2[:3],
                                    weights1=data1[3:], weights2=None if autocorr else data2[3:], **options_counts)
             assert_allclose(D1D2, test.D1D2)
-            if estimator not in ['natural','weight']:
-                D1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:3], positions2=randoms2[:3],
-                                       weights1=data1[3:], weights2=randoms2[3:], **options_counts)
-                assert_allclose(D1R2, test.D1R2)
-                if autocorr:
-                    assert_allclose(D1R2, test.D2R1)
-                else:
+            if with_shifted:
+                if estimator in ['landyszalay', 'natural']:
+                    R1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:3], positions2=None if autocorr else randoms2[:3],
+                                           weights1=randoms1[3:], weights2=None if autocorr else randoms2[3:], **options_counts)
+                    assert_allclose(R1R2, test.R1R2)
+                # for following computation
+                randoms1 = shifted1
+                randoms2 = shifted2
+            if estimator in ['landyszalay', 'davispeebles', 'hamilton']:
+                D1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:3], positions2=randoms1[:3] if autocorr else randoms2[:3],
+                                       weights1=data1[3:], weights2=randoms1[3:] if autocorr else randoms2[3:], **options_counts)
+                assert_allclose(D1R2, test.D1S2)
+                if not autocorr and estimator in ['landyszalay']:
                     D2R1 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:3], positions2=data2[:3],
                                            weights1=randoms1[3:], weights2=data2[3:], **options_counts)
                     #D2R1 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data2[:3], positions2=randoms1[:3],
                     #                       weights1=data2[3:], weights2=randoms1[3:], **options_counts)
-                    assert_allclose(D2R1, test.D2R1)
-
-            R1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:3], positions2=None if autocorr else randoms2[:3],
-                                   weights1=randoms1[3:], weights2=None if autocorr else randoms2[3:], **options_counts)
-            assert_allclose(R1R2, test.R1R2)
+                    assert_allclose(D2R1, test.D2S1)
+                else:
+                    assert_allclose(D1R2, test.D2S1)
+            if estimator in ['landyszalay', 'natural', 'weight'] and with_randoms:
+                R1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:3], positions2=None if autocorr else randoms2[:3],
+                                       weights1=randoms1[3:], weights2=None if autocorr else randoms2[3:], **options_counts)
+                assert_allclose(R1R2, test.S1S2)
             if test.D1D2.mode == 'smu':
                 sep, xiell = project_to_multipoles(test, ells=(0,2,4))
             if test.D1D2.mode == 'rppi':

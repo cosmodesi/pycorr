@@ -4,7 +4,7 @@ import numpy as np
 from scipy import special
 
 from .twopoint_counter import get_twopoint_counter
-from .utils import BaseClass, BaseMetaClass
+from .utils import BaseClass
 
 
 class EstimatorError(Exception):
@@ -12,7 +12,7 @@ class EstimatorError(Exception):
     """Exception raised when issue with estimator."""
 
 
-def get_estimator(estimator='auto', has_cross=True):
+def get_estimator(estimator='auto', with_DR=True):
     """
     Return :class:`BaseTwoPointEstimator` subclass corresponding
     to input estimator name.
@@ -20,13 +20,11 @@ def get_estimator(estimator='auto', has_cross=True):
     Parameters
     ----------
     estimator : string, default='auto'
-        Estimator name, one of ["auto", "natural", "landyszalay"].
-        If "auto", "landyszalay" will be chosen if ``has_cross``,
-        else "natural".
+        Estimator name, one of ["auto", "natural", "davispeebles", "hamilton", "landyszalay"].
+        If "auto", "landyszalay" will be chosen if ``with_DR``, else "natural".
 
-    has_randoms : bool, default=True
-        If estimator will be provided with pair counts from data x randoms
-        catalogs. See above.
+    with_DR : bool, default=True
+        If estimator will be provided with pair counts from data x random catalogs. See above.
 
     Returns
     -------
@@ -34,25 +32,19 @@ def get_estimator(estimator='auto', has_cross=True):
         Estimator class.
     """
     if estimator == 'auto':
-        estimator = {True:'landyszalay', False:'natural'}[has_cross]
+        estimator = {True:'landyszalay', False:'natural'}[with_DR]
 
     if isinstance(estimator, str):
 
-        if estimator.lower() == 'natural':
-            return NaturalTwoPointEstimator
-
-        if estimator.lower() == 'weight':
-            return WeightTwoPointEstimator
-
-        if estimator.lower() == 'landyszalay':
-            return LandySzalayTwoPointEstimator
-
-        raise EstimatorError('Unknown estimator {}.'.format(estimator))
+        try:
+            return BaseTwoPointEstimator._registry[estimator.lower()]
+        except KeyError:
+            raise EstimatorError('Unknown estimator {}.'.format(estimator))
 
     return estimator
 
 
-class MetaTwoPointEstimator(BaseMetaClass):
+class MetaTwoPointEstimator(type(BaseClass)):
 
     """Metaclass to return correct estimator."""
 
@@ -67,7 +59,7 @@ class TwoPointEstimator(metaclass=MetaTwoPointEstimator):
     Parameters
     ----------
     estimator : string, default='landyszalay'
-        Estimator name, one of ["natural", "landyszalay"].
+        Estimator name, one of ["auto", "natural", "davispeebles", "hamilton", "landyszalay"].
 
     args : list
         Arguments for two point estimator, see :class:`TwoPointEstimator`.
@@ -87,7 +79,19 @@ class TwoPointEstimator(metaclass=MetaTwoPointEstimator):
         return get_estimator(state.pop('name')).from_state(state)
 
 
-class BaseTwoPointEstimator(BaseClass):
+class RegisteredTwoPointEstimator(type(BaseClass)):
+
+    """Metaclass registering :class:`BaseTwoPointEstimator`-derived classes."""
+
+    _registry = {}
+
+    def __new__(meta, name, bases, class_dict):
+        cls = super().__new__(meta, name, bases, class_dict)
+        meta._registry[cls.name] = cls
+        return cls
+
+
+class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
     """
     Base class for estimators.
     Extend this class to implement a new estimator.
@@ -97,7 +101,9 @@ class BaseTwoPointEstimator(BaseClass):
     corr : array
         Correlation function estimation.
     """
-    def __init__(self, D1D2=None, R1R2=None, D1R2=None, D2R1=None):
+    name = 'base'
+
+    def __init__(self, D1D2=None, R1R2=None, D1R2=None, D2R1=None, S1S2=None, D1S2=None, D2S1=None):
         """
         Initialize :class:`BaseTwoPointEstimator`, and set correlation
         estimation :attr:`corr` (calling :meth:`run`).
@@ -116,13 +122,33 @@ class BaseTwoPointEstimator(BaseClass):
         D2R1 : BaseTwoPointCounter, default=None
             D2R1 pair counts, e.g. for :class:`LandySzalayTwoPointEstimator`,
             in case of cross-correlation.
+
+        S1S2 : BaseTwoPointCounter, default=None
+            S1S2 pair counts, e.g. with reconstruction, the Landy-Szalay estimator is commonly written:
+            :math:`(D1D2 - D1S2 - D2S1 - S1S2)/R1R2`, with S1 and S2 shifted random catalogs.
+            Defaults to ``R1R2``.
+
+        D1S2 : BaseTwoPointCounter, default=None
+            D1S2 pair counts, see ``S1S2``. Defaults to ``D1R2``.
+
+        S1D2 : BaseTwoPointCounter, default=None
+            S1D2 pair counts, see ``S1S2``. Defaults to ``D2R1``.
         """
         self.D1D2 = D1D2
         self.R1R2 = R1R2
         self.D1R2 = D1R2
         self.D2R1 = D2R1
+        self.S1S2 = S1S2
+        self.D1S2 = D1S2
+        self.D2S1 = D2S1
         if D2R1 is None: # D1 = D2 and R1 = R2
             self.D2R1 = D1R2
+        if S1S2 is None:
+            self.S1S2 = self.R1R2
+        if D1S2 is None:
+            self.D1S2 = self.D1R2
+        if D2S1 is None:
+            self.D2S1 = self.D2R1
         self.run()
 
     @property
@@ -158,26 +184,33 @@ class BaseTwoPointEstimator(BaseClass):
     def autocorr(self):
         return self.D1D2.autocorr
 
+    @property
+    def with_shifted(self):
+        return self.S1S2 is not self.R1R2 or self.D1S2 is not self.D1R2 or self.D2S1 is not self.D2R1
+
     @classmethod
-    def requires(cls, autocorr=False, join=None):
+    def requires(cls, autocorr=False, with_shifted=False, join=None):
         """Yield required pair counts."""
-
-        def gen():
-            yield 'D1','D2'
-            yield 'D1','R2'
-            if not autocorr:
-                yield 'D2','R1'
-            yield 'R1','R2'
-
-        for pair in gen():
+        for tu in cls._tuple_requires(autocorr=autocorr, with_shifted=with_shifted):
             if join is not None:
-                yield join.join(pair)
+                yield join.join(tu)
             else:
-                yield pair
+                yield tu
+
+    @classmethod
+    def _tuple_requires(cls, autocorr=False, with_shifted=False, join=None):
+        yield 'D1','D2'
+        key = 'S' if with_shifted else 'R'
+        yield 'D1','{}2'.format(key)
+        if not autocorr:
+            yield 'D2','{}1'.format(key)
+        yield '{}1'.format(key),'{}2'.format(key)
+        if with_shifted:
+            yield 'R1','R2'
 
     def rebin(self, *args, **kwargs):
         """Rebin estimator, by rebinning all pair counts. See :meth:`BaseTwoPointCounter.rebin`."""
-        for pair in self.requires(autocorr=self.autocorr, join=''):
+        for pair in self.requires(autocorr=self.autocorr, with_shifted=self.with_shifted, join=''):
             getattr(self, pair).rebin(*args, **kwargs)
         self.run()
 
@@ -186,13 +219,14 @@ class BaseTwoPointEstimator(BaseClass):
         for name in ['name']:
             if hasattr(self, name):
                 state[name] = getattr(self, name)
-        for pair in self.requires(autocorr=self.autocorr, join=''):
+        for pair in self.requires(autocorr=self.autocorr, with_shifted=self.with_shifted, join=''):
             state[pair] = getattr(self, pair).__getstate__()
         return state
 
     def __setstate__(self, state):
         kwargs = {}
-        for pair in self.requires(autocorr=False, join=''):
+        pairs = set(self.requires(autocorr=False, with_shifted=True, join='')) | set(self.requires(autocorr=False, with_shifted=False, join='')) # most general list
+        for pair in pairs:
             if pair in state:
                 pair_state = state[pair].copy()
                 kwargs[pair] = get_twopoint_counter(pair_state.pop('name')).from_state(pair_state)
@@ -206,7 +240,7 @@ class NaturalTwoPointEstimator(BaseTwoPointEstimator):
     def run(self):
         """
         Set correlation function estimate :attr:`corr` based on the natural estimator
-        :math:`DD/RR - 1`.
+        :math:`(D1D2 - S1S2)/R1R2`.
         """
         nonzero = self.R1R2.wcounts != 0
         # init
@@ -217,27 +251,76 @@ class NaturalTwoPointEstimator(BaseTwoPointEstimator):
         # (DD - RR) / RR
         DD = self.D1D2.normalized_wcounts()[nonzero]
         RR = self.R1R2.normalized_wcounts()[nonzero]
-        tmp = DD/RR - 1
+        SS = self.S1S2.normalized_wcounts()[nonzero]
+        tmp = (DD - SS)/RR
         corr[nonzero] = tmp[...]
         self.corr = corr
 
-    @property
-    def autocorr(self):
-        return self.D1D2.autocorr
-
     @classmethod
-    def requires(cls, autocorr=False, join=None):
-        """Yield required pair counts."""
-
-        def gen():
-            yield 'D1','D2'
+    def _tuple_requires(cls, autocorr=False, with_shifted=False, join=None):
+        yield 'D1','D2'
+        key = 'S' if with_shifted else 'R'
+        yield '{}1'.format(key),'{}2'.format(key)
+        if with_shifted:
             yield 'R1','R2'
 
-        for pair in gen():
-            if join is not None:
-                yield join.join(pair)
-            else:
-                yield pair
+
+class DavisPeeblesTwoPointEstimator(BaseTwoPointEstimator):
+
+    name = 'davispeebles'
+
+    def run(self):
+        """
+        Set correlation function estimate :attr:`corr` based on the Davis-Peebles estimator
+        :math:`(D1D2 - D1S2)/D1R2`.
+        """
+        nonzero = self.D1R2.wcounts != 0
+        # init
+        corr = np.empty_like(self.D1R2.wcounts, dtype='f8')
+        corr[...] = np.nan
+
+        # the natural estimator
+        # (DD - RR) / RR
+        DD = self.D1D2.normalized_wcounts()[nonzero]
+        DR = self.D1R2.normalized_wcounts()[nonzero]
+        DS = self.D1S2.normalized_wcounts()[nonzero]
+        tmp = (DD - DS)/DR
+        corr[nonzero] = tmp[...]
+        self.corr = corr
+
+    @classmethod
+    def _tuple_requires(cls, autocorr=False, with_shifted=False, join=None):
+        """Yield required pair counts."""
+        yield 'D1','D2'
+        key = 'S' if with_shifted else 'R'
+        yield 'D1','{}2'.format(key)
+        if with_shifted:
+            yield 'D1','R2'
+
+
+class HamiltonTwoPointEstimator(DavisPeeblesTwoPointEstimator):
+
+    name = 'hamilton'
+
+    def run(self):
+        """
+        Set correlation function estimate :attr:`corr` based on the Hamilton estimator
+        :math:`(D1D2 - D1S2^{2})/D1R2^{2}`.
+        """
+        nonzero = self.D1R2.wcounts != 0
+        # init
+        corr = np.empty_like(self.D1R2.wcounts, dtype='f8')
+        corr[...] = np.nan
+
+        # the natural estimator
+        # (DD - RR) / RR
+        DD = self.D1D2.normalized_wcounts()[nonzero]
+        DR = self.D1R2.normalized_wcounts()[nonzero]
+        DS = self.D1S2.normalized_wcounts()[nonzero]
+        tmp = (DD - DS**2)/DR**2
+        corr[nonzero] = tmp[...]
+        self.corr = corr
+
 
 class LandySzalayTwoPointEstimator(BaseTwoPointEstimator):
 
@@ -246,7 +329,7 @@ class LandySzalayTwoPointEstimator(BaseTwoPointEstimator):
     def run(self):
         """
         Set correlation function estimate :attr:`corr` based on the Landy-Szalay estimator
-        :math:`(DD - DR - RD)/RR + 1`.
+        :math:`(D1D2 - D1S2 - D2S1 - S1S2)/R1R2`.
         """
         nonzero = self.R1R2.wcounts != 0
         # init
@@ -257,9 +340,11 @@ class LandySzalayTwoPointEstimator(BaseTwoPointEstimator):
         # (DD - DR - RD + RR) / RR
         DD = self.D1D2.normalized_wcounts()[nonzero]
         RR = self.R1R2.normalized_wcounts()[nonzero]
-        DR = self.D1R2.normalized_wcounts()[nonzero]
-        RD = self.D2R1.normalized_wcounts()[nonzero]
-        tmp = (DD - DR - RD)/RR + 1
+        DS = self.D1S2.normalized_wcounts()[nonzero]
+        SD = self.D2S1.normalized_wcounts()[nonzero]
+        SS = self.R1R2.normalized_wcounts()[nonzero]
+
+        tmp = (DD - DS - SD - SS)/RR
         corr[nonzero] = tmp[...]
         self.corr = corr
 
@@ -270,8 +355,8 @@ class WeightTwoPointEstimator(NaturalTwoPointEstimator):
 
     def run(self):
         """
-        Set weight estimate :attr:`corr` following :math:`RR/DD`,
-        typically used for angular weights, with RR parent sample and DD fibered sample.
+        Set weight estimate :attr:`corr` following :math:`R1R2/D1D2`,
+        typically used for angular weights, with R1R2 from parent sample and D1D2 from fibered sample.
         """
         nonzero = self.D1D2.wcounts != 0
         # init
@@ -284,6 +369,11 @@ class WeightTwoPointEstimator(NaturalTwoPointEstimator):
         tmp = RR/DD
         corr[nonzero] = tmp[...]
         self.corr = corr
+
+    @classmethod
+    def _yield_requires(cls, autocorr=False, with_shifted=False, join=None):
+        yield 'D1','D2'
+        yield 'R1','R2'
 
     @property
     def weight(self):

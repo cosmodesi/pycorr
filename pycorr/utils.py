@@ -9,8 +9,6 @@ import functools
 
 import numpy as np
 
-lib_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)),'lib')
-
 
 def exception_handler(exc_type, exc_value, exc_traceback):
     """Print exception with a logger."""
@@ -137,7 +135,7 @@ class BaseClass(object,metaclass=BaseMetaClass):
 
     def save(self, filename):
         self.log_info('Saving {}.'.format(filename))
-        np.save(filename, self.__getstate__())
+        np.save(filename, self.__getstate__(), allow_pickle=True)
 
     @classmethod
     def load(cls, filename):

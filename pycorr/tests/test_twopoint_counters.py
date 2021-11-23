@@ -1,5 +1,6 @@
 import os
 import tempfile
+
 import numpy as np
 
 from pycorr import TwoPointCounter, AnalyticTwoPointCounter,\

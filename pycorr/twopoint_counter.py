@@ -3,7 +3,7 @@
 import os
 import numpy as np
 
-from .utils import BaseClass, BaseMetaClass
+from .utils import BaseClass
 from . import utils
 
 
@@ -14,13 +14,13 @@ class TwoPointCounterError(Exception):
 
 def get_twopoint_counter(engine='corrfunc'):
     """
-    Return :class:`BaseTwoPointCounter` subclass corresponding
+    Return :class:`BaseTwoPointCounter`-subclass corresponding
     to input engine name.
 
     Parameters
     ----------
     engine : string, default='corrfunc'
-        Name of pair counter engine, one of ["corrfunc", "analytical"].
+        Name of pair counter engine, one of ["corrfunc", "analytic"].
 
     Returns
     -------
@@ -41,7 +41,7 @@ def get_twopoint_counter(engine='corrfunc'):
     return engine
 
 
-class MetaTwoPointCounter(BaseMetaClass):
+class MetaTwoPointCounter(type(BaseClass)):
 
     """Metaclass to return correct pair counter engine."""
 
@@ -86,7 +86,10 @@ class BaseTwoPointCounter(BaseClass):
         Array of separation values.
 
     wcounts : array
-        (Optionally weighted) pair-counts.
+        (Optionally weighted) pair counts.
+
+    wnorm : float
+        Pair count normalization.
     """
     def __init__(self, mode, edges, positions1, positions2=None, weights1=None, weights2=None,
                 bin_type='auto', position_type='auto', weight_type='auto', weight_attrs=None,
@@ -220,10 +223,8 @@ class BaseTwoPointCounter(BaseClass):
         self.compute_sepavg = compute_sepavg
         self.attrs = kwargs
         self.wnorm = self.normalization()
-
         self._set_default_separation()
         self.run()
-
 
     def run(self):
         """
@@ -235,7 +236,7 @@ class BaseTwoPointCounter(BaseClass):
     def _set_edges(self, edges, bin_type='auto'):
         if np.ndim(edges[0]) == 0:
             edges = (edges,)
-        self.edges = tuple(edges)
+        self.edges = tuple(np.array(edge, dtype='f8') for edge in edges)
         if self.mode in ['smu','rppi']:
             if not self.ndim == 2:
                 raise TwoPointCounterError('A tuple of edges should be provided to pair counter in mode {}'.format(self.mode))
@@ -350,7 +351,7 @@ class BaseTwoPointCounter(BaseClass):
         if weight_type is None:
             self.weights1 = self.weights2 = None
         else:
-            self.weight_attrs.update(nalways=weight_attrs.get('nalways',0), nnever=weight_attrs.get('nnever',0))
+            self.weight_attrs.update(nalways=weight_attrs.get('nalways', 0), nnever=weight_attrs.get('nnever', 0))
             noffset = weight_attrs.get('noffset', 1)
             default_value = weight_attrs.get('default_value', 0.)
             self.weight_attrs.update(noffset=noffset, default_value=default_value)
@@ -449,7 +450,6 @@ class BaseTwoPointCounter(BaseClass):
             # just to make sure we use the correct dtype
             self.twopoint_weights = TwoPointWeight(sep=np.cos(np.radians(sep[::-1]), dtype=self.dtype),
                                                    weight=np.array(weight[::-1], dtype=self.dtype))
-
 
     def _mpi_decompose(self):
         if self.with_mpi:
