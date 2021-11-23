@@ -144,7 +144,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         See ``D1D2_twopoint_weights``.
 
     estimator : string, default='auto'
-        Estimator name, one of ["auto", "natural", "landyszalay", "davispeebles", "hamilton", "weight"].
+        Estimator name, one of ["auto", "natural", "landyszalay", "davispeebles", "weight"].
         If "auto", "landyszalay" will be chosen if random catalog(s) is/are provided.
 
     bin_type : string, default='auto'

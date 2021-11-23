@@ -20,7 +20,7 @@ def get_estimator(estimator='auto', with_DR=True):
     Parameters
     ----------
     estimator : string, default='auto'
-        Estimator name, one of ["auto", "natural", "davispeebles", "hamilton", "landyszalay"].
+        Estimator name, one of ["auto", "natural", "davispeebles", "landyszalay"].
         If "auto", "landyszalay" will be chosen if ``with_DR``, else "natural".
 
     with_DR : bool, default=True
@@ -59,7 +59,7 @@ class TwoPointEstimator(metaclass=MetaTwoPointEstimator):
     Parameters
     ----------
     estimator : string, default='landyszalay'
-        Estimator name, one of ["auto", "natural", "davispeebles", "hamilton", "landyszalay"].
+        Estimator name, one of ["auto", "natural", "davispeebles", "landyszalay"].
 
     args : list
         Arguments for two point estimator, see :class:`TwoPointEstimator`.
@@ -298,30 +298,6 @@ class DavisPeeblesTwoPointEstimator(BaseTwoPointEstimator):
             yield 'D1','R2'
 
 
-class HamiltonTwoPointEstimator(DavisPeeblesTwoPointEstimator):
-
-    name = 'hamilton'
-
-    def run(self):
-        """
-        Set correlation function estimate :attr:`corr` based on the Hamilton estimator
-        :math:`(D1D2 - D1S2^{2})/D1R2^{2}`.
-        """
-        nonzero = self.D1R2.wcounts != 0
-        # init
-        corr = np.empty_like(self.D1R2.wcounts, dtype='f8')
-        corr[...] = np.nan
-
-        # the natural estimator
-        # (DD - RR) / RR
-        DD = self.D1D2.normalized_wcounts()[nonzero]
-        DR = self.D1R2.normalized_wcounts()[nonzero]
-        DS = self.D1S2.normalized_wcounts()[nonzero]
-        tmp = (DD - DS**2)/DR**2
-        corr[nonzero] = tmp[...]
-        self.corr = corr
-
-
 class LandySzalayTwoPointEstimator(BaseTwoPointEstimator):
 
     name = 'landyszalay'
@@ -344,7 +320,7 @@ class LandySzalayTwoPointEstimator(BaseTwoPointEstimator):
         SD = self.D2S1.normalized_wcounts()[nonzero]
         SS = self.R1R2.normalized_wcounts()[nonzero]
 
-        tmp = (DD - DS - SD - SS)/RR
+        tmp = (DD - DS - SD + SS)/RR
         corr[nonzero] = tmp[...]
         self.corr = corr
 

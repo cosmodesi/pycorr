@@ -28,7 +28,6 @@ def test_estimator(mode='s'):
     if mode not in ['theta', 'rp']:
         list_options.append({'estimator':'natural', 'boxsize':boxsize, 'with_randoms':False})
     list_options.append({'estimator':'davispeebles'})
-    list_options.append({'estimator':'hamilton'})
     list_options.append({'estimator':'weight'})
     list_options.append({'with_shifted':True})
     list_options.append({'autocorr':True})
@@ -97,7 +96,7 @@ def test_estimator(mode='s'):
                 # for following computation
                 randoms1 = shifted1
                 randoms2 = shifted2
-            if estimator in ['landyszalay', 'davispeebles', 'hamilton']:
+            if estimator in ['landyszalay', 'davispeebles']:
                 D1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:3], positions2=randoms1[:3] if autocorr else randoms2[:3],
                                        weights1=data1[3:], weights2=randoms1[3:] if autocorr else randoms2[3:], **options_counts)
                 assert_allclose(D1R2, test.D1S2)

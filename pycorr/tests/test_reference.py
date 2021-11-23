@@ -111,6 +111,22 @@ def save_result(result, filename, header=''):
             file.write(line)
 
 
+def test_result(result, filename):
+    isestimator = isinstance(result, BaseTwoPointEstimator)
+    ref = np.loadtxt(filename, usecols=-1)
+    if isestimator:
+        mask = ~np.isnan(ref)
+        assert np.allclose(result.corr.flatten()[mask], ref[mask], atol=1e-9, rtol=1e-9)
+    else:
+        with open(filename, 'r') as file:
+            import re
+            for line in file:
+                wnorm = float(re.match('#norm = (.*)',line).group(1))
+                break
+            assert np.allclose(result.wnorm, wnorm, atol=0, rtol=1e-10)
+        assert np.allclose(result.wcounts.flatten(), ref, atol=0, rtol=1e-10)
+
+
 def load_catalog(catalog_fn):
     data = None
     fmt = None
@@ -205,16 +221,102 @@ def save_reference(base_dir):
     result = TwoPointCorrelationFunction(mode, edges, data_positions1=data1[:3], data_weights1=data_weights1,
                                          data_positions2=data2[:3], data_weights2=data_weights2,
                                          randoms_positions1=parent1[:3], randoms_weights1=parent_weights1,
-                                         randoms_positions2=parent2[:3], randoms_weights2=parent_weights2, **kwargs)
+                                         randoms_positions2=parent2[:3], randoms_weights2=parent_weights2,
+                                         estimator='weight', **kwargs)
     save_result(result, estimated_angular_weight_fn.format('for_D1D2_bitwise_weights'), header=header)
 
     # D1_parentR2/D1_iipR2
     result = TwoPointCorrelationFunction(mode, edges, data_positions1=data1[:3], data_weights1=data_weights1,
                                          data_positions2=randoms2[:3], data_weights2=randoms_weights2,
                                          randoms_positions1=parent1[:3], randoms_weights1=parent_weights1,
-                                         randoms_positions2=randoms2[:3], randoms_weights2=randoms_weights2, **kwargs)
+                                         randoms_positions2=randoms2[:3], randoms_weights2=randoms_weights2,
+                                         estimator='weight', **kwargs)
     save_result(result, estimated_angular_weight_fn.format('for_D1R2_bitwise_weights'), header=header)
 
+
+def test_reference(base_dir):
+    catalog_dirname = 'catalogs'
+    results_dirname = 'twopoint'
+    angular_upweights_dirname = 'angular_upweights'
+    catalog_dir = os.path.join(base_dir, catalog_dirname)
+    results_dir = os.path.join(base_dir, results_dirname)
+    angular_upweights_dir = os.path.join(base_dir, angular_upweights_dirname)
+    estimator_fn = os.path.join('{}_{{}}'.format(results_dir), 'correlation_function_{}.txt')
+    counts_fn = os.path.join('{}_{{}}'.format(results_dir), 'counts_{}.txt')
+    estimated_angular_weight_fn = os.path.join(angular_upweights_dir, 'weights_{}.txt')
+    data_fn = os.path.join(catalog_dir, 'data_{:d}.txt')
+    parent_fn = os.path.join(catalog_dir, 'parent_data_{:d}.txt')
+    randoms_fn = os.path.join(catalog_dir, 'randoms_{:d}.txt')
+    angular_upweights_fn = os.path.join(base_dir, 'custom_angular_upweights.txt')
+    readme_fn = os.path.join(base_dir, 'README')
+
+    data1 = load_catalog(data_fn.format(1))
+    data2 = load_catalog(data_fn.format(2))
+    parent1 = load_catalog(parent_fn.format(1))
+    parent2 = load_catalog(parent_fn.format(2))
+    randoms1 = load_catalog(randoms_fn.format(1))
+    randoms2 = load_catalog(randoms_fn.format(2))
+    angular_upweights = np.loadtxt(angular_upweights_fn, unpack=True)
+
+    mode_edges = {}
+    mode_edges['theta'] = 'np.logspace(-2, 0, 31)'
+    mode_edges['s'] = 'np.logspace(-0.5, 1, 31)'
+    mode_edges['smu'] = '(np.linspace(1, 41, 41), np.linspace(0, 1, 21))'
+    mode_edges['rppi'] = '(np.linspace(1, 41, 41), np.linspace(0, 20, 21))'
+    weight_attrs = {'nrealizations':64,'noffset':0,'default_value':0.,'nalways':1}
+
+    for mode, name_edges in mode_edges.items():
+        edges = eval(name_edges, {'np':np})
+        header = 'edges = {}'.format(name_edges)
+        for weight in ['no_weights', 'individal_weights', 'bitwise_weights', 'individual_bitwise_weights', 'individual_bitwise_angular_upweight']:
+            data_weights1, data_weights2, randoms_weights1, randoms_weights2 = None, None, None, None
+            if weight == 'individal_weights':
+                data_weights1, data_weights2, randoms_weights1, randoms_weights2 = data1[-1:], data2[-1:], randoms1[3:], randoms2[3:]
+            if  weight == 'bitwise_weights':
+                data_weights1, data_weights2, randoms_weights1, randoms_weights2 = data1[3:-1], data2[3:-1], np.ones_like(randoms1[0]), np.ones_like(randoms2[0])
+            if 'individual_bitwise_weights' in weight:
+                data_weights1, data_weights2, randoms_weights1, randoms_weights2 = data1[3:], data2[3:], randoms1[3:], randoms2[3:]
+            kwargs = {'weight_attrs':weight_attrs, 'position_type':'xyz', 'compute_sepavg':True}
+            if 'angular' in weight:
+                kwargs['D1D2_twopoint_weights'] = kwargs['D1R2_twopoint_weights'] = kwargs['D2R1_twopoint_weights'] = angular_upweights
+            result = TwoPointCorrelationFunction(mode, edges, data_positions1=data1[:3], data_weights1=data_weights1,
+                                                 data_positions2=data2[:3], data_weights2=data_weights2,
+                                                 randoms_positions1=randoms1[:3], randoms_weights1=randoms_weights1,
+                                                 randoms_positions2=randoms2[:3], randoms_weights2=randoms_weights2, **kwargs)
+
+            for pc in result.requires(autocorr=False, join=''):
+                test_result(getattr(result, pc), counts_fn.format(mode, '{}_{}'.format(pc, weight)))
+            test_result(result, estimator_fn.format(mode, 'cross_{}'.format(weight)))
+
+            result = TwoPointCorrelationFunction(mode, edges, data_positions1=data1[:3], data_weights1=data_weights1,
+                                                 randoms_positions1=randoms1[:3], randoms_weights1=randoms_weights1, **kwargs)
+
+            for pc in result.requires(autocorr=True, join=''):
+                test_result(getattr(result, pc), counts_fn.format(mode, '{}_{}'.format(pc.replace('2','1'), weight)))
+            test_result(result, estimator_fn.format(mode, 'auto1_{}'.format(weight)))
+
+    mode, name_edges = 'theta', 'np.logspace(-2.5, 0, 31)'
+    edges = eval(name_edges, {'np':np})
+    header = 'edges = {}'.format(name_edges)
+    data_weights1, data_weights2 = data1[3:-1], data2[3:-1]
+    randoms_weights1, randoms_weights2 = np.ones_like(randoms1[0]), np.ones_like(randoms2[0])
+    parent_weights1, parent_weights2 = np.ones_like(parent1[0]), np.ones_like(parent2[0])
+    kwargs = {'weight_attrs':weight_attrs, 'position_type':'xyz', 'compute_sepavg':True}
+    # D1_parentD2_parent/D1D2_pip
+    result = TwoPointCorrelationFunction(mode, edges, data_positions1=data1[:3], data_weights1=data_weights1,
+                                         data_positions2=data2[:3], data_weights2=data_weights2,
+                                         randoms_positions1=parent1[:3], randoms_weights1=parent_weights1,
+                                         randoms_positions2=parent2[:3], randoms_weights2=parent_weights2,
+                                         estimator='weight', **kwargs)
+    test_result(result, estimated_angular_weight_fn.format('for_D1D2_bitwise_weights'))
+
+    # D1_parentR2/D1_iipR2
+    result = TwoPointCorrelationFunction(mode, edges, data_positions1=data1[:3], data_weights1=data_weights1,
+                                         data_positions2=randoms2[:3], data_weights2=randoms_weights2,
+                                         randoms_positions1=parent1[:3], randoms_weights1=parent_weights1,
+                                         randoms_positions2=randoms2[:3], randoms_weights2=randoms_weights2,
+                                         estimator='weight', **kwargs)
+    test_result(result, estimated_angular_weight_fn.format('for_D1R2_bitwise_weights'))
 
 
 if __name__ == '__main__':
@@ -222,3 +324,4 @@ if __name__ == '__main__':
     base_dir = os.path.join(os.path.dirname(__file__), 'reference')
     setup_logging()
     #save_reference(base_dir)
+    test_reference(base_dir)
