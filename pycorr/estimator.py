@@ -148,7 +148,10 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
         if D1S2 is None:
             self.D1S2 = self.D1R2
         if D2S1 is None:
-            self.D2S1 = self.D2R1
+            if D1S2 is not None: # autocorr
+                self.D2S1 = self.D1S2
+            else:
+                self.D2S1 = self.D2R1
         self.run()
 
     @property

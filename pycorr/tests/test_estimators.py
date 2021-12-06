@@ -30,8 +30,10 @@ def test_estimator(mode='s'):
     list_options.append({'estimator':'davispeebles'})
     list_options.append({'estimator':'weight'})
     list_options.append({'with_shifted':True})
+    list_options.append({'with_shifted':True, 'autocorr':True})
     list_options.append({'autocorr':True})
     list_options.append({'n_individual_weights':1})
+
     has_mpi = True
     try:
         import mpi4py
@@ -142,5 +144,5 @@ def test_estimator(mode='s'):
 if __name__ == '__main__':
 
     setup_logging()
-    for mode in ['theta','s','smu','rppi','rp']:
+    for mode in ['theta','s','smu','rppi','rp'][:1]:
         test_estimator(mode=mode)

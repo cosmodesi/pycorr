@@ -246,12 +246,13 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
                 pairs[label12] = AnalyticTwoPointCounter(mode, edges, boxsize, size1=size1, size2=size2)
         else:
             if log: logger.info('Computing pair counts {}.'.format(label12))
-            # label12 is D1R2, but we only have R1, so swith label2 to R1
+            # label12 is D1R2, but we only have R1, so switch label2 to R1; same for D1S2
+            # No need for e.g. R1R2, as R2 being None, TwoPointCounter will understand it has to run the autocorrelation; same for S1S2
             if autocorr:
                 if label12 == 'D1R2': label2 = 'R1'
-                if label12 == 'S1S2': label2 = 'S1'
+                if label12 == 'D1S2': label2 = 'S1'
             pairs[label12] = TwoPointCounter(mode, edges, positions[label1], positions2=positions[label2],
-                                                   weights1=weights[label1], weights2=weights[label2],
-                                                   twopoint_weights=twopoint_weights[label12], weight_type=weight_type[label12],
-                                                   boxsize=boxsize, mpicomm=mpicomm, **kwargs)
+                                             weights1=weights[label1], weights2=weights[label2],
+                                             twopoint_weights=twopoint_weights[label12], weight_type=weight_type[label12],
+                                             boxsize=boxsize, mpicomm=mpicomm, **kwargs)
     return Estimator(**pairs)
