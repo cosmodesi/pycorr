@@ -323,7 +323,7 @@ class LandySzalayTwoPointEstimator(BaseTwoPointEstimator):
         RR = self.R1R2.normalized_wcounts()[nonzero]
         DS = self.D1S2.normalized_wcounts()[nonzero]
         SD = self.D2S1.normalized_wcounts()[nonzero]
-        SS = self.R1R2.normalized_wcounts()[nonzero]
+        SS = self.S1S2.normalized_wcounts()[nonzero]
 
         tmp = (DD - DS - SD + SS)/RR
         corr[nonzero] = tmp[...]
