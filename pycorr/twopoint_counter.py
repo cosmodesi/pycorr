@@ -75,6 +75,44 @@ class TwoPointCounter(metaclass=MetaTwoPointCounter):
         return get_twopoint_counter(state.pop('name')).from_state(state)
 
 
+def _vlogical_and(*arrays):
+    # & between any number of arrays
+    toret = arrays[0].copy()
+    for array in arrays[1:]: toret &= array
+    return toret
+
+
+def get_inverse_probability_weight(*weights, noffset=1, nrealizations=None, default_value=0.):
+    r"""
+    Return inverse probability weight given input bitwise weights.
+    Inverse probability weight is computed as::math:`\mathrm{nrealizations}/(\mathrm{noffset} + \mathrm{popcount}(w_{1} \& w_{2} \& ...))`.
+    If denominator is 0, weight is set to default_value.
+
+    Parameters
+    ----------
+    weights : int arrays
+        Bitwise weights.
+
+    noffset : int, default=1
+        The offset to be added to the bitwise counts in the denominator (defaults to 1).
+
+    nrealizations : int, default=None
+        Number of realizations (defaults to the number of bits in input weights plus one).
+
+    default_value : float, default=0.
+        Default weight value, if the denominator is zero (defaults to 0).
+    """
+    if nrealizations is None:
+        nrealizations = get_default_nrealizations(weights[0])
+    #denom = noffset + sum(utils.popcount(w1 & w2) for w1, w2 in zip(*weights))
+    denom = noffset + sum(utils.popcount(_vlogical_and(*weight)) for weight in zip(*weights))
+    mask = denom == 0
+    denom[mask] = 1
+    toret = nrealizations/denom
+    toret[mask] = default_value
+    return toret
+
+
 class BaseTwoPointCounter(BaseClass):
     """
     Base class for pair counters.
@@ -155,11 +193,11 @@ class BaseTwoPointCounter(BaseClass):
 
                 - ``None``: no weights are applied.
                 - "product_individual": each pair is weighted by the product of weights :math:`w_{1} w_{2}`.
-                - "inverse_bitwise": each pair is weighted by :math:`(1 + \mathrm{nrealizations})/(1 + \mathrm{popcount}(w_{1} \& w_{2}))`.
+                - "inverse_bitwise": each pair is weighted by :math:`\mathrm{nrealizations}/(\mathrm{noffset} + \mathrm{popcount}(w_{1} \& w_{2}))`.
                    Multiple bitwise weights can be provided as a list.
                    Individual weights can additionally be provided as float arrays, and angular upweights with ``twopoint_weights``.
                    In case of cross-correlations with floating weights, bitwise weights are automatically turned to IIP weights,
-                   i.e. :math:`(1 + \mathrm{nrealizations})/(1 + \mathrm{popcount}(w_{1}))`.
+                   i.e. :math:`\mathrm{nrealizations}/(\mathrm{noffset} + \mathrm{popcount}(w_{1}))`.
                 - "auto": automatically choose weighting based on input ``weights1`` and ``weights2``,
                    i.e. ``None`` when ``weights1`` and ``weights2`` are ``None``,
                    "inverse_bitwise" if one of input weights is integer, else "product_individual".
@@ -283,7 +321,7 @@ class BaseTwoPointCounter(BaseClass):
             else: position_type = 'xyz'
         self.dtype = dtype
 
-        def check_shape(positions):
+        def _format_positions(positions):
             for ip, p in enumerate(positions):
                 # cast to the input dtype if exists (may be set by previous weights)
                 positions[ip] = np.asarray(p, dtype=self.dtype)
@@ -313,14 +351,14 @@ class BaseTwoPointCounter(BaseClass):
             return positions
 
         self.positions1 = list(positions1)
-        self.positions1 = check_shape(self.positions1)
+        self.positions1 = _format_positions(self.positions1)
 
         self.autocorr = positions2 is None
         if self.autocorr:
             self.positions2 = None
         else:
             self.positions2 = list(positions2)
-            self.positions2 = check_shape(self.positions2)
+            self.positions2 = _format_positions(self.positions2)
 
     def _set_weights(self, weights1, weights2=None, weight_type='auto', twopoint_weights=None, weight_attrs=None):
 
@@ -333,16 +371,10 @@ class BaseTwoPointCounter(BaseClass):
             if weights2 is not None:
                 raise TwoPointCounterError('weights2 are provided, but not positions2')
 
-        if weights1 is None:
-            if weights2 is not None:
-                raise TwoPointCounterError('weights2 are provided, but not weights1')
-        else:
-            if self.autocorr:
-                if weights2 is not None:
-                    raise TwoPointCounterError('weights2 are provided, but not positions2')
-            else:
-                if weights2 is None:
-                    raise TwoPointCounterError('weights1 are provided, but not weights2')
+        if weights1 is None and weights2 is not None:
+            raise TwoPointCounterError('weights2 are provided, but not weights1')
+        if weights1 is None and weights2 is not None:
+            raise TwoPointCounterError('weights2 are provided, but not weights1')
 
         weight_attrs = weight_attrs or {}
         self.weight_attrs = {}
@@ -356,7 +388,7 @@ class BaseTwoPointCounter(BaseClass):
             default_value = weight_attrs.get('default_value', 0.)
             self.weight_attrs.update(noffset=noffset, default_value=default_value)
 
-            def check_shape(weights, size):
+            def _format_weights(weights, size):
                 if weights is None or len(weights) == 0:
                     return None, 0
                 if np.ndim(weights[0]) == 0:
@@ -381,7 +413,7 @@ class BaseTwoPointCounter(BaseClass):
                     weights += [np.prod(individual_weights, axis=0, dtype=self.dtype)]
                 return weights, n_bitwise_weights
 
-            self.weights1, n_bitwise_weights1 = check_shape(weights1, len(self.positions1[0]))
+            self.weights1, n_bitwise_weights1 = _format_weights(weights1, len(self.positions1[0]))
 
             def get_nrealizations(n_bitwise_weights):
                 nrealizations = weight_attrs.get('nrealizations', None)
@@ -400,7 +432,7 @@ class BaseTwoPointCounter(BaseClass):
                 self.n_bitwise_weights = n_bitwise_weights1
 
             else:
-                self.weights2, n_bitwise_weights2 = check_shape(weights2, len(self.positions2[0]))
+                self.weights2, n_bitwise_weights2 = _format_weights(weights2, len(self.positions2[0]))
 
                 if n_bitwise_weights2 == n_bitwise_weights1:
 
@@ -409,24 +441,18 @@ class BaseTwoPointCounter(BaseClass):
 
                 else:
 
-                    def wiip(weights, nrealizations):
-                        denom = noffset + utils.popcount(*weights)
-                        mask = denom == 0
-                        denom[mask] = 1
-                        toret = nrealizations/denom
-                        toret[mask] = default_value
-                        return toret
-
                     if n_bitwise_weights2 == 0:
-                        indweights = self.weights1[n_bitwise_weights1:]
+                        indweights = self.weights1[n_bitwise_weights1] if len(self.weights1) > n_bitwise_weights1 else 1.
                         nrealizations = get_nrealizations(n_bitwise_weights1)
-                        self.weights1 = [wiip(self.weights1[:n_bitwise_weights1], nrealizations)*(indweights or 1)]
+                        self.weights1 = [get_inverse_probability_weight(self.weights1[:n_bitwise_weights1], nrealizations=nrealizations,
+                                                                        noffset=noffset, default_value=default_value)*indweights]
                         self.n_bitwise_weights = 0
                         self.log_info('Setting IIP weights for first catalog.')
-                    elif self.n_bitwise_weights == 0:
-                        indweights = self.weights2[n_bitwise_weights2:]
+                    elif n_bitwise_weights1 == 0:
+                        indweights = self.weights2[n_bitwise_weights2] if len(self.weights2) > n_bitwise_weights2 else 1.
                         nrealizations = get_nrealizations(n_bitwise_weights2)
-                        self.weights2 = [wiip(self.weights2[:n_bitwise_weights2], nrealizations)*(indweights or 1)]
+                        self.weights2 = [get_inverse_probability_weight(self.weights2[:n_bitwise_weights2], nrealizations=nrealizations,
+                                                                        noffset=noffset, default_value=default_value)*indweights]
                         self.n_bitwise_weights = 0
                         self.log_info('Setting IIP weights for second catalog.')
                     else:
@@ -470,7 +496,7 @@ class BaseTwoPointCounter(BaseClass):
         self.seps = list(np.meshgrid(*mid, indexing='ij'))
 
     def _set_los(self, los):
-        self.los = los
+        self.los = los.lower()
         allowed_los = ['midpoint', 'endpoint', 'firstpoint', 'x', 'y', 'z']
         if self.los not in allowed_los:
             raise TwoPointCounterError('los should be one of {}'.format(allowed_los))

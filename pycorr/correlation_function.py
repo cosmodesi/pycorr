@@ -50,17 +50,17 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         See ``randoms_positions1``.
 
     shifted_positions1 : array, default=None
-        Optionally, in case of BAO reconstruction, positions of the catalog with shifted positions.
+        Optionally, in case of BAO reconstruction, positions of the first shifted catalog.
 
     shifted_positions2 : array, default=None
-        Optionally, in case of BAO reconstruction, positions of the catalog representing the second selection function, if different from ``randoms_positions2``.
+        Optionally, in case of BAO reconstruction, positions of the second shifted catalog.
 
     data_weights1 : array, default=None
-        Weights of the first catalog. Not required if ``weight_type`` is either ``None`` or "auto".
+        Weights in the first data catalog. Not required if ``weight_type`` is either ``None`` or "auto".
         See ``weight_type``.
 
     data_weights2 : array, default=None
-        Optionally, for cross-pair counts, weights in the second catalog. See ``data_weights1``.
+        Optionally, for cross-pair counts, weights in the second data catalog. See ``data_weights1``.
 
     randoms_weights1 : array, default=None
         Optionally, weights of the first random catalog. See ``data_weights1``.
@@ -80,15 +80,15 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         Precomputed R1R2 pairs; e.g. useful when running on many mocks with same random catalogs.
 
     D1D2_weight_type : string, default='auto'
-        The type of weighting to apply to provided weights for D1D2 pair counts. One of:
+        The type of weighting to apply to provided weights. One of:
 
             - ``None``: no weights are applied.
             - "product_individual": each pair is weighted by the product of weights :math:`w_{1} w_{2}`.
-            - "inverse_bitwise": each pair is weighted by :math:`(1 + \mathrm{nrealizations})/(1 + \mathrm{popcount}(w_{1} \& w_{2}))`.
+            - "inverse_bitwise": each pair is weighted by :math:`\mathrm{nrealizations}/(\mathrm{noffset} + \mathrm{popcount}(w_{1} \& w_{2}))`.
                Multiple bitwise weights can be provided as a list.
                Individual weights can additionally be provided as float arrays, and angular upweights with ``twopoint_weights``.
                In case of cross-correlations with floating weights, bitwise weights are automatically turned to IIP weights,
-               i.e. :math:`(1 + \mathrm{nrealizations})/(1 + \mathrm{popcount}(w_{1}))`.
+               i.e. :math:`\mathrm{nrealizations}/(\mathrm{noffset} + \mathrm{popcount}(w_{1}))`.
             - "auto": automatically choose weighting based on input ``weights1`` and ``weights2``,
                i.e. ``None`` when ``weights1`` and ``weights2`` are ``None``,
                "inverse_bitwise" if one of input weights is integer, else "product_individual".

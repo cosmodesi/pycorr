@@ -227,7 +227,7 @@ def test_twopoint_counter(mode='s'):
             setdefaultnone(weight_attrs, 'default_value', 0)
             refdata1, refdata2 = data1.copy(), data2.copy()
             if set_default_value:
-                for w in data1[3:3+n_bitwise_weights] + data2[3:3+n_bitwise_weights]: w[:] = 0
+                for w in data1[3:3+n_bitwise_weights] + data2[3:3+n_bitwise_weights]: w[:] = 0 # set to zero to make sure default_value is used
 
             def wiip(weights):
                 denom = weight_attrs['noffset'] + utils.popcount(*weights)

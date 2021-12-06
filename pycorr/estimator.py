@@ -182,10 +182,12 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
 
     @property
     def autocorr(self):
+        """Is this an autocorrelation?"""
         return self.D1D2.autocorr
 
     @property
     def with_shifted(self):
+        """Do we have "shifted" (e.g. for reconstruction) pair counts?"""
         return self.S1S2 is not self.R1R2 or self.D1S2 is not self.D1R2 or self.D2S1 is not self.D2R1
 
     @classmethod

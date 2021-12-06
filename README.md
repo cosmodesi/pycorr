@@ -22,7 +22,7 @@ result = TwoPointCorrelationFunction('rppi', edges, data_positions1=data_positio
 # correlation function in result.corr
 ```
 
-Example notebooks are provided in directory nb/.
+Example notebooks presenting most use cases are provided in directory nb/.
 
 ## Documentation
 

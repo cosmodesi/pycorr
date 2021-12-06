@@ -245,7 +245,7 @@ def rebin(ndarray, new_shape, statistic=np.sum):
     return ndarray
 
 
-# create a lookup table for set bits per byte
+# Create a lookup table for set bits per byte
 _popcount_lookuptable = np.array([bin(i).count('1') for i in range(256)], dtype=np.int32)
 
 
