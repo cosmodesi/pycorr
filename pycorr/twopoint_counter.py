@@ -195,12 +195,14 @@ class BaseTwoPointCounter(BaseClass):
                 - "product_individual": each pair is weighted by the product of weights :math:`w_{1} w_{2}`.
                 - "inverse_bitwise": each pair is weighted by :math:`\mathrm{nrealizations}/(\mathrm{noffset} + \mathrm{popcount}(w_{1} \& w_{2}))`.
                    Multiple bitwise weights can be provided as a list.
-                   Individual weights can additionally be provided as float arrays, and angular upweights with ``twopoint_weights``.
+                   Individual weights can additionally be provided as float arrays.
                    In case of cross-correlations with floating weights, bitwise weights are automatically turned to IIP weights,
                    i.e. :math:`\mathrm{nrealizations}/(\mathrm{noffset} + \mathrm{popcount}(w_{1}))`.
                 - "auto": automatically choose weighting based on input ``weights1`` and ``weights2``,
                    i.e. ``None`` when ``weights1`` and ``weights2`` are ``None``,
                    "inverse_bitwise" if one of input weights is integer, else "product_individual".
+
+            In addition, angular upweights can be provided with ``twopoint_weights``.
 
         weight_attrs : dict, default=None
             Dictionary of weighting scheme attributes. In case ``weight_type`` is "inverse_bitwise",
@@ -610,7 +612,7 @@ class BaseTwoPointCounter(BaseClass):
 
     def __getstate__(self):
         state = {}
-        for name in ['name', 'autocorr', 'seps', 'wcounts', 'wnorm', 'edges', 'mode', 'bin_type',
+        for name in ['name', 'autocorr', 'seps', 'npairs', 'wcounts', 'wnorm', 'edges', 'mode', 'bin_type',
                      'boxsize', 'los', 'compute_sepavg', 'weight_attrs', 'attrs']:
             if hasattr(self, name):
                 state[name] = getattr(self, name)

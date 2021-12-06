@@ -86,12 +86,14 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
             - "product_individual": each pair is weighted by the product of weights :math:`w_{1} w_{2}`.
             - "inverse_bitwise": each pair is weighted by :math:`\mathrm{nrealizations}/(\mathrm{noffset} + \mathrm{popcount}(w_{1} \& w_{2}))`.
                Multiple bitwise weights can be provided as a list.
-               Individual weights can additionally be provided as float arrays, and angular upweights with ``twopoint_weights``.
+               Individual weights can additionally be provided as float arrays.
                In case of cross-correlations with floating weights, bitwise weights are automatically turned to IIP weights,
                i.e. :math:`\mathrm{nrealizations}/(\mathrm{noffset} + \mathrm{popcount}(w_{1}))`.
             - "auto": automatically choose weighting based on input ``weights1`` and ``weights2``,
                i.e. ``None`` when ``weights1`` and ``weights2`` are ``None``,
                "inverse_bitwise" if one of input weights is integer, else "product_individual".
+
+        In addition, angular upweights can be provided with ``D1D2_twopoint_weights``, ``D1R2_twopoint_weights``, etc.
 
     D1R2_weight_type : string, default='auto'
         Same as ``D1D2_weight_type``, for D1R2 pair counts.
@@ -117,7 +119,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         (separations) and ``weight`` (weight at given separation) as attributes
         (i.e. to be accessed through ``twopoint_weights.sep``, ``twopoint_weights.weight``)
         or as keys (i.e. ``twopoint_weights['sep']``, ``twopoint_weights['weight']``)
-        or as element (i.e. ``sep, weight = twopoint_weights``)
+        or as element (i.e. ``sep, weight = twopoint_weights``).
 
     D1R2_twopoint_weights : WeightTwoPointEstimator, default=None
         Weights to be applied to each pair of particles between first data catalog and second randoms catalog.
@@ -227,7 +229,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     positions = {'D1':data_positions1, 'D2':data_positions2, 'R1':randoms_positions1, 'R2':randoms_positions2, 'S1': shifted_positions1, 'S2':shifted_positions2}
     weights = {'D1':data_weights1, 'D2':data_weights2, 'R1':randoms_weights1, 'R2':randoms_weights2, 'S1':shifted_weights1, 'S2':shifted_weights2}
     twopoint_weights = {'D1D2':D1D2_twopoint_weights, 'D1R2':D1R2_twopoint_weights, 'D2R1':D2R1_twopoint_weights, 'R1R2':R1R2_twopoint_weights, 'S1S2':S1S2_twopoint_weights, 'D1S2':D1S2_twopoint_weights, 'D2S1':D2S1_twopoint_weights}
-    weight_type = {'D1D2':D1D2_weight_type, 'D1R2':D1R2_weight_type, 'D2R1':D2R1_weight_type, 'R1R2':R1R2_weight_type, 'S1S2':S1S2_weight_type, 'D1S2':D1S2_weight_type, 'D2S1':D1S2_weight_type}
+    weight_type = {'D1D2':D1D2_weight_type, 'D1R2':D1R2_weight_type, 'D2R1':D2R1_weight_type, 'R1R2':R1R2_weight_type, 'S1S2':S1S2_weight_type, 'D1S2':D1S2_weight_type, 'D2S1':D2S1_weight_type}
     precomputed = {'R1R2':R1R2}
 
     pairs = {}
