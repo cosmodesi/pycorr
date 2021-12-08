@@ -383,7 +383,7 @@ class BaseTwoPointCounter(BaseClass):
 
         self.n_bitwise_weights = 0
         if weight_type is None:
-            self.weights1 = self.weights2 = None
+            self.weights1 = self.weights2 = []
         else:
             self.weight_attrs.update(nalways=weight_attrs.get('nalways', 0), nnever=weight_attrs.get('nnever', 0))
             noffset = weight_attrs.get('noffset', 1)
@@ -392,7 +392,7 @@ class BaseTwoPointCounter(BaseClass):
 
             def _format_weights(weights, size):
                 if weights is None or len(weights) == 0:
-                    return None, 0
+                    return [], 0
                 if np.ndim(weights[0]) == 0:
                     weights = [weights]
                 individual_weights = []
@@ -425,12 +425,11 @@ class BaseTwoPointCounter(BaseClass):
             #elif self.n_bitwise_weights and self.nrealizations - 1 > self.n_bitwise_weights * 8:
             #    raise TwoPointCounterError('Provided number of realizations is {:d}, '
             #                           'more than actual number of bits in bitwise weights {:d} plus 1'.format(self.nrealizations, self.n_bitwise_weights * 8))
-            self.weights2 = weights2
-
             if self.autocorr:
 
                 nrealizations = get_nrealizations(n_bitwise_weights1)
                 self.weight_attrs.update(nrealizations=nrealizations)
+                self.weights2 = self.weights1
                 self.n_bitwise_weights = n_bitwise_weights1
 
             else:
@@ -461,6 +460,13 @@ class BaseTwoPointCounter(BaseClass):
                         raise TwoPointCounterError('Incompatible length of bitwise weights: {:d} and {:d} bytes'.format(n_bitwise_weights1, n_bitwise_weights2))
 
                 self.weight_attrs.update(nrealizations=nrealizations)
+
+        if len(self.weights1) == len(self.weights2) + 1:
+            self.weights2.append(np.ones(len(self.positions1), dtype=self.dtype))
+        elif len(self.weights1) == len(self.weights2) - 1:
+            self.weights1.append(np.ones(len(self.positions2), dtype=self.dtype))
+        elif len(self.weights1) != len(self.weights2):
+            raise ValueError('Something fishy happened with weights; number of weights1/weights2 is {:d}/{:d}'.format(len(self.weights1),len(self.weights2)))
 
         self.twopoint_weights = twopoint_weights
         if twopoint_weights is not None:
@@ -528,7 +534,7 @@ class BaseTwoPointCounter(BaseClass):
             \left(\sum_{i=1}^{N_{1}} w_{1,i}\right)^{2} - \sum_{i=1}^{N_{1}} w_{1,i}^{2}
 
         """
-        if self.weights1 is None:
+        if not self.weights1:
             size1 = size2 = len(self.positions1[0])
             if not self.autocorr: size2 = len(self.positions2[0])
             if self.with_mpi:

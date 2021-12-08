@@ -51,7 +51,7 @@ def ref_theta(edges, data1, data2=None, boxsize=None, los='midpoint', **kwargs):
     if data2 is None: data2 = data1
     for xyzw1 in zip(*data1):
         for xyzw2 in zip(*data2):
-            xyz1, xyz2 = xyzw2[:3], xyzw1[:3]
+            xyz1, xyz2 = xyzw1[:3], xyzw2[:3]
             dist = np.rad2deg(np.arccos(min(dotproduct_normalized(xyz1, xyz2), 1))) # min to avoid rounding errors
             if edges[0] <= dist < edges[-1]:
                 ind = np.searchsorted(edges, dist, side='right', sorter=None) - 1
@@ -66,8 +66,8 @@ def ref_s(edges, data1, data2=None, boxsize=None, los='midpoint', **kwargs):
     if data2 is None: data2 = data1
     for xyzw1 in zip(*data1):
         for xyzw2 in zip(*data2):
-            xyz1, xyz2 = xyzw2[:3], xyzw1[:3]
-            dxyz = diff(xyzw2[:3], xyzw1[:3])
+            xyz1, xyz2 = xyzw1[:3], xyzw2[:3]
+            dxyz = diff(xyz2, xyz1)
             if boxsize is not None:
                 for idim, b in enumerate(boxsize):
                     if dxyz[idim] > 0.5*b: dxyz[idim] -= b
@@ -90,8 +90,8 @@ def ref_smu(edges, data1, data2=None, boxsize=None, weight_type=None, los='midpo
     if data2 is None: data2 = data1
     for xyzw1 in zip(*data1):
         for xyzw2 in zip(*data2):
-            xyz1, xyz2 = xyzw2[:3], xyzw1[:3]
-            dxyz = diff(xyzw2[:3], xyzw1[:3])
+            xyz1, xyz2 = xyzw1[:3], xyzw2[:3]
+            dxyz = diff(xyz2, xyz1)
             if boxsize is not None:
                 for idim, b in enumerate(boxsize):
                     if dxyz[idim] > 0.5*b: dxyz[idim] -= b
@@ -117,8 +117,8 @@ def ref_rppi(edges, data1, data2=None, boxsize=None, weight_type=None, los='midp
     if data2 is None: data2 = data1
     for xyzw1 in zip(*data1):
         for xyzw2 in zip(*data2):
-            xyz1, xyz2 = xyzw2[:3], xyzw1[:3]
-            dxyz = diff(xyzw2[:3], xyzw1[:3])
+            xyz1, xyz2 = xyzw1[:3], xyzw2[:3]
+            dxyz = diff(xyz2, xyz1)
             if boxsize is not None:
                 for idim, b in enumerate(boxsize):
                     if dxyz[idim] > 0.5*b: dxyz[idim] -= b
@@ -160,6 +160,7 @@ def test_twopoint_counter(mode='s'):
     size = 100
     boxsize = (1000,)*3
     list_options = []
+    list_options.append({})
     if mode not in ['theta', 'rp']:
         list_options.append({'boxsize':boxsize})
         list_options.append({'autocorr':True, 'boxsize':boxsize})
@@ -175,9 +176,8 @@ def test_twopoint_counter(mode='s'):
     from collections import namedtuple
     TwoPointWeight = namedtuple('TwoPointWeight', ['sep', 'weight'])
     twopoint_weights = TwoPointWeight(np.logspace(-4, 0, 40), np.linspace(4., 1., 40))
-    list_options.append({'autocorr':True, 'twopoint_weights':twopoint_weights})
+    #list_options.append({'autocorr':True, 'twopoint_weights':twopoint_weights})
     list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'dtype':'f4'})
-
     has_mpi = True
     try:
         import mpi4py
@@ -190,7 +190,6 @@ def test_twopoint_counter(mode='s'):
         list_options.append({'mpicomm':mpi.COMM_WORLD})
         list_options.append({'n_individual_weights':1, 'mpicomm':mpi.COMM_WORLD})
         list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'mpicomm':mpi.COMM_WORLD})
-
     #list_options.append({'weight_type':'inverse_bitwise','n_bitwise_weights':2})
     if mode == 'smu':
         edges = (edges, np.linspace(0,1,101))
