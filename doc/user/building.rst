@@ -23,7 +23,7 @@ pip
 ---
 To install **pycorr** alone (without pair counter engine, so fairly useless), simply run::
 
-  python -m pip install git+https://github.com/adematti/pycorr
+  python -m pip install git+https://github.com/cosmodesi/pycorr
 
 Corrfunc is currently the only pair counter engine implemented. We currently use a branch of Corrfunc,
 located `here <https://github.com/adematti/Corrfunc/tree/pipweights>`_.
@@ -33,17 +33,17 @@ Uninstall previous Corrfunc version (if any)::
 
 then::
 
-  python -m pip install git+https://github.com/adematti/pycorr#egg=pycorr[corrfunc]
+  python -m pip install git+https://github.com/cosmodesi/pycorr#egg=pycorr[corrfunc]
 
 To perform MPI parallelization::
 
-  python -m pip install git+https://github.com/adematti/pycorr#egg=pycorr[mpi]
+  python -m pip install git+https://github.com/cosmodesi/pycorr#egg=pycorr[mpi]
 
 git
 ---
 First::
 
-  git clone https://github.com/adematti/pycorr.git
+  git clone https://github.com/cosmodesi/pycorr.git
 
 To install the code::
 

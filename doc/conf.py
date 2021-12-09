@@ -62,8 +62,8 @@ exclude_patterns = ['build', '**.ipynb_checkpoints']
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = []
 
-git_repo = 'https://github.com/adematti/pycorr.git'
-git_root = 'https://github.com/adematti/pycorr/blob/main/'
+git_repo = 'https://github.com/cosmodesi/pycorr.git'
+git_root = 'https://github.com/cosmodesi/pycorr/blob/main/'
 
 extlinks = {'root': (git_root + '%s','')}
 
