@@ -82,7 +82,7 @@ def _vlogical_and(*arrays):
     return toret
 
 
-def get_inverse_probability_weight(*weights, noffset=1, nrealizations=None, default_value=0.):
+def get_inverse_probability_weight(*weights, noffset=1, nrealizations=None, default_value=0., dtype='f8'):
     r"""
     Return inverse probability weight given input bitwise weights.
     Inverse probability weight is computed as::math:`\mathrm{nrealizations}/(\mathrm{noffset} + \mathrm{popcount}(w_{1} \& w_{2} \& ...))`.
@@ -101,6 +101,14 @@ def get_inverse_probability_weight(*weights, noffset=1, nrealizations=None, defa
 
     default_value : float, default=0.
         Default weight value, if the denominator is zero (defaults to 0).
+
+    dtype : string, np.dtype
+        Type for output weight.
+
+    Returns
+    -------
+    weight : array
+        IIP weight.
     """
     if nrealizations is None:
         nrealizations = get_default_nrealizations(weights[0])
@@ -108,7 +116,8 @@ def get_inverse_probability_weight(*weights, noffset=1, nrealizations=None, defa
     denom = noffset + sum(utils.popcount(_vlogical_and(*weight)) for weight in zip(*weights))
     mask = denom == 0
     denom[mask] = 1
-    toret = nrealizations/denom
+    toret = np.empty_like(denom, dtype=dtype)
+    toret[...] = nrealizations/denom
     toret[mask] = default_value
     return toret
 
@@ -446,14 +455,14 @@ class BaseTwoPointCounter(BaseClass):
                         indweights = self.weights1[n_bitwise_weights1] if len(self.weights1) > n_bitwise_weights1 else 1.
                         nrealizations = get_nrealizations(n_bitwise_weights1)
                         self.weights1 = [get_inverse_probability_weight(self.weights1[:n_bitwise_weights1], nrealizations=nrealizations,
-                                                                        noffset=noffset, default_value=default_value)*indweights]
+                                                                        noffset=noffset, default_value=default_value, dtype=self.dtype)*indweights]
                         self.n_bitwise_weights = 0
                         self.log_info('Setting IIP weights for first catalog.')
                     elif n_bitwise_weights1 == 0:
                         indweights = self.weights2[n_bitwise_weights2] if len(self.weights2) > n_bitwise_weights2 else 1.
                         nrealizations = get_nrealizations(n_bitwise_weights2)
                         self.weights2 = [get_inverse_probability_weight(self.weights2[:n_bitwise_weights2], nrealizations=nrealizations,
-                                                                        noffset=noffset, default_value=default_value)*indweights]
+                                                                        noffset=noffset, default_value=default_value, dtype=self.dtype)*indweights]
                         self.n_bitwise_weights = 0
                         self.log_info('Setting IIP weights for second catalog.')
                     else:
