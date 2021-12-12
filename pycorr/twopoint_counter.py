@@ -122,6 +122,75 @@ def get_inverse_probability_weight(*weights, noffset=1, nrealizations=None, defa
     return toret
 
 
+def _format_positions(positions, position_type='xyz', mode='theta', dtype=None):
+    # Format input array of positions
+    # position_type in ["xyz", "rdd", "pos"]
+    if position_type == 'pos': # array of shape (N, 3)
+        positions = positions.T
+        if len(positions) != len(position_type):
+            raise TwoPointCounterError('For position type = {}, please provide a (N, 3) arrays for positions'.format(position_type))
+        position_type = 'xyz'
+
+    for ip, p in enumerate(positions):
+        # Cast to the input dtype if exists (may be set by previous weights)
+        positions[ip] = np.asarray(p, dtype=dtype)
+
+    size = len(positions[0])
+    dtype = positions[0].dtype
+    if not np.issubdtype(dtype, np.floating):
+        raise TwoPointCounterError('Input position arrays should be of floating type, not {}'.format(dtype))
+    for p in positions[1:]:
+        if len(p) != size:
+            raise TwoPointCounterError('All position arrays should be of the same size')
+        if p.dtype != dtype:
+            raise TwoPointCounterError('All position arrays should be of the same type, you can e.g. provide dtype')
+    if position_type != 'auto' and len(positions) != len(position_type):
+        raise TwoPointCounterError('For position type = {}, please provide a list of {:d} arrays for positions'.format(position_type, len(position_type)))
+
+    if mode == 'theta':
+        if position_type == 'xyz':
+            positions = utils.cartesian_to_sky(positions, degree=True)[:2]
+        elif position_type in ['rdd', 'rdz']:
+            positions = list(positions)[:2]
+        elif position_type != 'rd':
+            raise TwoPointCounterError('For mode = {}, position type should be one of ["xyz", "rdz", "rd"]'.format(mode))
+    else:
+        if position_type == 'rdd':
+            positions = utils.sky_to_cartesian(positions, degree=True)
+        elif position_type != 'xyz':
+            raise TwoPointCounterError('For mode = {}, position type should be one of ["xyz", "rdd"]'.format(mode))
+
+    return positions
+
+
+def _format_weights(weights, weight_type='auto', size=None, dtype=None):
+    # Format input weights, as a list of n_bitwise_weights uint8 arrays, and optionally a float array for individual weights.
+    # Return formated list of weights, and n_bitwise_weights.
+    if weights is None or all(weight is None for weight in weights):
+        return [], 0
+    if np.ndim(weights[0]) == 0:
+        weights = [weights]
+    individual_weights = []
+    bitwise_weights = []
+    for weight in weights:
+        if size is not None and len(weight) != size:
+            raise PairCounterError('All weight arrays should be of the same size as position arrays')
+        if np.issubdtype(weight.dtype, np.integer):
+            if weight_type == 'product_individual': # enforce float individual weight
+                individual_weights.append(weight)
+            else: # certainly bitwise weight
+                bitwise_weights.append(weight)
+        else:
+            individual_weights.append(weight)
+    # any integer array bit size will be a multiple of 8
+    bitwise_weights = utils.reformat_bitarrays(*bitwise_weights, dtype=np.uint8)
+    n_bitwise_weights = len(bitwise_weights)
+    weights = bitwise_weights
+    if individual_weights:
+        weights += [np.prod(individual_weights, axis=0, dtype=dtype)]
+    return weights, n_bitwise_weights
+
+
 class BaseTwoPointCounter(BaseClass):
     """
     Base class for pair counters.
@@ -330,46 +399,16 @@ class BaseTwoPointCounter(BaseClass):
         if position_type == 'auto':
             if self.mode == 'theta': position_type = 'rd'
             else: position_type = 'xyz'
-        self.dtype = dtype
+        self.position_type = position_type
 
-        def _format_positions(positions):
-            for ip, p in enumerate(positions):
-                # cast to the input dtype if exists (may be set by previous weights)
-                positions[ip] = np.asarray(p, dtype=self.dtype)
-            size = len(positions[0])
-            self.dtype = positions[0].dtype
-            if not np.issubdtype(self.dtype, np.floating):
-                raise TwoPointCounterError('Input position arrays should be of floating type, not {}'.format(self.dtype))
-            for p in positions[1:]:
-                if len(p) != size:
-                    raise TwoPointCounterError('All position arrays should be of the same size')
-                if p.dtype != self.dtype:
-                    raise TwoPointCounterError('All position arrays should be of the same type, you can e.g. provide dtype')
-            if position_type != 'auto' and len(positions) != len(position_type):
-                raise TwoPointCounterError('For position type = {}, please provide a list of {:d} arrays for positions'.format(position_type, len(positions)))
-            if self.mode == 'theta':
-                if position_type == 'xyz':
-                    positions = utils.cartesian_to_sky(positions, degree=True)[:2]
-                elif position_type in ['rdd', 'rdz']:
-                    positions = list(positions)
-                elif position_type != 'rd':
-                    raise TwoPointCounterError('For mode = {}, position type should be one of ["xyz", "rdz", "rd"]'.format(self.mode))
-            else:
-                if position_type == 'rdd':
-                    positions = utils.sky_to_cartesian(positions, degree=True)
-                elif position_type != 'xyz':
-                    raise TwoPointCounterError('For mode = {}, position type should be one of ["xyz", "rdd"]'.format(self.mode))
-            return positions
-
-        self.positions1 = list(positions1)
-        self.positions1 = _format_positions(self.positions1)
+        self.positions1 = _format_positions(positions1, position_type=self.position_type, mode=self.mode, dtype=dtype)
+        self.dtype = self.positions1[0].dtype
 
         self.autocorr = positions2 is None
         if self.autocorr:
             self.positions2 = None
         else:
-            self.positions2 = list(positions2)
-            self.positions2 = _format_positions(self.positions2)
+            self.positions2 =  _format_positions(positions2, position_type=self.position_type, mode=self.mode, dtype=self.dtype)
 
         self.size1 = self.size2 = len(self.positions1[0])
         if not self.autocorr: self.size2 = len(self.positions2[0])
@@ -382,15 +421,7 @@ class BaseTwoPointCounter(BaseClass):
         allowed_weight_types = [None, 'auto', 'product_individual', 'inverse_bitwise']
         if weight_type not in allowed_weight_types:
             raise TwoPointCounterError('weight_type should be one of {}'.format(allowed_weight_types))
-
-        if self.autocorr:
-            if weights2 is not None:
-                raise TwoPointCounterError('weights2 are provided, but not positions2')
-
-        if weights1 is None and weights2 is not None:
-            raise TwoPointCounterError('weights2 are provided, but not weights1')
-        if weights1 is None and weights2 is not None:
-            raise TwoPointCounterError('weights2 are provided, but not weights1')
+        self.weight_type = weight_type
 
         weight_attrs = weight_attrs or {}
         self.weight_attrs = {}
@@ -398,47 +429,22 @@ class BaseTwoPointCounter(BaseClass):
         self.n_bitwise_weights = 0
         if weight_type is None:
             self.weights1 = self.weights2 = []
+
         else:
+
             self.weight_attrs.update(nalways=weight_attrs.get('nalways', 0), nnever=weight_attrs.get('nnever', 0))
             noffset = weight_attrs.get('noffset', 1)
             default_value = weight_attrs.get('default_value', 0.)
             self.weight_attrs.update(noffset=noffset, default_value=default_value)
 
-            def _format_weights(weights, size):
-                if weights is None or len(weights) == 0:
-                    return [], 0
-                if np.ndim(weights[0]) == 0:
-                    weights = [weights]
-                individual_weights = []
-                bitwise_weights = []
-                for w in weights:
-                    if len(w) != size:
-                        raise TwoPointCounterError('All weight arrays should be of the same size as position arrays')
-                    if np.issubdtype(w.dtype, np.integer):
-                        if weight_type == 'product_individual':
-                            individual_weights.append(w)
-                        else: # certainly bitwise weight
-                            bitwise_weights.append(w)
-                    else:
-                        individual_weights.append(w)
-                # any integer array bit size will be a multiple of 8
-                bitwise_weights = utils.reformat_bitarrays(*bitwise_weights, dtype=np.uint8)
-                n_bitwise_weights = len(bitwise_weights)
-                weights = bitwise_weights
-                if individual_weights:
-                    weights += [np.prod(individual_weights, axis=0, dtype=self.dtype)]
-                return weights, n_bitwise_weights
-
-            self.weights1, n_bitwise_weights1 = _format_weights(weights1, len(self.positions1[0]))
+            self.weights1, n_bitwise_weights1 = _format_weights(weights1, weight_type=self.weight_type, size=len(self.positions1[0]), dtype=self.dtype)
 
             def get_nrealizations(n_bitwise_weights):
                 nrealizations = weight_attrs.get('nrealizations', None)
                 if nrealizations is None:
                     nrealizations = n_bitwise_weights * 8 + 1
                 return nrealizations
-            #elif self.n_bitwise_weights and self.nrealizations - 1 > self.n_bitwise_weights * 8:
-            #    raise TwoPointCounterError('Provided number of realizations is {:d}, '
-            #                           'more than actual number of bits in bitwise weights {:d} plus 1'.format(self.nrealizations, self.n_bitwise_weights * 8))
+
             if self.autocorr:
 
                 nrealizations = get_nrealizations(n_bitwise_weights1)
@@ -447,7 +453,7 @@ class BaseTwoPointCounter(BaseClass):
                 self.n_bitwise_weights = n_bitwise_weights1
 
             else:
-                self.weights2, n_bitwise_weights2 = _format_weights(weights2, len(self.positions2[0]))
+                self.weights2, n_bitwise_weights2 = _format_weights(weights2, weight_type=self.weight_type, size=len(self.positions2[0]), dtype=self.dtype)
 
                 if n_bitwise_weights2 == n_bitwise_weights1:
 
