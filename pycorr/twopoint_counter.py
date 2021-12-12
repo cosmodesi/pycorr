@@ -285,7 +285,7 @@ class BaseTwoPointCounter(BaseClass):
     def _set_edges(self, edges, bin_type='auto'):
         if np.ndim(edges[0]) == 0:
             edges = (edges,)
-        self.edges = tuple(np.array(edge, dtype='f8') for edge in edges)
+        self.edges = [np.array(edge, dtype='f8') for edge in edges]
         if self.mode in ['smu','rppi']:
             if not self.ndim == 2:
                 raise TwoPointCounterError('A tuple of edges should be provided to pair counter in mode {}'.format(self.mode))
@@ -370,6 +370,11 @@ class BaseTwoPointCounter(BaseClass):
         else:
             self.positions2 = list(positions2)
             self.positions2 = _format_positions(self.positions2)
+
+        self.size1 = self.size2 = len(self.positions1[0])
+        if not self.autocorr: self.size2 = len(self.positions2[0])
+        if self.with_mpi:
+            self.size1, self.size2 = self.mpicomm.allreduce(self.size1), self.mpicomm.allreduce(self.size2)
 
     def _set_weights(self, weights1, weights2=None, weight_type='auto', twopoint_weights=None, weight_attrs=None):
 
@@ -544,13 +549,10 @@ class BaseTwoPointCounter(BaseClass):
 
         """
         if not self.weights1:
-            size1 = size2 = len(self.positions1[0])
-            if not self.autocorr: size2 = len(self.positions2[0])
-            if self.with_mpi:
-                size1, size2 = self.mpicomm.allreduce(size1), self.mpicomm.allreduce(size2)
+
             if self.autocorr:
-                return size1 * (size1 - 1)
-            return size1 * size2
+                return self.size1 * (self.size1 - 1)
+            return self.size1 * self.size2
 
         if self.n_bitwise_weights:
 
@@ -624,10 +626,11 @@ class BaseTwoPointCounter(BaseClass):
         wcounts = self.wcounts
         self.wcounts = utils.rebin(wcounts, new_shape, statistic=np.sum)
         self.seps = [utils.rebin(sep*wcounts, new_shape, statistic=np.sum)/self.wcounts for sep in self.seps]
+        self.edges = [edges[::f] for edges, f in zip(self.edges, factor)]
 
     def __getstate__(self):
         state = {}
-        for name in ['name', 'autocorr', 'seps', 'npairs', 'wcounts', 'wnorm', 'edges', 'mode', 'bin_type',
+        for name in ['name', 'autocorr', 'seps', 'npairs', 'wcounts', 'wnorm', 'size1', 'size2', 'edges', 'mode', 'bin_type',
                      'boxsize', 'los', 'compute_sepavg', 'weight_attrs', 'attrs']:
             if hasattr(self, name):
                 state[name] = getattr(self, name)

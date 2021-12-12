@@ -322,6 +322,7 @@ def test_twopoint_counter(mode='s'):
                 test2 = TwoPointCounter.load(fn)
                 assert np.allclose(test2.wcounts, ref, **tol)
                 assert np.allclose(test2.wnorm, refnorm, **tol)
+                assert np.allclose(test2.size1, test.size1) and np.allclose(test2.size2, test.size2)
                 test2.rebin((2,2) if len(edges) == 2 else (2,))
                 assert np.allclose(np.sum(test2.wcounts), np.sum(ref))
 
@@ -391,6 +392,7 @@ def test_rebin():
     ref = test.copy()
     test.rebin(2)
     assert test.sep.shape == test.wcounts.shape == (5,)
+    assert np.allclose(test.edges, [np.linspace(0., 10, 6)])
     assert np.allclose(np.sum(test.wcounts), np.sum(ref.wcounts))
 
     mode = 'smu'
@@ -399,13 +401,15 @@ def test_rebin():
     ref = test.copy()
     test.rebin((2,5))
     assert test.sep.shape == test.wcounts.shape == (5, 1)
+    refedges = [np.linspace(0., 10, 6), np.linspace(0, 1, 2)]
+    for i in range(2):
+        assert np.allclose(test.edges[i], refedges[i])
     assert np.allclose(np.sum(test.wcounts), np.sum(ref.wcounts))
 
 
 if __name__ == '__main__':
 
     setup_logging()
-
     for mode in ['theta','s','smu','rppi','rp']:
         test_twopoint_counter(mode=mode)
 
