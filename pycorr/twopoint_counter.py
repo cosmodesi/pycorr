@@ -7,6 +7,13 @@ from .utils import BaseClass
 from . import utils
 
 
+def _make_array(value, shape, dtype='f8'):
+    # Return numpy array filled with value
+    toret = np.empty(shape, dtype=dtype)
+    toret[...] = value
+    return toret
+
+
 class TwoPointCounterError(Exception):
 
     """Exception raised when issue with pair counting."""
@@ -193,7 +200,7 @@ def _format_weights(weights, weight_type='auto', size=None, dtype=None):
 
 class BaseTwoPointCounter(BaseClass):
     """
-    Base class for pair counters.
+    Base class for two-point counters.
     Extend this class to implement a new pair counter engine.
 
     Attributes
@@ -328,7 +335,7 @@ class BaseTwoPointCounter(BaseClass):
         kwargs : dict
             Pair counter engine-specific options.
         """
-        self.mode = mode
+        self.mode = mode.lower()
         self.nthreads = nthreads
         if nthreads is None:
             self.nthreads = int(os.getenv('OMP_NUM_THREADS','1'))
@@ -516,7 +523,7 @@ class BaseTwoPointCounter(BaseClass):
                 smoothing = np.inf
             from . import mpi
             return mpi.domain_decompose(self.mpicomm, smoothing, self.positions1, weights1=self.weights1,
-                                 positions2=self.positions2, weights2=self.weights2, boxsize=self.boxsize)
+                                        positions2=self.positions2, weights2=self.weights2, boxsize=self.boxsize)
         return (self.positions1, self.weights1), (self.positions2, self.weights2)
 
     def _set_default_separation(self):
@@ -536,8 +543,7 @@ class BaseTwoPointCounter(BaseClass):
     def _set_boxsize(self, boxsize):
         self.boxsize = boxsize
         if self.periodic:
-            self.boxsize = np.empty(3, dtype='f8')
-            self.boxsize[:] = boxsize
+            self.boxsize = _make_array(boxsize, 3, dtype='f8')
 
     def normalization(self):
         r"""
@@ -697,7 +703,7 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
             Line-of-sight to be used when ``mode`` is "rp", in case of non-cubic box;
             one of cartesian axes "x", "y" or "z".
         """
-        self.mode = mode
+        self.mode = mode.lower()
         self._set_edges(edges)
         self._set_boxsize(boxsize)
         self._set_los(los)

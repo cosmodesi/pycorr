@@ -242,9 +242,10 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
             continue
         if label12 == 'R1R2' and not has_randoms:
                 if log: logger.info('Analytically computing pair counts {}.'.format(label12))
-                size2 = size1 = len(positions[label1.replace('R','D')][0])
+                size1 = pairs['D1D2'].size1
+                size2 = None
                 if not autocorr:
-                    size2 = len(positions[label2.replace('R','D')][0])
+                    size2 = pairs['D1D2'].size2
                 pairs[label12] = AnalyticTwoPointCounter(mode, edges, boxsize, size1=size1, size2=size2)
         else:
             if log: logger.info('Computing pair counts {}.'.format(label12))

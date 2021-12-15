@@ -27,6 +27,7 @@ def test_estimator(mode='s'):
     list_options.append({'estimator':'natural'})
     if mode not in ['theta', 'rp']:
         list_options.append({'estimator':'natural', 'boxsize':boxsize, 'with_randoms':False})
+        list_options.append({'autocorr':True, 'estimator':'natural', 'boxsize':boxsize, 'with_randoms':False})
     list_options.append({'estimator':'davispeebles'})
     list_options.append({'estimator':'weight'})
     list_options.append({'with_shifted':True})
@@ -114,6 +115,10 @@ def test_estimator(mode='s'):
                 R1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:3], positions2=None if autocorr else randoms2[:3],
                                        weights1=randoms1[3:], weights2=None if autocorr else randoms2[3:], **options_counts)
                 assert_allclose(R1R2, test.S1S2)
+            if estimator in ['natural'] and not with_randoms:
+                R1R2 = TwoPointCounter(mode=mode, edges=edges, engine='analytic', boxsize=test.D1D2.boxsize,
+                                       size1=test.D1D2.size1, size2=None if test.autocorr else test.D1D2.size2, los=options_counts['los'])
+                assert_allclose(R1R2, test.R1R2)
             if test.D1D2.mode == 'smu':
                 sep, xiell = project_to_multipoles(test, ells=(0,2,4))
             if test.D1D2.mode == 'rppi':
@@ -144,5 +149,5 @@ def test_estimator(mode='s'):
 if __name__ == '__main__':
 
     setup_logging()
-    for mode in ['theta','s','smu','rppi','rp'][:1]:
+    for mode in ['theta','s','smu','rppi','rp']:
         test_estimator(mode=mode)
