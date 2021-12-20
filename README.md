@@ -1,19 +1,20 @@
 # pycorr
 
-**pycorr** is a wrapper for correlation function estimation, designed to handle different pair counter engines (currently only Corrfunc).
+**pycorr** is a wrapper for correlation function estimation, designed to handle different two-point counter engines (currently only Corrfunc).
 It currently supports:
 
   - theta (angular), s, s-mu, rp-pi binning schemes
-  - analytical pair counts with periodic boundary conditions
+  - analytical two-point counts with periodic boundary conditions
   - inverse bitwise weights (in any integer format) and (angular) upweighting
   - MPI parallelization (further requires mpi4py and pmesh)
+  - jackknife estimate of the correlation function covariance matrix
 
 A typical auto-correlation function estimation is as simple as:
 ```
 import numpy as np
 from pycorr import TwoPointCorrelationFunction
 
-edges = (np.linspace(1, 100, 51), np.linspace(0, 50, 51))
+edges = (np.linspace(1, 101, 51), np.linspace(0, 50, 51))
 # pass e.g. mpicomm = MPI.COMM_WORLD if input positions and weights are MPI-scattered
 result = TwoPointCorrelationFunction('rppi', edges, data_positions1=data_positions1, data_weights1=data_weights1,
                                      randoms_positions1=randoms_positions1, randoms_weights1=randoms_weights1,
@@ -35,7 +36,7 @@ Strict requirements are:
   - numpy
   - scipy
 
-To use Corrfunc as pair-counting engine (only engine linked so far):
+To use Corrfunc as two-point-counting engine (only engine linked so far):
 
   - git+https://github.com/adematti/Corrfunc@pipweights
 
@@ -54,4 +55,6 @@ See [pycorr docs](https://py2pcf.readthedocs.io/en/latest/user/building.html).
 
 ## Credits
 
-Lehman Garrison and Manodeep Sinha for advice when implementing linear binning, and PIP and angular weights into Corrfunc.
+- Lehman Garrison and Manodeep Sinha for advice when implementing linear binning, and PIP and angular weights into Corrfunc.
+- Davide Bianchi for cross-checks of two-point counts with PIP weights.
+- Svyatoslav Trusov for script to compute jackknife covariance estimates based on https://arxiv.org/pdf/2109.07071.pdf: https://github.com/theonefromnowhere/JK_pycorr/blob/main/CF_JK_ST_conf.py.

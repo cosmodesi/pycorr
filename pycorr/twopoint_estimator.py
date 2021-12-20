@@ -1,18 +1,18 @@
-"""Implement correlation function estimators, natural and Landy-Szalay."""
+"""Implements correlation function estimators, natural and Landy-Szalay."""
 
 import numpy as np
 from scipy import special
 
-from .twopoint_counter import get_twopoint_counter
+from .twopoint_counter import TwoPointCounter
 from .utils import BaseClass
 
 
-class EstimatorError(Exception):
+class TwoPointEstimatorError(Exception):
 
     """Exception raised when issue with estimator."""
 
 
-def get_estimator(estimator='auto', with_DR=True):
+def get_twopoint_estimator(estimator='auto', with_DR=True, with_jackknife=False):
     """
     Return :class:`BaseTwoPointEstimator` subclass corresponding
     to input estimator name.
@@ -24,22 +24,25 @@ def get_estimator(estimator='auto', with_DR=True):
         If "auto", "landyszalay" will be chosen if ``with_DR``, else "natural".
 
     with_DR : bool, default=True
-        If estimator will be provided with pair counts from data x random catalogs. See above.
+        If estimator will be provided with two-point counts from data x random catalogs. See above.
 
     Returns
     -------
     estimator : type
         Estimator class.
     """
-    if estimator == 'auto':
-        estimator = {True:'landyszalay', False:'natural'}[with_DR]
-
     if isinstance(estimator, str):
 
+        if estimator == 'auto':
+            estimator = {True:'landyszalay', False:'natural'}[with_DR]
+
+        if with_jackknife:
+            estimator = 'jackknife-{}'.format(estimator)
+
         try:
-            return BaseTwoPointEstimator._registry[estimator.lower()]
+            estimator = BaseTwoPointEstimator._registry[estimator.lower()]
         except KeyError:
-            raise EstimatorError('Unknown estimator {}.'.format(estimator))
+            raise TwoPointEstimatorError('Unknown estimator {}.'.format(estimator))
 
     return estimator
 
@@ -49,12 +52,12 @@ class MetaTwoPointEstimator(type(BaseClass)):
     """Metaclass to return correct estimator."""
 
     def __call__(cls, *args, estimator='landyszalay', **kwargs):
-        return get_estimator(estimator=estimator)(*args, **kwargs)
+        return get_twopoint_estimator(estimator=estimator)(*args, **kwargs)
 
 
-class TwoPointEstimator(metaclass=MetaTwoPointEstimator):
+class TwoPointEstimator(BaseClass, metaclass=MetaTwoPointEstimator):
     """
-    Entry point to two point estimators.
+    Entry point to two-point estimators.
 
     Parameters
     ----------
@@ -62,10 +65,10 @@ class TwoPointEstimator(metaclass=MetaTwoPointEstimator):
         Estimator name, one of ["auto", "natural", "davispeebles", "landyszalay"].
 
     args : list
-        Arguments for two point estimator, see :class:`TwoPointEstimator`.
+        Arguments for two-point estimator, see :class:`TwoPointEstimator`.
 
     kwargs : dict
-        Arguments for two point estimator, see :class:`TwoPointEstimator`.
+        Arguments for two-point estimator, see :class:`TwoPointEstimator`.
 
     Returns
     -------
@@ -73,10 +76,12 @@ class TwoPointEstimator(metaclass=MetaTwoPointEstimator):
         Estimator instance.
     """
     @classmethod
-    def load(cls, filename):
-        cls.log_info('Loading {}.'.format(filename))
-        state = np.load(filename, allow_pickle=True)[()]
-        return get_estimator(state.pop('name')).from_state(state)
+    def from_state(cls, state):
+        """Return new estimator based on state dictionary."""
+        cls = get_twopoint_estimator(state.pop('name'))
+        new = cls.__new__(cls)
+        new.__setstate__(state)
+        return new
 
 
 class RegisteredTwoPointEstimator(type(BaseClass)):
@@ -111,28 +116,28 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
         Parameters
         ----------
         D1D2 : BaseTwoPointCounter, default=None
-            D1D2 pair counts.
+            D1D2 two-point counts.
 
         R1R2 : BaseTwoPointCounter, default=None
-            R1R2 pair counts.
+            R1R2 two-point counts.
 
         D1R2 : BaseTwoPointCounter, default=None
-            D1R2 pair counts, e.g. for :class:`LandySzalayTwoPointEstimator`.
+            D1R2 two-point counts, e.g. for :class:`LandySzalayTwoPointEstimator`.
 
         D2R1 : BaseTwoPointCounter, default=None
-            D2R1 pair counts, e.g. for :class:`LandySzalayTwoPointEstimator`,
+            D2R1 two-point counts, e.g. for :class:`LandySzalayTwoPointEstimator`,
             in case of cross-correlation.
 
         S1S2 : BaseTwoPointCounter, default=None
-            S1S2 pair counts, e.g. with reconstruction, the Landy-Szalay estimator is commonly written:
+            S1S2 two-point counts, e.g. with reconstruction, the Landy-Szalay estimator is commonly written:
             :math:`(D1D2 - D1S2 - D2S1 - S1S2)/R1R2`, with S1 and S2 shifted random catalogs.
             Defaults to ``R1R2``.
 
         D1S2 : BaseTwoPointCounter, default=None
-            D1S2 pair counts, see ``S1S2``. Defaults to ``D1R2``.
+            D1S2 two-point counts, see ``S1S2``. Defaults to ``D1R2``.
 
         S1D2 : BaseTwoPointCounter, default=None
-            S1D2 pair counts, see ``S1S2``. Defaults to ``D2R1``.
+            S1D2 two-point counts, see ``S1S2``. Defaults to ``D2R1``.
         """
         self.D1D2 = D1D2
         self.R1R2 = R1R2
@@ -170,13 +175,18 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
 
     @property
     def edges(self):
-        """Edges for pair count calculation, taken from :attr:`D1D2`."""
+        """Edges for two-point count calculation, taken from :attr:`D1D2`."""
         return self.D1D2.edges
 
     @property
     def mode(self):
-        """Pair counting mode, taken from :attr:`D1D2`."""
+        """Two-point counting mode, taken from :attr:`D1D2`."""
         return self.D1D2.mode
+
+    @property
+    def shape(self):
+        """Return shape of obtained correlation :attr:`corr`."""
+        return tuple(len(edges) - 1 for edges in self.edges)
 
     @property
     def ndim(self):
@@ -190,33 +200,42 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
 
     @property
     def with_shifted(self):
-        """Do we have "shifted" (e.g. for reconstruction) pair counts?"""
+        """Do we have "shifted" (e.g. for reconstruction) two-point counts?"""
         return self.S1S2 is not self.R1R2 or self.D1S2 is not self.D1R2 or self.D2S1 is not self.D2R1
 
     @classmethod
     def requires(cls, autocorr=False, with_shifted=False, join=None):
-        """Yield required pair counts."""
+        """List required counts."""
+        toret = []
         for tu in cls._tuple_requires(autocorr=autocorr, with_shifted=with_shifted):
             if join is not None:
-                yield join.join(tu)
+                toret.append(join.join(tu))
             else:
-                yield tu
+                toret.append(tu)
+        return toret
 
     @classmethod
     def _tuple_requires(cls, autocorr=False, with_shifted=False, join=None):
-        yield 'D1','D2'
+        toret = []
+        toret.append(('D1','D2'))
         key = 'S' if with_shifted else 'R'
-        yield 'D1','{}2'.format(key)
+        toret.append(('D1','{}2'.format(key)))
         if not autocorr:
-            yield 'D2','{}1'.format(key)
-        yield '{}1'.format(key),'{}2'.format(key)
+            toret.append(('D2','{}1'.format(key)))
+        toret.append(('{}1'.format(key),'{}2'.format(key)))
         if with_shifted:
-            yield 'R1','R2'
+            toret.append(('R1','R2'))
+        return toret
+
+    @property
+    def _count_names(self):
+        """Return list of counts used in estimator."""
+        return self.requires(autocorr=self.autocorr, with_shifted=self.with_shifted, join='')
 
     def rebin(self, *args, **kwargs):
-        """Rebin estimator, by rebinning all pair counts. See :meth:`BaseTwoPointCounter.rebin`."""
-        for pair in self.requires(autocorr=self.autocorr, with_shifted=self.with_shifted, join=''):
-            getattr(self, pair).rebin(*args, **kwargs)
+        """Rebin estimator, by rebinning all two-point counts. See :meth:`BaseTwoPointCounter.rebin`."""
+        for name in self._count_names:
+            getattr(self, name).rebin(*args, **kwargs)
         self.run()
 
     def __getstate__(self):
@@ -224,18 +243,24 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
         for name in ['name']:
             if hasattr(self, name):
                 state[name] = getattr(self, name)
-        for pair in self.requires(autocorr=self.autocorr, with_shifted=self.with_shifted, join=''):
-            state[pair] = getattr(self, pair).__getstate__()
+        for name in self._count_names:
+            state[name] = getattr(self, name).__getstate__()
         return state
 
     def __setstate__(self, state):
         kwargs = {}
-        pairs = set(self.requires(autocorr=False, with_shifted=True, join='')) | set(self.requires(autocorr=False, with_shifted=False, join='')) # most general list
-        for pair in pairs:
-            if pair in state:
-                pair_state = state[pair].copy()
-                kwargs[pair] = get_twopoint_counter(pair_state.pop('name')).from_state(pair_state)
+        counts = set(self.requires(autocorr=False, with_shifted=True, join='')) | set(self.requires(autocorr=False, with_shifted=False, join='')) # most general list
+        for name in counts:
+            if name in state:
+                kwargs[name] = TwoPointCounter.from_state(state[name])
         self.__init__(**kwargs)
+
+    def save(self, filename):
+        """Save estimator to ``filename``."""
+        if not self.D1D2.with_mpi or self.D1D2.mpicomm.rank == 0:
+            super(BaseTwoPointEstimator, self).save(filename)
+        if self.D1D2.with_mpi:
+            self.D1D2.mpicomm.Barrier()
 
 
 class NaturalTwoPointEstimator(BaseTwoPointEstimator):
@@ -263,11 +288,13 @@ class NaturalTwoPointEstimator(BaseTwoPointEstimator):
 
     @classmethod
     def _tuple_requires(cls, autocorr=False, with_shifted=False, join=None):
-        yield 'D1','D2'
+        toret = []
+        toret.append(('D1','D2'))
         key = 'S' if with_shifted else 'R'
-        yield '{}1'.format(key),'{}2'.format(key)
+        toret.append(('{}1'.format(key),'{}2'.format(key)))
         if with_shifted:
-            yield 'R1','R2'
+            toret.append(('R1','R2'))
+        return toret
 
 
 class DavisPeeblesTwoPointEstimator(BaseTwoPointEstimator):
@@ -295,12 +322,14 @@ class DavisPeeblesTwoPointEstimator(BaseTwoPointEstimator):
 
     @classmethod
     def _tuple_requires(cls, autocorr=False, with_shifted=False, join=None):
-        """Yield required pair counts."""
-        yield 'D1','D2'
+        """Yield required two-point counts."""
+        toret = []
+        toret.append(('D1','D2'))
         key = 'S' if with_shifted else 'R'
-        yield 'D1','{}2'.format(key)
+        toret.append(('D1','{}2'.format(key)))
         if with_shifted:
-            yield 'D1','R2'
+            toret.append(('D1','R2'))
+        return toret
 
 
 class LandySzalayTwoPointEstimator(BaseTwoPointEstimator):
@@ -353,8 +382,10 @@ class WeightTwoPointEstimator(NaturalTwoPointEstimator):
 
     @classmethod
     def _yield_requires(cls, autocorr=False, with_shifted=False, join=None):
-        yield 'D1','D2'
-        yield 'R1','R2'
+        toret = []
+        toret.append(('D1','D2'))
+        toret.append(('R1','R2'))
+        return toret
 
     @property
     def weight(self):
@@ -362,7 +393,7 @@ class WeightTwoPointEstimator(NaturalTwoPointEstimator):
         return self.corr
 
 
-def project_to_multipoles(estimator, ells=(0,2,4)):
+def project_to_multipoles(estimator, ells=(0,2,4), **kwargs):
     r"""
     Project :math:`(s, \mu)` correlation function estimation onto Legendre polynomials.
 
@@ -370,55 +401,78 @@ def project_to_multipoles(estimator, ells=(0,2,4)):
     ----------
     estimator : BaseTwoPointEstimator
         Estimator for :math:`(s, \mu)` correlation function.
+        If estimator holds jackknife realizations, also return jackknife covariance estimate.
 
     ells : tuple, int, default=(0,2,4)
         Order of Legendre polynomial.
+
+    kwargs : dict
+        Optional arguments for :math:`JackknifeTwoPointEstimator.realization`, when relevant.
 
     Returns
     -------
     sep : array
         Array of separation values.
 
-    toret : list
+    poles : list
         List of correlation function multipoles.
+
+    cov : array
+        If input ``estimator`` holds jackknife realizations, jackknife covariance estimate (for all successive ``ells``).
     """
     if np.ndim(ells) == 0:
         ells = (ells,)
     ells = tuple(ells)
     sep = np.nanmean(estimator.sep, axis=-1)
-    toret = []
+    poles = []
     for ill,ell in enumerate(ells):
         dmu = np.diff(estimator.edges[1], axis=-1)
         poly = special.legendre(ell)(estimator.edges[1])
         legendre = (2*ell + 1) * (poly[1:] + poly[:-1])/2. * dmu
-        toret.append(np.sum(estimator.corr*legendre, axis=-1)/np.sum(dmu))
-    return sep, toret
+        poles.append(np.sum(estimator.corr*legendre, axis=-1)/np.sum(dmu))
+    try:
+        realizations = [np.concatenate(project_to_multipoles(estimator.realization(ii, **kwargs), ells=ells)[1]).T for ii in estimator.realizations]
+    except AttributeError:
+        return sep, poles
+    cov = (len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0)
+    return sep, poles, cov
 
 
-def project_to_wp(estimator, pimax=None):
+def project_to_wp(estimator, pimax=None, **kwargs):
     r"""
-    Integrate :math:`(r_{p}, \pi)` correlation function over :math:`\pi`
-    to obtain :math:`w_{p}(r_{p})`.
+    Integrate :math:`(r_{p}, \pi)` correlation function over :math:`\pi` to obtain :math:`w_{p}(r_{p})`.
 
     Parameters
     ----------
     estimator : BaseTwoPointEstimator
         Estimator for :math:`(r_{p}, \pi)` correlation function.
+        If estimator holds jackknife realizations, also return jackknife covariance estimate.
 
     pimax : float, default=None
         Upper bound for summation of :math:`\pi`.
+
+    kwargs : dict
+        Optional arguments for :math:`JackknifeTwoPointEstimator.realization`, when relevant.
 
     Returns
     -------
     sep : array
         Array of separation values.
 
-    toret : array
+    wp : array
         Estimated :math:`w_{p}(r_{p})`.
+
+    cov : array
+        If input ``estimator`` holds jackknife realizations, jackknife covariance estimate.
     """
     mask = Ellipsis
     if pimax is not None:
         mask = (estimator.edges[1] <= pimax)[:-1]
     sep = np.nanmean(estimator.sep[:,mask], axis=-1)
     wp = 2.*np.sum(estimator.corr[:,mask]*np.diff(estimator.edges[1])[mask], axis=-1)
-    return sep, wp
+    try:
+        realizations = [project_to_wp(estimator.realization(ii, **kwargs), pimax=pimax)[1] for ii in estimator.realizations]
+    except AttributeError:
+        return sep, wp
+    cov = (len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0)
+    return sep, wp, cov

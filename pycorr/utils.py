@@ -119,10 +119,8 @@ class BaseClass(object,metaclass=BaseMetaClass):
         new.__dict__.update(self.__dict__)
         return new
 
-    def copy(self, **kwargs):
-        new = self.__copy__()
-        new.__dict__.update(kwargs)
-        return new
+    def copy(self):
+        return self.__copy__()
 
     def __setstate__(self, state):
         self.__dict__.update(state)
@@ -135,6 +133,7 @@ class BaseClass(object,metaclass=BaseMetaClass):
 
     def save(self, filename):
         self.log_info('Saving {}.'.format(filename))
+        mkdir(os.path.dirname(filename))
         np.save(filename, self.__getstate__(), allow_pickle=True)
 
     @classmethod
@@ -462,3 +461,91 @@ class DistanceToRedshift(object):
     def __call__(self, distance):
         """Return (interpolated) redshift at distance ``distance`` (scalar or array)."""
         return self.interp(distance)
+
+
+class BaseTaskManager(BaseClass):
+    """A dumb task manager, that simply iterates through the tasks in series."""
+
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+    def __enter__(self):
+        """Return self."""
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        """Do nothing."""
+
+    def iterate(self, tasks):
+        """
+        Iterate through a series of tasks.
+
+        Parameters
+        ----------
+        tasks : iterable
+            An iterable of tasks that will be yielded.
+
+        Yields
+        -------
+        task :
+            The individual items of ```tasks``, iterated through in series.
+        """
+        for task in tasks:
+            yield task
+
+    def map(self, function, tasks):
+        """
+        Apply a function to all of the values in a list and return the list of results.
+
+        If ``tasks`` contains tuples, the arguments are passed to
+        ``function`` using the ``*args`` syntax.
+
+        Parameters
+        ----------
+        function : callable
+            The function to apply to the list.
+        tasks : list
+            The list of tasks.
+
+        Returns
+        -------
+        results : list
+            The list of the return values of ``function``.
+        """
+        return [function(*(t if isinstance(t,tuple) else (t,))) for t in tasks]
+
+
+def get_mpi():
+    """Return mpi module."""
+    from . import mpi
+    return mpi
+
+
+def TaskManager(mpicomm=None, **kwargs):
+    """
+    Switch between non-MPI (ntasks=1) and MPI task managers. To be called as::
+
+        with TaskManager(...) as tm:
+            # do stuff
+
+    """
+    if mpicomm is None or mpicomm.size == 1:
+        cls = BaseTaskManager
+    else:
+        cls = get_mpi().MPITaskManager
+
+    self = cls.__new__(cls)
+    self.__init__(mpicomm=mpicomm, **kwargs)
+    return self
+
+
+def cov_to_corrcoef(cov):
+    """
+    Return correlation matrix corresponding to input covariance matrix ``cov``.
+    If ``cov`` is scalar, return 1.
+    """
+    if np.ndim(cov) == 0:
+        return 1.
+    stddev = np.sqrt(np.diag(cov).real)
+    c = cov/stddev[:,None]/stddev[None,:]
+    return c

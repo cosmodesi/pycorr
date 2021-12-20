@@ -1,4 +1,4 @@
-"""Implement Corrfunc pair counter engine."""
+"""Implement Corrfunc two-point counter engine."""
 
 import numpy as np
 from Corrfunc import theory, mocks
@@ -7,15 +7,22 @@ from .twopoint_counter import BaseTwoPointCounter, TwoPointCounterError
 from . import utils
 
 
+def _zero_to_nan(array):
+    # Replace 0s with nans
+    array = array.copy()
+    mask = array == 0.
+    array[mask] = np.nan
+    return array
+
+
 class CorrfuncTwoPointCounter(BaseTwoPointCounter):
 
-    """Extend :class:`BaseTwoPointCounter` for Corrfunc pair counting code."""
+    """Extend :class:`BaseTwoPointCounter` for Corrfunc two-point counting code."""
 
     name = 'corrfunc'
 
     def run(self):
-        """Compute the pair counts and set :attr:`wcounts` and :attr:`sep`."""
-
+        """Compute the two-point counts and set :attr:`wcounts` and :attr:`sep`."""
         (dpositions1, dweights1), (dpositions2, dweights2) = self._mpi_decompose()
 
         def boxsize():
@@ -100,11 +107,11 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             weight_type = 'pair_product'
 
         pair_weights, sep_pair_weights = None, None
-        if self.twopoint_weights is not None:
+        if self.cos_twopoint_weights is not None:
             output_weightavg = True
             weight_type = 'inverse_bitwise'
-            pair_weights = self.twopoint_weights.weight
-            sep_pair_weights = self.twopoint_weights.sep
+            pair_weights = self.cos_twopoint_weights.weight
+            sep_pair_weights = self.cos_twopoint_weights.sep
 
         kwargs = {'weights1': weights1, 'weights2': weights2,
                   'bin_type': self.bin_type, 'weight_type': weight_type,
@@ -125,127 +132,131 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                                             > pip uninstall Corrfunc\n\
                                             > pip install git+https://github.com/adematti/Corrfunc@pipweights\n') from exc
 
-        if self.mode == 'theta':
-            if self.periodic:
-                raise TwoPointCounterError('Corrfunc does not provide periodic boundary conditions for the angular correlation function')
-            result = call_corrfunc(mocks.DDtheta_mocks, autocorr, nthreads=self.nthreads, binfile=self.edges[0],
-                                   RA1=dpositions1[0], DEC1=dpositions1[1], RA2=positions2[0], DEC2=positions2[1],
-                                   output_thetaavg=self.compute_sepavg, fast_acos=self.attrs.get('fast_acos',False), **kwargs)
-            key_sep = 'thetaavg'
 
-        elif self.mode == 's':
-            result = call_corrfunc(theory.DD, autocorr, nthreads=self.nthreads, binfile=self.edges[0],
-                                   X1=dpositions1[0], Y1=dpositions1[1], Z1=dpositions1[2],
-                                   X2=positions2[0], Y2=positions2[1], Z2=positions2[2],
-                                   periodic=self.periodic, boxsize=boxsize(),
-                                   output_ravg=self.compute_sepavg, **kwargs)
+        if len(dpositions1[0]) and (self.autocorr or len(dpositions2[0])):
 
-            key_sep = 'ravg'
+            if self.mode == 'theta':
+                if self.periodic:
+                    raise TwoPointCounterError('Corrfunc does not provide periodic boundary conditions for the angular correlation function')
+                result = call_corrfunc(mocks.DDtheta_mocks, autocorr, nthreads=self.nthreads, binfile=self.edges[0],
+                                       RA1=dpositions1[0], DEC1=dpositions1[1], RA2=positions2[0], DEC2=positions2[1],
+                                       output_thetaavg=self.compute_sepavg, fast_acos=self.attrs.get('fast_acos',False), **kwargs)
+                key_sep = 'thetaavg'
 
-        elif self.mode == 'smu':
-            check_mu()
-            if self.los in ['x','y','z']:
-                positions1, positions2 = rotated_positions()
-                result = call_corrfunc(theory.DDsmu, autocorr, nthreads=self.nthreads,
-                                       binfile=self.edges[0], mu_max=self.edges[1].max(), nmu_bins=len(self.edges[1]) - 1,
-                                       X1=positions1[0], Y1=positions1[1], Z1=positions1[2],
+            elif self.mode == 's':
+                result = call_corrfunc(theory.DD, autocorr, nthreads=self.nthreads, binfile=self.edges[0],
+                                       X1=dpositions1[0], Y1=dpositions1[1], Z1=dpositions1[2],
                                        X2=positions2[0], Y2=positions2[1], Z2=positions2[2],
                                        periodic=self.periodic, boxsize=boxsize(),
-                                       output_savg=self.compute_sepavg, **kwargs)
-            else:
-                check_los()
-                positions1, positions2 = sky_positions()
-                result = call_corrfunc(mocks.DDsmu_mocks, autocorr, cosmology=1, nthreads=self.nthreads,
-                                       mu_max=self.edges[1].max(), nmu_bins=len(self.edges[1]) - 1, binfile=self.edges[0],
-                                       RA1=positions1[0], DEC1=positions1[1], CZ1=positions1[2],
-                                       RA2=positions2[0], DEC2=positions2[1], CZ2=positions2[2],
-                                       is_comoving_dist=True,
-                                       output_savg=self.compute_sepavg, **kwargs)
+                                       output_ravg=self.compute_sepavg, **kwargs)
 
-            key_sep = 'savg'
+                key_sep = 'ravg'
 
-        elif self.mode == 'rppi':
-            check_pi()
-            if self.los in ['x','y','z']:
-                positions1, positions2 = rotated_positions()
-                result = call_corrfunc(theory.DDrppi, autocorr, nthreads=self.nthreads,
-                                       binfile=self.edges[0], pimax=self.edges[1].max(),
-                                       X1=positions1[0], Y1=positions1[1], Z1=positions1[2],
-                                       X2=positions2[0], Y2=positions2[1], Z2=positions2[2],
-                                       periodic=self.periodic, boxsize=boxsize(),
-                                       output_rpavg=self.compute_sepavg, **kwargs)
-            else:
-                check_los()
-                positions1, positions2 = sky_positions()
-                result = call_corrfunc(mocks.DDrppi_mocks, autocorr, cosmology=1, nthreads=self.nthreads,
-                                       pimax=self.edges[1].max(), binfile=self.edges[0],
-                                       RA1=positions1[0], DEC1=positions1[1], CZ1=positions1[2],
-                                       RA2=positions2[0], DEC2=positions2[1], CZ2=positions2[2],
-                                       is_comoving_dist=True,
-                                       output_rpavg=self.compute_sepavg, **kwargs)
-
-            key_sep = 'rpavg'
-
-        elif self.mode == 'rp':
-            key_sep = 'rpavg'
-            if self.los in ['x','y','z']:
-                positions1, positions2 = rotated_positions()
-                boxsize = boxsize()
-                pimax = boxsize + 1. # los axis is z
-                result = call_corrfunc(theory.DDrppi, autocorr, nthreads=self.nthreads,
-                                       binfile=self.edges[0], pimax=pimax,
-                                       X1=positions1[0], Y1=positions1[1], Z1=positions1[2],
-                                       X2=positions2[0], Y2=positions2[1], Z2=positions2[2],
-                                       periodic=self.periodic, boxsize=boxsize,
-                                       output_rpavg=self.compute_sepavg, **kwargs)
-            else:
-                check_los()
-                positions1, positions2 = sky_positions()
-                # \pi = \hat{\ell} \cdot (r_{1} - r_{2}) < r_{1} + r_{2}
-                #if autocorr:
-                #    pimax = 2*positions1[0].max()
-                #else:
-                #    pimax = 2*max(positions1[0].max(),positions2[0].max()
-                # local calculation, since integrated over pi
-                # \pi = \hat{\ell} \cdot (r_{1} - r_{2}) < | r_{1} - r_{2} | < boxsize
-                if autocorr:
-                    boxsize = [p.max() - p.min() for p in dpositions1]
+            elif self.mode == 'smu':
+                check_mu()
+                if self.los in ['x','y','z']:
+                    positions1, positions2 = rotated_positions()
+                    result = call_corrfunc(theory.DDsmu, autocorr, nthreads=self.nthreads,
+                                           binfile=self.edges[0], mu_max=self.edges[1].max(), nmu_bins=len(self.edges[1]) - 1,
+                                           X1=positions1[0], Y1=positions1[1], Z1=positions1[2],
+                                           X2=positions2[0], Y2=positions2[1], Z2=positions2[2],
+                                           periodic=self.periodic, boxsize=boxsize(),
+                                           output_savg=self.compute_sepavg, **kwargs)
                 else:
-                    boxsize = [max(p1.max(), p2.max()) - min(p1.min(), p2.min()) for p1, p2 in zip(dpositions1, dpositions2)]
-                pimax = sum(p**2 for p in boxsize)**0.5 + 1.
-                result = call_corrfunc(mocks.DDrppi_mocks, autocorr, cosmology=1, nthreads=self.nthreads,
-                                       pimax=pimax, binfile=self.edges[0],
-                                       RA1=positions1[0], DEC1=positions1[1], CZ1=positions1[2],
-                                       RA2=positions2[0], DEC2=positions2[1], CZ2=positions2[2],
-                                       is_comoving_dist=True,
-                                       output_rpavg=self.compute_sepavg, **kwargs)
+                    check_los()
+                    positions1, positions2 = sky_positions()
+                    result = call_corrfunc(mocks.DDsmu_mocks, autocorr, cosmology=1, nthreads=self.nthreads,
+                                           mu_max=self.edges[1].max(), nmu_bins=len(self.edges[1]) - 1, binfile=self.edges[0],
+                                           RA1=positions1[0], DEC1=positions1[1], CZ1=positions1[2],
+                                           RA2=positions2[0], DEC2=positions2[1], CZ2=positions2[2],
+                                           is_comoving_dist=True,
+                                           output_savg=self.compute_sepavg, **kwargs)
 
-            # sum over pi to keep only rp
-            result = {key:result[key] for key in ['npairs','weightavg',key_sep]}
-            result[key_sep].shape = result['weightavg'].shape = result['npairs'].shape = self.shape + (-1,)
-            npairs = result['npairs']
-            result['weightavg'][npairs == 0] = 0.
-            result['npairs'] = np.sum(result['npairs'], axis=-1)
-            sumnpairs = np.maximum(result['npairs'], 1e-9) # just to avoid division by 0
-            result[key_sep] = np.sum(result[key_sep]*npairs, axis=-1)/sumnpairs
-            result['weightavg'] = np.sum(result['weightavg']*npairs, axis=-1)/sumnpairs
+                key_sep = 'savg'
 
-        else:
-            raise TwoPointCounterError('Corrfunc does not support mode {}'.format(self.mode))
+            elif self.mode == 'rppi':
+                check_pi()
+                if self.los in ['x','y','z']:
+                    positions1, positions2 = rotated_positions()
+                    result = call_corrfunc(theory.DDrppi, autocorr, nthreads=self.nthreads,
+                                           binfile=self.edges[0], pimax=self.edges[1].max(),
+                                           X1=positions1[0], Y1=positions1[1], Z1=positions1[2],
+                                           X2=positions2[0], Y2=positions2[1], Z2=positions2[2],
+                                           periodic=self.periodic, boxsize=boxsize(),
+                                           output_rpavg=self.compute_sepavg, **kwargs)
+                else:
+                    check_los()
+                    positions1, positions2 = sky_positions()
+                    result = call_corrfunc(mocks.DDrppi_mocks, autocorr, cosmology=1, nthreads=self.nthreads,
+                                           pimax=self.edges[1].max(), binfile=self.edges[0],
+                                           RA1=positions1[0], DEC1=positions1[1], CZ1=positions1[2],
+                                           RA2=positions2[0], DEC2=positions2[1], CZ2=positions2[2],
+                                           is_comoving_dist=True,
+                                           output_rpavg=self.compute_sepavg, **kwargs)
 
-        self.npairs = result['npairs']
-        self.wcounts = self.npairs*(result['weightavg'] if output_weightavg else 1)\
-                       *(self.weight_attrs['nrealizations'] if self.n_bitwise_weights else 1)
-        self.wcounts[self.npairs == 0] = 0.
-        if self.compute_sepavg:
-            self.sep = result[key_sep]
-            self.sep.shape = self.wcounts.shape = self.npairs.shape = self.shape
-        #self.wcounts.shape = self.shape[:1] + (1400,)
-        #self.wcounts = self.wcounts.sum(axis=-1)
+                key_sep = 'rpavg'
+
+            elif self.mode == 'rp':
+                key_sep = 'rpavg'
+                if self.los in ['x','y','z']:
+                    positions1, positions2 = rotated_positions()
+                    boxsize = boxsize()
+                    pimax = boxsize + 1. # los axis is z
+                    result = call_corrfunc(theory.DDrppi, autocorr, nthreads=self.nthreads,
+                                           binfile=self.edges[0], pimax=pimax,
+                                           X1=positions1[0], Y1=positions1[1], Z1=positions1[2],
+                                           X2=positions2[0], Y2=positions2[1], Z2=positions2[2],
+                                           periodic=self.periodic, boxsize=boxsize,
+                                           output_rpavg=self.compute_sepavg, **kwargs)
+                else:
+                    check_los()
+                    positions1, positions2 = sky_positions()
+                    # \pi = \hat{\ell} \cdot (r_{1} - r_{2}) < r_{1} + r_{2}
+                    #if autocorr:
+                    #    pimax = 2*positions1[0].max()
+                    #else:
+                    #    pimax = 2*max(positions1[0].max(),positions2[0].max()
+                    # local calculation, since integrated over pi
+                    # \pi = \hat{\ell} \cdot (r_{1} - r_{2}) < | r_{1} - r_{2} | < boxsize
+                    if autocorr:
+                        boxsize = [p.max() - p.min() for p in dpositions1]
+                    else:
+                        boxsize = [max(p1.max(), p2.max()) - min(p1.min(), p2.min()) for p1, p2 in zip(dpositions1, dpositions2)]
+                    pimax = sum(p**2 for p in boxsize)**0.5 + 1.
+                    result = call_corrfunc(mocks.DDrppi_mocks, autocorr, cosmology=1, nthreads=self.nthreads,
+                                           pimax=pimax, binfile=self.edges[0],
+                                           RA1=positions1[0], DEC1=positions1[1], CZ1=positions1[2],
+                                           RA2=positions2[0], DEC2=positions2[1], CZ2=positions2[2],
+                                           is_comoving_dist=True,
+                                           output_rpavg=self.compute_sepavg, **kwargs)
+
+                # sum over pi to keep only rp
+                result = {key:result[key] for key in ['npairs','weightavg',key_sep]}
+                result[key_sep].shape = result['weightavg'].shape = result['npairs'].shape = self.shape + (-1,)
+                npairs = result['npairs']
+                result['weightavg'][npairs == 0] = 0.
+                result['npairs'] = np.sum(result['npairs'], axis=-1)
+                sumnpairs = np.maximum(result['npairs'], 1e-9) # just to avoid division by 0
+                result[key_sep] = np.sum(result[key_sep]*npairs, axis=-1)/sumnpairs
+                result['weightavg'] = np.sum(result['weightavg']*npairs, axis=-1)/sumnpairs
+
+            else:
+
+                raise TwoPointCounterError('Corrfunc does not support mode {}'.format(self.mode))
+
+            self.ncounts = result['npairs']
+            self.wcounts = self.ncounts*(result['weightavg'] if output_weightavg else 1)\
+                           *(self.weight_attrs['nrealizations'] if self.n_bitwise_weights else 1)
+            self.wcounts[self.ncounts == 0] = 0.
+            if self.compute_sepavg:
+                self.sep = result[key_sep]
+            self.sep.shape = self.wcounts.shape = self.ncounts.shape = self.shape
 
         if self.with_mpi:
             self.wcounts = self.mpicomm.allreduce(self.wcounts)
-            npairs = np.maximum(self.mpicomm.allreduce(self.npairs), 1e-9) # just to avoid division by 0
+            ncounts = np.maximum(self.mpicomm.allreduce(self.ncounts), 1e-9) # just to avoid division by 0
             if self.compute_sepavg:
-                self.sep = self.mpicomm.allreduce(self.sep * self.npairs)/npairs
-            self.npairs = npairs
+                self.sep = self.mpicomm.allreduce(self.sep * self.ncounts)/ncounts
+            self.ncounts = ncounts
+
+        self.sep = _zero_to_nan(self.sep)

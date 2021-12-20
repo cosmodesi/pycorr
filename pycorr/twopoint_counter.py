@@ -1,9 +1,9 @@
-"""Implement base pair counter, to be extended when implementing a new engine."""
+"""Implements base two-point counter, to be extended when implementing a new engine."""
 
 import os
 import numpy as np
 
-from .utils import BaseClass
+from .utils import BaseClass, get_mpi
 from . import utils
 
 
@@ -16,7 +16,7 @@ def _make_array(value, shape, dtype='f8'):
 
 class TwoPointCounterError(Exception):
 
-    """Exception raised when issue with pair counting."""
+    """Exception raised when issue with two-point counting."""
 
 
 def get_twopoint_counter(engine='corrfunc'):
@@ -27,12 +27,12 @@ def get_twopoint_counter(engine='corrfunc'):
     Parameters
     ----------
     engine : string, default='corrfunc'
-        Name of pair counter engine, one of ["corrfunc", "analytic"].
+        Name of two-point counter engine, one of ["corrfunc", "analytic"].
 
     Returns
     -------
-    pair_counter : type
-        Pair counter class.
+    counter : type
+        Two-point counter class.
     """
     if isinstance(engine, str):
 
@@ -50,36 +50,39 @@ def get_twopoint_counter(engine='corrfunc'):
 
 class MetaTwoPointCounter(type(BaseClass)):
 
-    """Metaclass to return correct pair counter engine."""
+    """Metaclass to return correct two-point counter engine."""
 
     def __call__(cls, *args, engine='corrfunc', **kwargs):
         return get_twopoint_counter(engine)(*args, **kwargs)
 
 
-class TwoPointCounter(metaclass=MetaTwoPointCounter):
+class TwoPointCounter(BaseClass, metaclass=MetaTwoPointCounter):
     """
-    Entry point to pair counter engines.
+    Entry point to two-point counter engines.
 
     Parameters
     ----------
     engine : string, default='corrfunc'
-        Name of pair counter engine, one of ["corrfunc", "analytical"].
+        Name of two-point counter engine, one of ["corrfunc", "analytical"].
 
     args : list
-        Arguments for pair counter engine, see :class:`BaseTwoPointCounter`.
+        Arguments for two-point counter engine, see :class:`BaseTwoPointCounter`.
 
     kwargs : dict
-        Arguments for pair counter engine, see :class:`BaseTwoPointCounter`.
+        Arguments for two-point counter engine, see :class:`BaseTwoPointCounter`.
 
     Returns
     -------
     engine : BaseTwoPointCounter
     """
     @classmethod
-    def load(cls, filename):
-        cls.log_info('Loading {}.'.format(filename))
-        state = np.load(filename, allow_pickle=True)[()]
-        return get_twopoint_counter(state.pop('name')).from_state(state)
+    def from_state(cls, state):
+        """Return new two point counter based on state dictionary."""
+        state = state.copy()
+        cls = get_twopoint_counter(state.pop('name'))
+        new = cls.__new__(cls)
+        new.__setstate__(state)
+        return new
 
 
 def _vlogical_and(*arrays):
@@ -87,6 +90,14 @@ def _vlogical_and(*arrays):
     toret = arrays[0].copy()
     for array in arrays[1:]: toret &= array
     return toret
+
+
+def _nan_to_zero(array):
+    # Replace nans with 0s
+    array = array.copy()
+    mask = np.isnan(array)
+    array[mask] = 0.
+    return array
 
 
 def get_inverse_probability_weight(*weights, noffset=1, nrealizations=None, default_value=0., dtype='f8'):
@@ -129,79 +140,114 @@ def get_inverse_probability_weight(*weights, noffset=1, nrealizations=None, defa
     return toret
 
 
-def _format_positions(positions, position_type='xyz', mode='theta', dtype=None):
+def _format_positions(positions, mode='auto', position_type='xyz', dtype=None, mpicomm=None, mpiroot=None):
     # Format input array of positions
     # position_type in ["xyz", "rdd", "pos"]
-    if position_type == 'pos': # array of shape (N, 3)
-        positions = positions.T
-        if len(positions) != len(position_type):
-            raise TwoPointCounterError('For position type = {}, please provide a (N, 3) arrays for positions'.format(position_type))
-        position_type = 'xyz'
+    mode = mode.lower()
+    position_type = position_type.lower()
+    if position_type == 'auto':
+        if mode in ['theta', 'angular']: position_type = 'rd'
+        else: position_type = 'xyz'
 
-    for ip, p in enumerate(positions):
-        # Cast to the input dtype if exists (may be set by previous weights)
-        positions[ip] = np.asarray(p, dtype=dtype)
+    def __format_positions(positions, position_type=position_type, dtype=dtype):
+        if position_type == 'pos': # array of shape (N, 3)
+            positions = np.asarray(positions, dtype=dtype)
+            if positions.shape[-1] != 3:
+                return None, 'For position type = {}, please provide a (N, 3) array for positions'.format(position_type)
+            position_type = 'xyz'
+            positions = positions.T
+        # Array of shape (3, N)
+        for ip, p in enumerate(positions):
+            # Cast to the input dtype if exists (may be set by previous weights)
+            positions[ip] = np.asarray(p, dtype=dtype)
 
-    size = len(positions[0])
-    dtype = positions[0].dtype
-    if not np.issubdtype(dtype, np.floating):
-        raise TwoPointCounterError('Input position arrays should be of floating type, not {}'.format(dtype))
-    for p in positions[1:]:
-        if len(p) != size:
-            raise TwoPointCounterError('All position arrays should be of the same size')
-        if p.dtype != dtype:
-            raise TwoPointCounterError('All position arrays should be of the same type, you can e.g. provide dtype')
-    if position_type != 'auto' and len(positions) != len(position_type):
-        raise TwoPointCounterError('For position type = {}, please provide a list of {:d} arrays for positions'.format(position_type, len(position_type)))
+        size = len(positions[0])
+        dtype = positions[0].dtype
+        if not np.issubdtype(dtype, np.floating):
+            return None, 'Input position arrays should be of floating type, not {}'.format(dtype)
+        for p in positions[1:]:
+            if len(p) != size:
+                return None, 'All position arrays should be of the same size'
+            if p.dtype != dtype:
+                return None, 'All position arrays should be of the same type, you can e.g. provide dtype'
+        if position_type != 'auto' and len(positions) != len(position_type):
+            return None, 'For position type = {}, please provide a list of {:d} arrays for positions (found {:d})'.format(position_type, len(position_type), len(positions))
 
-    if mode == 'theta':
-        if position_type == 'xyz':
-            positions = utils.cartesian_to_sky(positions, degree=True)[:2]
-        elif position_type in ['rdd', 'rdz']:
-            positions = list(positions)[:2]
-        elif position_type != 'rd':
-            raise TwoPointCounterError('For mode = {}, position type should be one of ["xyz", "rdz", "rd"]'.format(mode))
+        if mode in ['theta', 'angular']:
+            if position_type == 'xyz':
+                positions = utils.cartesian_to_sky(positions, degree=True)[:2]
+            elif position_type in ['rdd', 'rdz']:
+                positions = list(positions)[:2]
+            elif position_type != 'rd':
+                return None, 'For mode = {}, position type should be one of ["xyz", "rdz", "rd"]'.format(mode)
+        else:
+            if position_type == 'rdd':
+                positions = utils.sky_to_cartesian(positions, degree=True)
+            elif position_type != 'xyz':
+                return None, 'For mode = {}, position type should be one of ["pos", "xyz", "rdd"]'.format(mode)
+        return positions, None
+
+    error = None
+    if positions is not None and not all(position is None for position in positions):
+        positions, error = __format_positions(positions) # return error separately to raise on all processes
+    if mpicomm is not None:
+        error = mpicomm.allgather(error)
     else:
-        if position_type == 'rdd':
-            positions = utils.sky_to_cartesian(positions, degree=True)
-        elif position_type != 'xyz':
-            raise TwoPointCounterError('For mode = {}, position type should be one of ["xyz", "rdd"]'.format(mode))
-
+        error = [error]
+    errors = [err for err in error if err is not None]
+    if errors:
+        raise TwoPointCounterError(errors[0])
+    if mpiroot is not None and mpicomm.bcast(positions is not None if mpicomm.rank == mpiroot else None, root=mpiroot):
+        n = mpicomm.bcast(len(positions) if mpicomm.rank == mpiroot else None, root=mpiroot)
+        if mpicomm.rank != mpiroot: positions = [None]*n
+        positions = [get_mpi().scatter_array(position, mpicomm=mpicomm, root=mpiroot) for position in positions]
     return positions
 
 
-def _format_weights(weights, weight_type='auto', size=None, dtype=None):
+def _format_weights(weights, weight_type='auto', size=None, dtype=None, mpicomm=None, mpiroot=None):
     # Format input weights, as a list of n_bitwise_weights uint8 arrays, and optionally a float array for individual weights.
     # Return formated list of weights, and n_bitwise_weights.
-    if weights is None or all(weight is None for weight in weights):
-        return [], 0
-    if np.ndim(weights[0]) == 0:
-        weights = [weights]
-    individual_weights = []
-    bitwise_weights = []
-    for weight in weights:
-        if size is not None and len(weight) != size:
-            raise PairCounterError('All weight arrays should be of the same size as position arrays')
-        if np.issubdtype(weight.dtype, np.integer):
-            if weight_type == 'product_individual': # enforce float individual weight
-                individual_weights.append(weight)
-            else: # certainly bitwise weight
-                bitwise_weights.append(weight)
-        else:
-            individual_weights.append(weight)
-    # any integer array bit size will be a multiple of 8
-    bitwise_weights = utils.reformat_bitarrays(*bitwise_weights, dtype=np.uint8)
-    n_bitwise_weights = len(bitwise_weights)
-    weights = bitwise_weights
-    if individual_weights:
-        weights += [np.prod(individual_weights, axis=0, dtype=dtype)]
+
+    def __format_weights(weights, weight_type=weight_type, dtype=dtype):
+        if weights is None or all(weight is None for weight in weights):
+            return [], 0
+        if np.ndim(weights[0]) == 0:
+            weights = [weights]
+        individual_weights = []
+        bitwise_weights = []
+        for w in weights:
+            if np.issubdtype(w.dtype, np.integer):
+                if weight_type == 'product_individual': # enforce float individual weight
+                    individual_weights.append(w)
+                else: # certainly bitwise weight
+                    bitwise_weights.append(w)
+            else:
+                individual_weights.append(w)
+        # any integer array bit size will be a multiple of 8
+        bitwise_weights = utils.reformat_bitarrays(*bitwise_weights, dtype=np.uint8)
+        n_bitwise_weights = len(bitwise_weights)
+        weights = bitwise_weights
+        if individual_weights:
+            weights += [np.prod(individual_weights, axis=0, dtype=dtype)]
+        return weights, n_bitwise_weights
+
+    weights, n_bitwise_weights = __format_weights(weights)
+    if mpiroot is not None and mpicomm.bcast(weights is not None if mpicomm.rank == mpiroot else None, root=mpiroot):
+        n = mpicomm.bcast(len(weights) if mpicomm.rank == mpiroot else None, root=mpiroot)
+        if mpicomm.rank != mpiroot: weights = [None]*n
+        weights = [get_mpi().scatter_array(weight, mpicomm=mpicomm, root=mpiroot) for weight in weights]
+        n_bitwise_weights = mpicomm.bcast(n_bitwise_weights, root=mpiroot)
+
+    if size is not None:
+        if not all(len(weight) == size for weight in weights):
+            raise TwoPointCounterError('All weight arrays should be of the same size as position arrays')
     return weights, n_bitwise_weights
 
 
 class BaseTwoPointCounter(BaseClass):
     """
     Base class for two-point counters.
-    Extend this class to implement a new pair counter engine.
+    Extend this class to implement a new two-point counter engine.
 
     Attributes
     ----------
@@ -209,23 +255,23 @@ class BaseTwoPointCounter(BaseClass):
         Array of separation values.
 
     wcounts : array
-        (Optionally weighted) pair counts.
+        (Optionally weighted) two-point counts.
 
     wnorm : float
-        Pair count normalization.
+        Two-point count normalization.
     """
     def __init__(self, mode, edges, positions1, positions2=None, weights1=None, weights2=None,
-                bin_type='auto', position_type='auto', weight_type='auto', weight_attrs=None,
-                twopoint_weights=None, los='midpoint', boxsize=None, compute_sepavg=True, dtype=None,
-                nthreads=None, mpicomm=None, **kwargs):
+                 bin_type='auto', position_type='auto', weight_type='auto', weight_attrs=None,
+                 twopoint_weights=None, los='midpoint', boxsize=None, compute_sepavg=True, dtype=None,
+                 nthreads=None, mpicomm=None, mpiroot=None, **kwargs):
         r"""
-        Initialize :class:`BaseTwoPointCounter`, and run actual pair counts
+        Initialize :class:`BaseTwoPointCounter`, and run actual two-point counts
         (calling :meth:`run`), setting :attr:`wcounts` and :attr:`sep`.
 
         Parameters
         ----------
         mode : string
-            Type of pair counts, one of:
+            Type of two-point counts, one of:
 
                 - "theta": as a function of angle (in degree) between two particles
                 - "s": as a function of distance between two particles
@@ -241,16 +287,17 @@ class BaseTwoPointCounter(BaseClass):
 
         positions1 : list, array
             Positions in the first catalog. Typically of shape (3, N), but can be (2, N) when ``mode`` is "theta".
+            See ``position_type``.
 
         positions2 : list, array, default=None
-            Optionally, for cross-pair counts, positions in the second catalog. See ``positions1``.
+            Optionally, for cross-two-point counts, positions in the second catalog. See ``positions1``.
 
         weights1 : array, list, default=None
             Weights of the first catalog. Not required if ``weight_type`` is either ``None`` or "auto".
             See ``weight_type``.
 
         weights2 : array, list, default=None
-            Optionally, for cross-pair counts, weights in the second catalog. See ``weights1``.
+            Optionally, for cross-two-point counts, weights in the second catalog. See ``weights1``.
 
         bin_type : string, default='auto'
             Binning type for first dimension, e.g. :math:`r_{p}` when ``mode`` is "rppi".
@@ -271,7 +318,8 @@ class BaseTwoPointCounter(BaseClass):
 
                 - "rd": RA/Dec in degree, only if ``mode`` is "theta"
                 - "rdd": RA/Dec in degree, distance, for any ``mode``
-                - "xyz": Cartesian positions
+                - "xyz": Cartesian positions, shape (3, N)
+                - "pos": Cartesian positions, shape (N, 3).
 
         weight_type : string, default='auto'
             The type of weighting to apply to provided weights. One of:
@@ -319,44 +367,57 @@ class BaseTwoPointCounter(BaseClass):
 
         compute_sepavg : bool, default=True
             Set to ``False`` to *not* calculate the average separation for each bin.
-            This can make the pair counts faster if ``bin_type`` is "custom".
+            This can make the two-point counts faster if ``bin_type`` is "custom".
             In this case, :attr:`sep` will be set the midpoint of input edges.
 
         dtype : string, np.dtype, default=None
             Array type for positions and weights.
             If ``None``, defaults to type of first ``positions1`` array.
 
-        nthreads : int
+        nthreads : int, default=None
             Number of OpenMP threads to use.
 
         mpicomm : MPI communicator, default=None
-            The MPI communicator, if input positions and weights are MPI-scattered.
+            The MPI communicator, to MPI-distribute calculation.
+
+        mpiroot : int, default=None
+            In case ``mpicomm`` is provided, if ``None``, input positions and weights are assumed to be scattered across all ranks.
+            Else the MPI rank where input positions and weights are gathered.
 
         kwargs : dict
-            Pair counter engine-specific options.
+            Two-point counter engine-specific options.
         """
         self.mode = mode.lower()
         self.nthreads = nthreads
         if nthreads is None:
             self.nthreads = int(os.getenv('OMP_NUM_THREADS','1'))
         self.mpicomm = mpicomm
-        self._set_positions(positions1, positions2, position_type=position_type, dtype=dtype)
-        self._set_weights(weights1, weights2, weight_type=weight_type, twopoint_weights=twopoint_weights, weight_attrs=weight_attrs)
+        if self.mpicomm is None and mpiroot is not None:
+            raise TwoPointCounterError('mpiroot is not None, but no mpicomm provided')
+        self._set_positions(positions1, positions2, position_type=position_type, dtype=dtype, mpiroot=mpiroot)
+        self._set_weights(weights1, weights2, weight_type=weight_type, twopoint_weights=twopoint_weights, weight_attrs=weight_attrs, mpiroot=mpiroot)
         self._set_edges(edges, bin_type=bin_type)
         self._set_boxsize(boxsize)
         self._set_los(los)
         self.compute_sepavg = compute_sepavg
         self.attrs = kwargs
         self.wnorm = self.normalization()
-        self._set_default_separation()
-        self.run()
+        self._set_zeros()
+        if self.size1 * self.size2:
+            self.run()
+        del self.positions1, self.positions2, self.weights1, self.weights2
 
     def run(self):
         """
-        Method that computes the actual pair counts and set :attr:`wcounts` and :attr:`sep`,
+        Method that computes the actual two-point counts and set :attr:`wcounts` and :attr:`sep`,
         to be implemented in your new engine.
         """
         raise NotImplementedError('Implement method "run" in your {}'.format(self.__class__.__name__))
+
+    def _set_zeros(self):
+        self._set_default_separation()
+        self.wcounts = np.zeros_like(self.sep)
+        self.ncounts = np.zeros_like(self.sep, dtype='i8')
 
     def _set_edges(self, edges, bin_type='auto'):
         if np.ndim(edges[0]) == 0:
@@ -364,10 +425,10 @@ class BaseTwoPointCounter(BaseClass):
         self.edges = [np.array(edge, dtype='f8') for edge in edges]
         if self.mode in ['smu','rppi']:
             if not self.ndim == 2:
-                raise TwoPointCounterError('A tuple of edges should be provided to pair counter in mode {}'.format(self.mode))
+                raise TwoPointCounterError('A tuple of edges should be provided to two-point counter in mode {}'.format(self.mode))
         else:
             if not self.ndim == 1:
-                raise TwoPointCounterError('Only one edge array should be provided to pair counter in mode {}'.format(self.mode))
+                raise TwoPointCounterError('Only one edge array should be provided to two-point counter in mode {}'.format(self.mode))
         self._set_bin_type(bin_type)
 
     def _set_bin_type(self, bin_type):
@@ -382,7 +443,7 @@ class BaseTwoPointCounter(BaseClass):
 
     @property
     def shape(self):
-        """Return shape of obtained pair counts :attr:`wcounts`."""
+        """Return shape of obtained counts :attr:`wcounts`."""
         return tuple(len(edges) - 1 for edges in self.edges)
 
     @property
@@ -401,28 +462,18 @@ class BaseTwoPointCounter(BaseClass):
         if not hasattr(self, 'mpicomm'): self.mpicomm = None
         return self.mpicomm is not None and self.mpicomm.size > 1
 
-    def _set_positions(self, positions1, positions2=None, position_type='auto', dtype=None):
-        position_type = position_type.lower()
-        if position_type == 'auto':
-            if self.mode == 'theta': position_type = 'rd'
-            else: position_type = 'xyz'
-        self.position_type = position_type
-
-        self.positions1 = _format_positions(positions1, position_type=self.position_type, mode=self.mode, dtype=dtype)
+    def _set_positions(self, positions1, positions2=None, position_type='auto', dtype=None, mpiroot=None):
+        self.positions1 = _format_positions(positions1, mode=self.mode, position_type=position_type, dtype=dtype, mpicomm=self.mpicomm, mpiroot=mpiroot)
+        self.positions2 = _format_positions(positions2, mode=self.mode, position_type=position_type, dtype=dtype, mpicomm=self.mpicomm, mpiroot=mpiroot)
+        self.autocorr = self.positions2 is None
         self.dtype = self.positions1[0].dtype
-
-        self.autocorr = positions2 is None
-        if self.autocorr:
-            self.positions2 = None
-        else:
-            self.positions2 =  _format_positions(positions2, position_type=self.position_type, mode=self.mode, dtype=self.dtype)
 
         self.size1 = self.size2 = len(self.positions1[0])
         if not self.autocorr: self.size2 = len(self.positions2[0])
         if self.with_mpi:
             self.size1, self.size2 = self.mpicomm.allreduce(self.size1), self.mpicomm.allreduce(self.size2)
 
-    def _set_weights(self, weights1, weights2=None, weight_type='auto', twopoint_weights=None, weight_attrs=None):
+    def _set_weights(self, weights1, weights2=None, weight_type='auto', twopoint_weights=None, weight_attrs=None, mpiroot=None):
 
         if weight_type is not None: weight_type = weight_type.lower()
         allowed_weight_types = [None, 'auto', 'product_individual', 'inverse_bitwise']
@@ -444,7 +495,7 @@ class BaseTwoPointCounter(BaseClass):
             default_value = weight_attrs.get('default_value', 0.)
             self.weight_attrs.update(noffset=noffset, default_value=default_value)
 
-            self.weights1, n_bitwise_weights1 = _format_weights(weights1, weight_type=self.weight_type, size=len(self.positions1[0]), dtype=self.dtype)
+            self.weights1, n_bitwise_weights1 = _format_weights(weights1, weight_type=self.weight_type, size=len(self.positions1[0]), dtype=self.dtype, mpicomm=self.mpicomm, mpiroot=mpiroot)
 
             def get_nrealizations(n_bitwise_weights):
                 nrealizations = weight_attrs.get('nrealizations', None)
@@ -460,7 +511,7 @@ class BaseTwoPointCounter(BaseClass):
                 self.n_bitwise_weights = n_bitwise_weights1
 
             else:
-                self.weights2, n_bitwise_weights2 = _format_weights(weights2, weight_type=self.weight_type, size=len(self.positions2[0]), dtype=self.dtype)
+                self.weights2, n_bitwise_weights2 = _format_weights(weights2, weight_type=self.weight_type, size=len(self.positions2[0]), dtype=self.dtype, mpicomm=self.mpicomm, mpiroot=mpiroot)
 
                 if n_bitwise_weights2 == n_bitwise_weights1:
 
@@ -496,6 +547,7 @@ class BaseTwoPointCounter(BaseClass):
             raise ValueError('Something fishy happened with weights; number of weights1/weights2 is {:d}/{:d}'.format(len(self.weights1),len(self.weights2)))
 
         self.twopoint_weights = twopoint_weights
+        self.cos_twopoint_weights = None
         if twopoint_weights is not None:
             from collections import namedtuple
             TwoPointWeight = namedtuple('TwoPointWeight', ['sep', 'weight'])
@@ -509,8 +561,8 @@ class BaseTwoPointCounter(BaseClass):
                 except IndexError:
                     sep, weight = twopoint_weights
             # just to make sure we use the correct dtype
-            self.twopoint_weights = TwoPointWeight(sep=np.cos(np.radians(sep[::-1]), dtype=self.dtype),
-                                                   weight=np.array(weight[::-1], dtype=self.dtype))
+            self.cos_twopoint_weights = TwoPointWeight(sep=np.cos(np.radians(sep[::-1]), dtype=self.dtype),
+                                                       weight=np.array(weight[::-1], dtype=self.dtype))
 
     def _mpi_decompose(self):
         if self.with_mpi:
@@ -521,9 +573,8 @@ class BaseTwoPointCounter(BaseClass):
                 smoothing = np.sqrt(smoothing**2 + np.max(self.edges[1])**2)
             elif self.mode == 'rp':
                 smoothing = np.inf
-            from . import mpi
-            return mpi.domain_decompose(self.mpicomm, smoothing, self.positions1, weights1=self.weights1,
-                                        positions2=self.positions2, weights2=self.weights2, boxsize=self.boxsize)
+            return get_mpi().domain_decompose(self.mpicomm, smoothing, self.positions1, weights1=self.weights1,
+                                              positions2=self.positions2, weights2=self.weights2, boxsize=self.boxsize)
         return (self.positions1, self.weights1), (self.positions2, self.weights2)
 
     def _set_default_separation(self):
@@ -547,7 +598,7 @@ class BaseTwoPointCounter(BaseClass):
 
     def normalization(self):
         r"""
-        Return pair count normalization, i.e., in case of cross-correlation:
+        Return two-point count normalization, i.e., in case of cross-correlation:
 
         .. math::
 
@@ -621,12 +672,12 @@ class BaseTwoPointCounter(BaseClass):
         self.seps[0] = sep
 
     def normalized_wcounts(self):
-        """Return normalized pair counts, i.e. :attr:`wcounts` divided by :meth:`normalization`."""
+        """Return normalized two-point counts, i.e. :attr:`wcounts` divided by :meth:`normalization`."""
         return self.wcounts/self.wnorm
 
     def rebin(self, factor=1):
         """
-        Rebin pair counts, by factor(s) ``factor``.
+        Rebin two-point counts, by factor(s) ``factor``.
         A tuple must be provided in case :attr:`ndim` is greater than 1.
         Input factors must divide :attr:`shape`.
         """
@@ -637,19 +688,24 @@ class BaseTwoPointCounter(BaseClass):
         new_shape = tuple(s//f for s,f in zip(self.shape, factor))
         wcounts = self.wcounts
         self.wcounts = utils.rebin(wcounts, new_shape, statistic=np.sum)
-        self.seps = [utils.rebin(sep*wcounts, new_shape, statistic=np.sum)/self.wcounts for sep in self.seps]
+        if hasattr(self, 'ncounts'):
+            self.ncounts = utils.rebin(self.ncounts, new_shape, statistic=np.sum)
         self.edges = [edges[::f] for edges, f in zip(self.edges, factor)]
+        if self.compute_sepavg:
+            self.seps = [utils.rebin(_nan_to_zero(sep)*wcounts, new_shape, statistic=np.sum)/self.wcounts for sep in self.seps]
+        else:
+            self._set_default_separation()
 
     def __getstate__(self):
         state = {}
-        for name in ['name', 'autocorr', 'seps', 'npairs', 'wcounts', 'wnorm', 'size1', 'size2', 'edges', 'mode', 'bin_type',
+        for name in ['name', 'autocorr', 'seps', 'ncounts', 'wcounts', 'wnorm', 'size1', 'size2', 'edges', 'mode', 'bin_type',
                      'boxsize', 'los', 'compute_sepavg', 'weight_attrs', 'attrs']:
             if hasattr(self, name):
                 state[name] = getattr(self, name)
         return state
 
     def save(self, filename):
-        """Save pair counts to ``filename``."""
+        """Save two-point counts to ``filename``."""
         if not self.with_mpi or self.mpicomm.rank == 0:
             super(BaseTwoPointCounter, self).save(filename)
         if self.with_mpi:
@@ -658,7 +714,7 @@ class BaseTwoPointCounter(BaseClass):
 
 class AnalyticTwoPointCounter(BaseTwoPointCounter):
     """
-    Analytic pair counter. Assume periodic wrapping and no data weights.
+    Analytic two-point counter. Assume periodic wrapping and no data weights.
 
     Attributes
     ----------
@@ -666,7 +722,7 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
         Array of separation values.
 
     wcounts : array
-        Analytical pair counts.
+        Analytical two-point counts.
     """
     name = 'analytic'
 
@@ -677,11 +733,11 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
         Parameters
         ----------
         mode : string
-            Pair counting mode, one of:
+            Two-point counting mode, one of:
 
-                - "s": pair counts as a function of distance between two particles
-                - "smu": pair counts as a function of distance between two particles and cosine angle :math:`\mu` w.r.t. the line-of-sight
-                - "rppi": pair counts as a function of distance transverse (:math:`r_{p}`) and parallel (:math:`\pi`) to the line-of-sight
+                - "s": two-point counts as a function of distance between two particles
+                - "smu": two-point counts as a function of distance between two particles and cosine angle :math:`\mu` w.r.t. the line-of-sight
+                - "rppi": two-point counts as a function of distance transverse (:math:`r_{p}`) and parallel (:math:`\pi`) to the line-of-sight
                 - "rp": same as "rppi", without binning in :math:`\pi`
 
         edges : tuple, array
@@ -693,11 +749,11 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
         boxsize : array, float
             The side-length(s) of the periodic cube.
 
-        size1 : int, default=10
+        size1 : int, default=2
             Length of the first catalog.
 
         size2 : int, default=None
-            Optionally, for cross-pair counts, length of second catalog.
+            Optionally, for cross-two-point counts, length of second catalog.
 
         los : string, default='z'
             Line-of-sight to be used when ``mode`` is "rp", in case of non-cubic box;
@@ -716,7 +772,7 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
         self.wnorm = self.normalization()
 
     def run(self):
-        """Set analytical pair counts."""
+        """Set analytical two-point counts."""
         if self.mode == 's':
             v = 4./3. * np.pi * self.edges[0]**3
             dv = np.diff(v, axis=0)
@@ -732,12 +788,12 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
             v = np.pi * self.edges[0][:,None]**2 * self.boxsize['xyz'.index(self.los)]
             dv = np.diff(v, axis=0)
         else:
-            raise PairCounterError('No analytic randoms provided for mode {}'.format(self.mode))
+            raise TwoPointCounterError('No analytic randoms provided for mode {}'.format(self.mode))
         self.wcounts = self.normalization()*dv/self.boxsize.prod()
 
     def normalization(self):
         """
-        Return pair count normalization, i.e., in case of cross-correlation ``size1 * size2``,
+        Return two-point count normalization, i.e., in case of cross-correlation ``size1 * size2``,
         and in case of auto-correlation ``size1 * (size1 - 1)``.
         """
         if self.autocorr:

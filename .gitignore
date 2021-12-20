@@ -15,6 +15,7 @@ doc/_build/
 **/_catalogs
 **/.ipynb_checkpoints
 **/bak
+**/_tests
 
 # Unit test / coverage reports
 **/.coverage

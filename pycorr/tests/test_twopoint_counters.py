@@ -140,11 +140,11 @@ def ref_rp(edges, *args, **kwargs):
     return ref_rppi((edges,[0,np.inf]), *args, **kwargs).flatten()
 
 
-def generate_catalogs(size=100, boxsize=(1000,)*3, n_individual_weights=1, n_bitwise_weights=0, seed=42):
+def generate_catalogs(size=100, boxsize=(1000,)*3, offset=(1000.,0,0), n_individual_weights=1, n_bitwise_weights=0, seed=42):
     rng = np.random.RandomState(seed=seed)
     toret = []
     for i in range(2):
-        positions = [rng.uniform(0., 1., size)*b for b in boxsize]
+        positions = [o + rng.uniform(0., 1., size)*b for o, b in zip(offset, boxsize)]
         weights = utils.pack_bitarrays(*[rng.randint(0, 2, size) for i in range(64*n_bitwise_weights)], dtype=np.uint64)
         #weights = utils.pack_bitarrays(*[rng.randint(0, 2, size) for i in range(33)], dtype=np.uint64)
         #weights = [rng.randint(0, 0xffffffff, size, dtype=np.uint64) for i in range(n_bitwise_weights)]
@@ -154,6 +154,7 @@ def generate_catalogs(size=100, boxsize=(1000,)*3, n_individual_weights=1, n_bit
 
 
 def test_twopoint_counter(mode='s'):
+
     ref_func = {'theta':ref_theta, 's':ref_s, 'smu':ref_smu, 'rppi':ref_rppi, 'rp':ref_rp}[mode]
     list_engine = ['corrfunc']
     edges = np.linspace(1,100,11)
@@ -164,33 +165,35 @@ def test_twopoint_counter(mode='s'):
     if mode not in ['theta', 'rp']:
         list_options.append({'boxsize':boxsize})
         list_options.append({'autocorr':True, 'boxsize':boxsize})
+
     list_options.append({'autocorr':True})
     list_options.append({'n_individual_weights':1, 'bin_type':'custom'})
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1})
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'iip':1, 'dtype':'f4'})
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'bitwise_type': 'i4', 'iip':1})
     list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'position_type':'rdd', 'weight_attrs':{'nrealizations':42,'noffset':3}})
+
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':2, 'iip':2, 'weight_attrs':{'noffset':0,'default_value':0.8}})
     if mode == 'theta':
         list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'position_type':'rd'})
+
     from collections import namedtuple
     TwoPointWeight = namedtuple('TwoPointWeight', ['sep', 'weight'])
     twopoint_weights = TwoPointWeight(np.logspace(-4, 0, 40), np.linspace(4., 1., 40))
     #list_options.append({'autocorr':True, 'twopoint_weights':twopoint_weights})
     list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'dtype':'f4'})
-    has_mpi = True
+
+    mpi = False
     try:
-        import mpi4py
-        import pmesh
-    except ImportError:
-        has_mpi = False
-    if has_mpi:
         from pycorr import mpi
+    except ImportError:
+        pass
+    if mpi:
         print('Has MPI')
         list_options.append({'mpicomm':mpi.COMM_WORLD})
         list_options.append({'n_individual_weights':1, 'mpicomm':mpi.COMM_WORLD})
         list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'mpicomm':mpi.COMM_WORLD})
-    #list_options.append({'weight_type':'inverse_bitwise','n_bitwise_weights':2})
+
     if mode == 'smu':
         edges = (edges, np.linspace(0,1,101))
     elif mode == 'rppi':
@@ -263,7 +266,7 @@ def test_twopoint_counter(mode='s'):
             if twopoint_weights is not None:
                 twopoint_weights = TwoPointWeight(np.cos(np.radians(twopoint_weights.sep[::-1], dtype=dtype)), np.asarray(twopoint_weights.weight[::-1], dtype=dtype))
 
-            ref = ref_func(edges, refdata1, data2=None if autocorr else refdata2, n_bitwise_weights=n_bitwise_weights, twopoint_weights=twopoint_weights, **refoptions, **weight_attrs)
+            wcounts_ref = ref_func(edges, refdata1, data2=None if autocorr else refdata2, n_bitwise_weights=n_bitwise_weights, twopoint_weights=twopoint_weights, **refoptions, **weight_attrs)
 
             if bitwise_type is not None and n_bitwise_weights > 0:
 
@@ -289,9 +292,9 @@ def test_twopoint_counter(mode='s'):
                 data1 = update_pos_type(data1)
                 data2 = update_pos_type(data2)
 
-            def run(**kwargs):
-                return TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:npos], positions2=None if autocorr else data2[:npos],
-                                       weights1=data1[npos:], weights2=None if autocorr else data2[npos:], position_type=position_type, bin_type=bin_type,
+            def run(pass_none=False, **kwargs):
+                return TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=None if pass_none else data1[:npos], positions2=None if pass_none or autocorr else data2[:npos],
+                                       weights1=None if pass_none else data1[npos:], weights2=None if pass_none or autocorr else data2[npos:], position_type=position_type, bin_type=bin_type,
                                        dtype=dtype, **kwargs, **options)
 
             test = run()
@@ -300,36 +303,38 @@ def test_twopoint_counter(mode='s'):
                 if n_individual_weights == 0:
                     size1, size2 = len(refdata1[0]), len(refdata2[0])
                     if autocorr:
-                        refnorm = size1**2 - size1
+                        norm_ref = size1**2 - size1
                     else:
-                        refnorm = size1*size2
+                        norm_ref = size1*size2
                 else:
                     w1 = np.prod(refdata1[3:], axis=0)
                     w2 = np.prod(refdata2[3:], axis=0)
                     if autocorr:
-                        refnorm = np.sum(w1)**2 - np.sum(w1**2)
+                        norm_ref = np.sum(w1)**2 - np.sum(w1**2)
                     else:
-                        refnorm = np.sum(w1)*np.sum(w2)
+                        norm_ref = np.sum(w1)*np.sum(w2)
             else:
-                refnorm = test.wnorm # too lazy to recode
+                norm_ref = test.wnorm # too lazy to recode
 
-            assert np.allclose(test.wnorm, refnorm, **tol)
-            assert np.allclose(test.wcounts, ref, **tol)
+            assert np.allclose(test.wnorm, norm_ref, **tol)
+            assert np.allclose(test.wcounts, wcounts_ref, **tol)
 
             with tempfile.TemporaryDirectory() as tmp_dir:
                 fn = os.path.join(tmp_dir, 'tmp.npy')
                 test.save(fn)
                 test2 = TwoPointCounter.load(fn)
-                assert np.allclose(test2.wcounts, ref, **tol)
-                assert np.allclose(test2.wnorm, refnorm, **tol)
+                assert np.allclose(test2.wcounts, wcounts_ref, **tol)
+                assert np.allclose(test2.wnorm, norm_ref, **tol)
                 assert np.allclose(test2.size1, test.size1) and np.allclose(test2.size2, test.size2)
                 test2.rebin((2,2) if len(edges) == 2 else (2,))
-                assert np.allclose(np.sum(test2.wcounts), np.sum(ref))
+                assert np.allclose(np.sum(test2.wcounts), np.sum(wcounts_ref), **tol)
 
             if mpicomm is not None:
+                test_mpi = run(mpicomm=mpicomm, pass_none=mpicomm.rank != 0, mpiroot=0)
+                assert np.allclose(test_mpi.wcounts, test.wcounts, **tol)
+                assert np.allclose(test_mpi.wnorm, test.wnorm, **tol)
                 data1 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data1]
                 data2 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data2]
-
                 test_mpi = run(mpicomm=mpicomm)
                 assert np.allclose(test_mpi.wcounts, test.wcounts, **tol)
                 assert np.allclose(test_mpi.wnorm, test.wnorm, **tol)
@@ -369,15 +374,15 @@ def test_analytic_twopoint_counter(mode='s'):
         autocorr = options.pop('autocorr', False)
         data1, data2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=0, n_bitwise_weights=0)
         ref = TwoPointCounter(mode=mode, edges=edges, positions1=data1[:3], positions2=None if autocorr else data2[:3],
-                               weights1=None, weights2=None, position_type='xyz', boxsize=boxsize, los='z', **options).wcounts
+                               weights1=None, weights2=None, position_type='xyz', boxsize=boxsize, los='z', **options)
         test = AnalyticTwoPointCounter(mode, edges, boxsize, size1=len(data1[0]), size2=None if autocorr else len(data2[0]))
-        ratio = np.absolute(test.wcounts/ref - 1)
+        ratio = np.absolute(test.wcounts/ref.wcounts - 1)
         assert np.all(ratio < 0.1)
         with tempfile.TemporaryDirectory() as tmp_dir:
             fn = os.path.join(tmp_dir, 'tmp.npy')
             test.save(fn)
             test = TwoPointCounter.load(fn)
-            ratio = np.absolute(test.wcounts/ref - 1)
+            ratio = np.absolute(test.wcounts/ref.wcounts - 1)
             assert np.all(ratio < 0.1)
             ref = test.copy()
             test.rebin((2,2) if len(edges) == 2 else (2,))
