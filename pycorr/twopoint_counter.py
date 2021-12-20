@@ -21,8 +21,7 @@ class TwoPointCounterError(Exception):
 
 def get_twopoint_counter(engine='corrfunc'):
     """
-    Return :class:`BaseTwoPointCounter`-subclass corresponding
-    to input engine name.
+    Return :class:`BaseTwoPointCounter`-subclass corresponding to input engine name.
 
     Parameters
     ----------
@@ -251,9 +250,6 @@ class BaseTwoPointCounter(BaseClass):
 
     Attributes
     ----------
-    sep : array
-        Array of separation values.
-
     wcounts : array
         (Optionally weighted) two-point counts.
 
@@ -718,9 +714,6 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
 
     Attributes
     ----------
-    sep : array
-        Array of separation values.
-
     wcounts : array
         Analytical two-point counts.
     """

@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(name='pycorr',
       version='0.0.1',
-      author='Arnaud de Mattia',
+      author='cosmodesi',
       author_email='',
       description='Estimation of correlation functions',
       license='BSD3',

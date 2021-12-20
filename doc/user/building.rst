@@ -10,7 +10,7 @@ Strict requirements are:
   - numpy
   - scipy
 
-To use Corrfunc as pair-counting engine (only engine linked so far):
+To use Corrfunc as two-point counter engine (only engine linked so far):
 
   - git+https://github.com/adematti/Corrfunc@pipweights
 
@@ -21,11 +21,11 @@ To perform MPI parallelization:
 
 pip
 ---
-To install **pycorr** alone (without pair counter engine, so fairly useless), simply run::
+To install **pycorr** alone (without two-point counter engine, so fairly useless), simply run::
 
   python -m pip install git+https://github.com/cosmodesi/pycorr
 
-Corrfunc is currently the only pair counter engine implemented. We currently use a branch of Corrfunc,
+Corrfunc is currently the only two-point counter engine implemented. We currently use a branch of Corrfunc,
 located `here <https://github.com/adematti/Corrfunc/tree/pipweights>`_.
 Uninstall previous Corrfunc version (if any)::
 

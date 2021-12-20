@@ -27,15 +27,15 @@ Welcome to pycorr's documentation!
 Introduction
 ************
 
-**pycorr** is a wrapper for correlation function estimation, designed to handle different pair counter engines (currently only Corrfunc).
+**pycorr** is a wrapper for correlation function estimation, designed to handle different two-point counter engines (currently only Corrfunc).
 It currently supports:
 
   - theta (angular), s, s-mu, rp-pi binning schemes
-  - analytical pair counts with periodic boundary conditions
+  - analytical two-point counts with periodic boundary conditions
   - inverse bitwise weights (in any integer format) and (angular) upweighting
   - MPI parallelization (further requires mpi4py and pmesh)
 
-A typicall auto-correlation function estimation is as simple as:
+A typical auto-correlation function estimation is as simple as:
 
 .. code-block:: python
 
@@ -58,11 +58,13 @@ Code structure
 
 The code structure is the following:
 
-  - pair_counter.py implements the base pair counter class
-  - estimator.py implements correlation function estimators based on pair counts
+  - twopoint_counter.py implements the base two-point counter class
+  - twopoint_estimator.py implements correlation function estimators based on two-point counts
   - correlation_function.py implements high-level interface for correlation function estimation
+  - twopoint_jackknife.py implements jackknife two-point counts
   - utils.py implements various utilities
-  - a module for each pair-counting engine
+  - mpi.py implements MPI-related utilities
+  - a module for each two-point counter engine
 
 
 Changelog

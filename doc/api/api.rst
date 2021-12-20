@@ -12,22 +12,29 @@ High-level correlation function interface
 Correlation function estimators
 -------------------------------
 
-.. automodule:: pycorr.estimator
+.. automodule:: pycorr.twopoint_estimator
   :members:
   :inherited-members:
   :show-inheritance:
 
-Base pair-counting class
-------------------------
+Base two-point counter class
+----------------------------
 
-.. automodule:: pycorr.pair_counter
+.. automodule:: pycorr.twopoint_counter
   :members:
   :inherited-members:
   :show-inheritance:
 
+Jackknife two-point counter class
+---------------------------------
 
-Corrfunc pair counter
----------------------
+.. automodule:: pycorr.twopoint_jackknife
+  :members:
+  :inherited-members:
+  :show-inheritance:
+
+Corrfunc two-point counter
+--------------------------
 
 .. automodule:: pycorr.corrfunc
   :members:
@@ -38,6 +45,14 @@ Utilities
 ---------
 
 .. automodule:: pycorr.utils
+  :members:
+  :inherited-members:
+  :show-inheritance:
+
+MPI
+---
+
+.. automodule:: pycorr.mpi
   :members:
   :inherited-members:
   :show-inheritance:
