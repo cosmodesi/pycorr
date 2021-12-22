@@ -4,7 +4,7 @@ import tempfile
 import numpy as np
 
 from pycorr import TwoPointCorrelationFunction, TwoPointEstimator, TwoPointCounter,\
-                   JacknifeTwoPointEstimator, project_to_multipoles, project_to_wp, setup_logging
+                   JackknifeTwoPointEstimator, project_to_multipoles, project_to_wp, setup_logging
 
 
 def generate_catalogs(size=100, boxsize=(1000,)*3, offset=(0,0,0), n_individual_weights=1, n_bitwise_weights=0, seed=42):
@@ -141,7 +141,7 @@ def test_estimator(mode='s'):
                 assert estimator_jacknife.cov().shape == (estimator_jacknife.shape[0],)*2
 
             nsplits = 10
-            estimator_jacknife = JacknifeTwoPointEstimator.concatenate(*[run_jacknife(samples=samples) for samples in np.array_split(np.unique(data1[-1]), nsplits)])
+            estimator_jacknife = JackknifeTwoPointEstimator.concatenate(*[run_jacknife(samples=samples) for samples in np.array_split(np.unique(data1[-1]), nsplits)])
             assert_allclose_estimators(estimator_jacknife, estimator_nojacknife)
 
             ii = data1[-1][0]

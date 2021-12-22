@@ -79,6 +79,7 @@ def test_twopoint_counter(mode='s'):
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'iip':1, 'dtype':'f4'})
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'bitwise_type': 'i4', 'iip':1})
     list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'position_type':'rdd', 'weight_attrs':{'nrealizations':42,'noffset':3}})
+    list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'position_type':'pos', 'weight_attrs':{'nrealizations':42,'noffset':3}})
 
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':2, 'iip':2, 'weight_attrs':{'noffset':0,'default_value':0.8}})
     if mode == 'theta':
@@ -170,20 +171,20 @@ def test_twopoint_counter(mode='s'):
                 data1 = update_bit_type(data1)
                 data2 = update_bit_type(data2)
 
-            if position_type != 'xyz':
+            if position_type in ['rd', 'rdd']:
 
                 if position_type == 'rd': npos = 2
 
-                def update_pos_type(data):
+                def update_position_type(data):
                     rdd = list(utils.cartesian_to_sky(data[:3]))
                     if position_type == 'rdd':
-                        return rdd + data[3:]
+                        return rdd + data[npos:]
                     if position_type == 'rd':
-                        return rdd[:2] + data[3:]
+                        return rdd[:npos] + data[3:]
                     raise ValueError('Unknown position type {}'.format(position_type))
 
-                data1 = update_pos_type(data1)
-                data2 = update_pos_type(data2)
+                data1 = update_position_type(data1)
+                data2 = update_position_type(data2)
 
             def run_ref(ii=None, **kwargs):
                 positions1, weights1, samples1 = data1[:npos], data1[npos:-1], data1[-1]
@@ -193,13 +194,21 @@ def test_twopoint_counter(mode='s'):
                     positions1, weights1 = [position[~mask] for position in positions1], [weight[~mask] for weight in weights1]
                     mask = samples2 == ii
                     positions2, weights2 = [position[~mask] for position in positions2], [weight[~mask] for weight in weights2]
+                if position_type == 'pos':
+                    positions1 = np.array(positions1).T
+                    positions2 = np.array(positions2).T
                 return TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=positions1, positions2=None if autocorr else positions2,
                                        weights1=weights1, weights2=None if autocorr else weights2, position_type=position_type, bin_type=bin_type,
                                        dtype=dtype, **kwargs, **options)
 
             def run(pass_none=False, **kwargs):
-                return JackknifeTwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=None if pass_none else data1[:npos], weights1=None if pass_none else data1[npos:-1],
-                                               positions2=None if pass_none or autocorr else data2[:npos], weights2=None if pass_none or autocorr else data2[npos:-1],
+                positions1 = data1[:npos]
+                positions2 = data2[:npos]
+                if position_type == 'pos':
+                    positions1 = np.array(positions1).T
+                    positions2 = np.array(positions2).T
+                return JackknifeTwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=None if pass_none else positions1, weights1=None if pass_none else data1[npos:-1],
+                                               positions2=None if pass_none or autocorr else positions2, weights2=None if pass_none or autocorr else data2[npos:-1],
                                                samples1=None if pass_none else data1[-1], samples2=None if pass_none or autocorr else data2[-1],
                                                position_type=position_type, bin_type=bin_type, dtype=dtype, **kwargs, **options)
 
