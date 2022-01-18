@@ -68,12 +68,13 @@ def test_twopoint_counter(mode='s'):
     size = 1000
     boxsize = (1000,)*3
     list_options = []
-    list_options.append({})
-    if mode not in ['theta', 'rp']:
-        list_options.append({'boxsize':boxsize})
-        list_options.append({'autocorr':True, 'boxsize':boxsize})
+    #list_options.append({})
+    #if mode not in ['theta', 'rp']:
+    #    list_options.append({'boxsize':boxsize})
+    #    list_options.append({'autocorr':True, 'boxsize':boxsize})
 
-    list_options.append({'autocorr':True})
+    list_options.append({'autocorr':True, 'nthreads':2})
+    """
     list_options.append({'n_individual_weights':1, 'bin_type':'custom'})
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1})
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'iip':1, 'dtype':'f4'})
@@ -100,7 +101,7 @@ def test_twopoint_counter(mode='s'):
         list_options.append({'mpicomm':mpi.COMM_WORLD})
         list_options.append({'n_individual_weights':1, 'mpicomm':mpi.COMM_WORLD})
         list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'mpicomm':mpi.COMM_WORLD})
-
+    """
     if mode == 'smu':
         edges = (edges, np.linspace(0,1,21))
     elif mode == 'rppi':

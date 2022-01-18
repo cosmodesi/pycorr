@@ -450,7 +450,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
             At the end of the computation, the different :class:`JackknifeTwoPointCounter` instances can be concatenated with :meth:`concatenate`.
 
         kwargs : dict
-            two-point counter engine-specific options.
+            Two-point counter engine-specific options.
         """
         self.mode = mode.lower()
         self.nthreads = nthreads
@@ -552,7 +552,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
                         spositions2 = [position[mask2] for position in positions2]
                         sweights2 = [weight[mask2] for weight in weights2]
                 mpiroot = 0 if self.with_mpi else None
-                kwargs = {name: getattr(self, name) for name in ['twopoint_weights', 'weight_attrs', 'bin_type', 'boxsize', 'los', 'compute_sepavg']}
+                kwargs = {name: getattr(self, name) for name in ['bin_type', 'weight_attrs', 'twopoint_weights', 'los', 'boxsize', 'compute_sepavg', 'nthreads']}
                 kwargs['position_type'] = 'rd' if self.mode == 'theta' else 'xyz'
                 kwargs.update(self.attrs)
                 tmp = TwoPointCounter(self.mode, edges=self.edges, positions1=spositions1, weights1=sweights1, positions2=spositions2, weights2=sweights2, mpicomm=tm.mpicomm, mpiroot=mpiroot, **kwargs)

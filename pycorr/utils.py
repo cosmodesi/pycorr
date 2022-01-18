@@ -204,9 +204,9 @@ def sky_to_cartesian(rdd, degree=True, dtype=None):
     return [x, y, z]
 
 
-def rebin(ndarray, new_shape, statistic=np.sum):
+def rebin(array, new_shape, statistic=np.sum):
     """
-    Bin an ndarray in all axes based on the target shape, by summing or
+    Bin an array in all axes based on the target shape, by summing or
     averaging. Number of output dimensions must match number of input dimensions and
     new axes must divide old ones.
 
@@ -226,22 +226,24 @@ def rebin(ndarray, new_shape, statistic=np.sum):
      [342 350 358 366 374]]
 
     """
-    if ndarray.ndim != len(new_shape):
-        raise ValueError('Input array dim is {}, but requested output one is {}'.format(ndarray.ndim, len(new_shape)))
+    if array.ndim == 1 and np.ndim(new_shape) == 0:
+        new_shape = [new_shape]
+    if array.ndim != len(new_shape):
+        raise ValueError('Input array dim is {}, but requested output one is {}'.format(array.ndim, len(new_shape)))
 
     pairs = []
-    for d, c in zip(new_shape, ndarray.shape):
+    for d, c in zip(new_shape, array.shape):
         if c % d != 0:
             raise ValueError('New shape should divide current shape, but {:d} % {:d} = {:d}'.format(c, d, c % d))
         pairs.append((d, c//d))
 
     flattened = [l for p in pairs for l in p]
-    ndarray = ndarray.reshape(flattened)
+    array = array.reshape(flattened)
 
     for i in range(len(new_shape)):
-        ndarray = statistic(ndarray, axis=-1*(i+1))
+        array = statistic(array, axis=-1*(i+1))
 
-    return ndarray
+    return array
 
 
 # Create a lookup table for set bits per byte

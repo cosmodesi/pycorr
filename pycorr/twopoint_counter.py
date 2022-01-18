@@ -681,6 +681,8 @@ class BaseTwoPointCounter(BaseClass):
             factor = (factor,)
         if len(factor) != self.ndim:
             raise TwoPointCounterError('Provide a rebinning factor for each dimension')
+        if any(s % f for s,f in zip(self.shape, factor)):
+            raise TwoPointCounterError('Rebinning factor must divide shape')
         new_shape = tuple(s//f for s,f in zip(self.shape, factor))
         wcounts = self.wcounts
         self.wcounts = utils.rebin(wcounts, new_shape, statistic=np.sum)

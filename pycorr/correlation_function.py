@@ -43,7 +43,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         Optionally, for cross-correlations, data positions in the second catalog. See ``data_positions1``.
 
     randoms_positions1 : array, default=None
-        Optionally, positions of the random catalog representing the selection function.
+        Optionally, positions of the random catalog representing the first selection function.
         If no randoms are provided, and estimator is "auto", or "natural",
         :class:`NaturalTwoPointEstimator` will be used to estimate the correlation function,
         with analytical two-point counts for R1R2.
