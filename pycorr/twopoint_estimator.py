@@ -427,6 +427,7 @@ def project_to_multipoles(estimator, ells=(0,2,4), **kwargs):
     sep = np.nanmean(estimator.sep, axis=-1)
     poles = []
     for ill, ell in enumerate(ells):
+        # \sum_{i} \xi_{i} \int_{\mu_{i}}^{\mu_{i+1}} L_{\ell}(\mu^{\prime}) d\mu^{\prime}
         poly = special.legendre(ell).integ()(muedges)
         legendre = (2*ell + 1) * (poly[1:] - poly[:-1])
         poles.append(np.sum(estimator.corr*legendre, axis=-1)/(muedges[-1] - muedges[0]))
