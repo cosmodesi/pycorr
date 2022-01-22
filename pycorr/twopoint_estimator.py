@@ -423,13 +423,13 @@ def project_to_multipoles(estimator, ells=(0,2,4), **kwargs):
     if np.ndim(ells) == 0:
         ells = (ells,)
     ells = tuple(ells)
+    muedges = estimator.edges[1]
     sep = np.nanmean(estimator.sep, axis=-1)
     poles = []
-    for ill,ell in enumerate(ells):
-        dmu = np.diff(estimator.edges[1], axis=-1)
-        poly = special.legendre(ell)(estimator.edges[1])
-        legendre = (2*ell + 1) * (poly[1:] + poly[:-1])/2. * dmu
-        poles.append(np.sum(estimator.corr*legendre, axis=-1)/np.sum(dmu))
+    for ill, ell in enumerate(ells):
+        poly = special.legendre(ell).integ()(muedges)
+        legendre = (2*ell + 1) * (poly[1:] - poly[:-1])
+        poles.append(np.sum(estimator.corr*legendre, axis=-1)/(muedges[-1] - muedges[0]))
     try:
         realizations = [np.concatenate(project_to_multipoles(estimator.realization(ii, **kwargs), ells=ells)[1]).T for ii in estimator.realizations]
     except AttributeError:

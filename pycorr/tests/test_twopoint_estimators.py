@@ -18,6 +18,30 @@ def generate_catalogs(size=100, boxsize=(1000,)*3, offset=(0,0,0), n_individual_
     return toret
 
 
+def test_multipoles():
+
+    class Estimator(object): pass
+    from scipy import special
+
+    estimator = Estimator()
+    for muedges in [np.linspace(0., 1., 10), np.linspace(0., 1., 100), np.linspace(-1., 1., 100)]:
+        edges = [np.linspace(0., 1., 10), np.linspace(0., 1., 100)]
+        s, mu = np.meshgrid(*[(e[:-1] + e[1:])/2. for e in edges], indexing='ij')
+        estimator.sep, estimator.edges, estimator.corr = s, edges, np.ones_like(s)
+        s, xi = project_to_multipoles(estimator, ells=(0,2,4))
+        assert np.allclose(xi[0], 1., atol=1e-9)
+        for xiell in xi[1:]: assert np.allclose(xiell, 0., atol=1e-9)
+
+    edges = [np.linspace(0., 1., 10), np.linspace(0., 1., 100)]
+    s, mu = np.meshgrid(*[(e[:-1] + e[1:])/2. for e in edges], indexing='ij')
+    ells = (0, 2, 4)
+    for ellin in ells[1:]:
+        estimator.sep, estimator.edges, estimator.corr = s, edges, special.legendre(ellin)(mu)
+        s, xi = project_to_multipoles(estimator, ells=ells)
+        for ell, xiell in zip(ells, xi):
+            assert np.allclose(xiell, 1. if ell == ellin else 0., atol=1e-3)
+
+
 def test_estimator(mode='s'):
 
     from pycorr import KMeansSubsampler
@@ -221,5 +245,7 @@ def test_estimator(mode='s'):
 if __name__ == '__main__':
 
     setup_logging()
+    test_multipoles()
+
     for mode in ['theta','s','smu','rppi','rp']:
         test_estimator(mode=mode)
