@@ -315,7 +315,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
 
     def __init__(self, mode, edges, positions1, samples1, weights1=None, positions2=None, samples2=None, weights2=None,
                  bin_type='auto', position_type='auto', weight_type='auto', weight_attrs=None,
-                 twopoint_weights=None, los='midpoint', boxsize=None, compute_sepavg=True, dtype=None,
+                 twopoint_weights=None, los='midpoint', boxsize=None, compute_sepsavg=True, dtype=None,
                  nthreads=None, mpicomm=None, mpiroot=None, nprocs_per_real=1, samples=None, **kwargs):
         """
         Initialize :class:`JackknifeTwoPointCounter`.
@@ -363,7 +363,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
             In this case, the bin number for a pair separated by a (3D, projected, angular...) separation
             ``sep`` is given by ``(sep - edges[0])/(edges[-1] - edges[0])*(len(edges) - 1)``,
             i.e. only the first and last bins of input edges are considered.
-            Then setting ``compute_sepavg`` is virtually costless.
+            Then setting ``compute_sepsavg`` is virtually costless.
             For non-linear binning, set to "custom".
             "auto" allows for auto-detection of the binning type:
             linear binning will be chosen if input edges are
@@ -423,7 +423,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         boxsize : array, float, default=None
             For periodic wrapping, the side-length(s) of the periodic cube.
 
-        compute_sepavg : bool, default=True
+        compute_sepsavg : bool, default=True
             Set to ``False`` to *not* calculate the average separation for each bin.
             This can make the two-point counts faster if ``bin_type`` is "custom".
             In this case, :attr:`sep` will be set the midpoint of input edges.
@@ -452,6 +452,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         kwargs : dict
             Two-point counter engine-specific options.
         """
+        self.attrs = kwargs
         self.mode = mode.lower()
         self.nthreads = nthreads
         if nthreads is None:
@@ -463,8 +464,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         self._set_edges(edges, bin_type=bin_type)
         self._set_boxsize(boxsize)
         self._set_los(los)
-        self.compute_sepavg = compute_sepavg
-        self.attrs = kwargs
+        self._set_compute_sepsavg(compute_sepsavg)
         self._set_zeros()
         self._set_samples(samples1, samples2, mpiroot=mpiroot)
         self.auto, self.cross12, self.cross21 = {}, {}, {}
@@ -495,9 +495,13 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         for name in ['wcounts', 'wnorm', 'ncounts']:
             if hasattr(auto, name):
                 setattr(self, name, sum(getattr(r, name) for r in self.auto.values()) + sum(getattr(r, name) for r in self.cross12.values()))
-        if self.compute_sepavg:
-            self.sep = np.sum([_nan_to_zero(r.sep)*r.wcounts for r in self.auto.values()], axis=0) + np.sum([_nan_to_zero(r.sep)*r.wcounts for r in self.cross12.values()], axis=0)
-            self.sep /= self.wcounts
+
+        self._set_default_seps() # reset self.seps to default
+        for idim, compute_sepavg in enumerate(self.compute_sepsavg):
+            if compute_sepavg:
+                self.seps[idim] = np.sum([_nan_to_zero(r.seps[idim])*r.wcounts for r in self.auto.values()], axis=0) + np.sum([_nan_to_zero(r.seps[idim])*r.wcounts for r in self.cross12.values()], axis=0)
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    self.seps[idim] /= self.wcounts
 
     def run(self, samples=None):
         """Run kackknife two-point counts."""
@@ -552,7 +556,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
                         spositions2 = [position[mask2] for position in positions2]
                         sweights2 = [weight[mask2] for weight in weights2]
                 mpiroot = 0 if self.with_mpi else None
-                kwargs = {name: getattr(self, name) for name in ['bin_type', 'weight_attrs', 'twopoint_weights', 'los', 'boxsize', 'compute_sepavg', 'nthreads']}
+                kwargs = {name: getattr(self, name) for name in ['bin_type', 'weight_attrs', 'twopoint_weights', 'los', 'boxsize', 'compute_sepsavg', 'nthreads']}
                 kwargs['position_type'] = 'rd' if self.mode == 'theta' else 'xyz'
                 kwargs.update(self.attrs)
                 tmp = TwoPointCounter(self.mode, edges=self.edges, positions1=spositions1, weights1=sweights1, positions2=spositions2, weights2=sweights2, mpicomm=tm.mpicomm, mpiroot=mpiroot, **kwargs)
@@ -584,7 +588,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
                         cls = results[ii].__class__
                         mpiroot_worker = self.mpicomm.rank
                         state = results[ii].__getstate__()
-                        state_arrays = {name: state.pop(name,None) for name in state_arrays}
+                        state_arrays = {name: state.pop(name, None) for name in state_arrays}
                     for mpiroot_worker in self.mpicomm.allgather(mpiroot_worker):
                         if mpiroot_worker is not None: break
                     cls = self.mpicomm.bcast(cls, root=mpiroot_worker)
@@ -644,9 +648,18 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         for name in ['wcounts', 'wnorm', 'ncounts']:
             if hasattr(self, name):
                 state[name] = getattr(self, name) - getattr(self.auto[ii], name) - alpha * (getattr(self.cross12[ii], name) + getattr(self.cross21[ii], name))
-        if self.compute_sepavg:
-            wsep = _nan_to_zero(self.sep) * self.wcounts - _nan_to_zero(self.auto[ii].sep) * self.auto[ii].wcounts - alpha * (_nan_to_zero(self.cross12[ii].sep) * self.cross12[ii].wcounts + _nan_to_zero(self.cross21[ii].sep) * self.cross21[ii].wcounts)
-            state['seps'][0] = wsep/state['wcounts']
+
+        state['seps'] = state['seps'].copy()
+        for idim, compute_sepavg in enumerate(self.compute_sepsavg):
+            if compute_sepavg:
+                state['seps'][idim] = _nan_to_zero(self.seps[idim]) * self.wcounts - _nan_to_zero(self.auto[ii].seps[idim]) * self.auto[ii].wcounts - alpha * (_nan_to_zero(self.cross12[ii].seps[idim]) * self.cross12[ii].wcounts + _nan_to_zero(self.cross21[ii].seps[idim]) * self.cross21[ii].wcounts)
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    state['seps'][idim] /= state['wcounts']
+                # The above may lead to rounding errors
+                # such that seps may be non-zero even if wcounts is zero.
+                # We restrict to those separations which lie in between the lower and upper edges
+                mask = np.apply_along_axis(lambda x: (x >= self.edges[idim][:-1]) & (x <= self.edges[idim][1:]), idim, state['seps'][idim])
+                state['seps'][idim][~mask] = np.nan
         for name in ['size1', 'size2']:
             state[name] = getattr(self, name) - getattr(self.auto[ii], name)
         return self.auto[ii].__class__.from_state(state)
@@ -698,6 +711,12 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         """Extend current instance with another; see :meth:`concatenate`."""
         new = self.concatenate(self, other, **kwargs)
         self.__dict__.update(new.__dict__)
+
+    def __copy__(self):
+        new = super(JackknifeTwoPointCounter, self).__copy__()
+        for name in self._result_names:
+            setattr(new, name, {ii: r.__copy__() for ii, r in getattr(self, name).items()})
+        return new
 
     def __getstate__(self):
         state = super(JackknifeTwoPointCounter, self).__getstate__()

@@ -68,24 +68,21 @@ def test_twopoint_counter(mode='s'):
     size = 1000
     boxsize = (1000,)*3
     list_options = []
-    #list_options.append({})
-    #if mode not in ['theta', 'rp']:
-    #    list_options.append({'boxsize':boxsize})
-    #    list_options.append({'autocorr':True, 'boxsize':boxsize})
+    list_options.append({})
+    if mode not in ['theta', 'rp']:
+        list_options.append({'boxsize':boxsize})
+        list_options.append({'autocorr':True, 'boxsize':boxsize})
 
     list_options.append({'autocorr':True, 'nthreads':2})
-    """
     list_options.append({'n_individual_weights':1, 'bin_type':'custom'})
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1})
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'iip':1, 'dtype':'f4'})
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'bitwise_type': 'i4', 'iip':1})
     list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'position_type':'rdd', 'weight_attrs':{'nrealizations':42,'noffset':3}})
     list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'position_type':'pos', 'weight_attrs':{'nrealizations':42,'noffset':3}})
-
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':2, 'iip':2, 'weight_attrs':{'noffset':0,'default_value':0.8}})
     if mode == 'theta':
         list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'position_type':'rd'})
-
     from collections import namedtuple
     TwoPointWeight = namedtuple('TwoPointWeight', ['sep', 'weight'])
     twopoint_weights = TwoPointWeight(np.logspace(-4, 0, 40), np.linspace(4., 1., 40))
@@ -101,7 +98,7 @@ def test_twopoint_counter(mode='s'):
         list_options.append({'mpicomm':mpi.COMM_WORLD})
         list_options.append({'n_individual_weights':1, 'mpicomm':mpi.COMM_WORLD})
         list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'mpicomm':mpi.COMM_WORLD})
-    """
+
     if mode == 'smu':
         edges = (edges, np.linspace(0,1,21))
     elif mode == 'rppi':
@@ -111,6 +108,7 @@ def test_twopoint_counter(mode='s'):
     for engine in list_engine:
         for options in list_options:
             options = options.copy()
+            twopoint_weights = options.get('twopoint_weights', None)
             n_individual_weights = options.pop('n_individual_weights',0)
             n_bitwise_weights = options.pop('n_bitwise_weights',0)
             npos = 3
@@ -130,6 +128,7 @@ def test_twopoint_counter(mode='s'):
             position_type = options.pop('position_type', 'xyz')
             dtype = options.pop('dtype', None)
             weight_attrs = options.get('weight_attrs', {}).copy()
+            compute_sepavg = options.get('compute_sepsavg', True)
 
             def setdefaultnone(di, key, value):
                 if di.get(key, None) is None:
@@ -213,22 +212,21 @@ def test_twopoint_counter(mode='s'):
                                                samples1=None if pass_none else data1[-1], samples2=None if pass_none or autocorr else data2[-1],
                                                position_type=position_type, bin_type=bin_type, dtype=dtype, **kwargs, **options)
 
-            def assert_allclose(res1, res2):
+            def assert_allclose(res2, res1):
                 assert np.allclose(res2.wcounts, res1.wcounts, **tol)
                 assert np.allclose(res2.wnorm, res1.wnorm, **tol)
-                if n_individual_weights == n_bitwise_weights == 0:
-                    mask = ~np.isnan(res2.sep)
-                    assert np.allclose(res2.sep[mask], res1.sep[mask], **tol)
+                if compute_sepavg:
+                    assert np.allclose(res2.sep, res1.sep, **tol, equal_nan=True)
                 assert res1.size1 == res2.size1
                 assert res1.size2 == res2.size2
 
             ref = run_ref()
             test = run()
-            assert_allclose(test, ref)
+            #assert_allclose(test, ref)
 
             nsplits = 10
             test = JackknifeTwoPointCounter.concatenate(*[run(samples=samples) for samples in np.array_split(np.unique(data1[-1]), nsplits)])
-            assert_allclose(test, ref)
+            #assert_allclose(test, ref)
 
             ii = data1[-1][0]
             ref_ii = run_ref(ii=ii)

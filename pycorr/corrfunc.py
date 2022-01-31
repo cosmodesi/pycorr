@@ -7,14 +7,6 @@ from .twopoint_counter import BaseTwoPointCounter, TwoPointCounterError
 from . import utils
 
 
-def _zero_to_nan(array):
-    # Replace 0s with nans
-    array = array.copy()
-    mask = array == 0.
-    array[mask] = np.nan
-    return array
-
-
 class CorrfuncTwoPointCounter(BaseTwoPointCounter):
 
     """Extend :class:`BaseTwoPointCounter` for Corrfunc two-point counting code."""
@@ -118,6 +110,9 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                   'pair_weights': pair_weights, 'sep_pair_weights': sep_pair_weights,
                   'attrs_pair_weights': weight_attrs, 'verbose': False,
                   'isa': 'fallback'} # to be set to 'fastest' when bitwise weights included in all kernels
+        #kwargs = {'weights1': weights1, 'weights2': weights2,
+        #          'weight_type': weight_type, 'verbose': False,
+        #          'isa': 'fallback'}
 
         positions2 = dpositions2
         if autocorr:
@@ -233,12 +228,13 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                 # sum over pi to keep only rp
                 result = {key:result[key] for key in ['npairs','weightavg',key_sep]}
                 result[key_sep].shape = result['weightavg'].shape = result['npairs'].shape = self.shape + (-1,)
-                npairs = result['npairs']
-                result['weightavg'][npairs == 0] = 0.
+                wpairs = result['npairs']*(result['weightavg'] if output_weightavg else 1)
                 result['npairs'] = np.sum(result['npairs'], axis=-1)
-                sumnpairs = np.maximum(result['npairs'], 1e-9) # just to avoid division by 0
-                result[key_sep] = np.sum(result[key_sep]*npairs, axis=-1)/sumnpairs
-                result['weightavg'] = np.sum(result['weightavg']*npairs, axis=-1)/sumnpairs
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    result['weightavg'] = np.sum(wpairs, axis=-1)/result['npairs']
+                    result[key_sep] = np.sum(result[key_sep]*wpairs, axis=-1)/(result['npairs']*result['weightavg'])
+                result['weightavg'][result['npairs'] == 0] = 0.
+                result[key_sep][result['npairs'] == 0] = 0.
 
             else:
 
@@ -253,10 +249,11 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             self.sep.shape = self.wcounts.shape = self.ncounts.shape = self.shape
 
         if self.with_mpi:
+            wcounts = self.wcounts
             self.wcounts = self.mpicomm.allreduce(self.wcounts)
-            ncounts = np.maximum(self.mpicomm.allreduce(self.ncounts), 1e-9) # just to avoid division by 0
+            self.ncounts = self.mpicomm.allreduce(self.ncounts)
             if self.compute_sepavg:
-                self.sep = self.mpicomm.allreduce(self.sep * self.ncounts)/ncounts
-            self.ncounts = ncounts
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    self.sep = self.mpicomm.allreduce(self.sep * wcounts)/self.wcounts
 
-        self.sep = _zero_to_nan(self.sep)
+        self.sep[self.ncounts == 0] = np.nan

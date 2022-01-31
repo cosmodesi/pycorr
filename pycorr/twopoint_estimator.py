@@ -238,6 +238,12 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
             getattr(self, name).rebin(*args, **kwargs)
         self.run()
 
+    def __copy__(self):
+        new = super(BaseTwoPointEstimator, self).__copy__()
+        for name in self._count_names:
+            setattr(new, name, getattr(self, name).__copy__())
+        return new
+
     def __getstate__(self):
         state = {}
         for name in ['name']:

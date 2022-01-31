@@ -60,7 +60,7 @@ def test_estimator(mode='s'):
     list_options.append({'with_shifted':True})
     list_options.append({'with_shifted':True, 'autocorr':True})
     list_options.append({'autocorr':True})
-    list_options.append({'n_individual_weights':1, 'compute_sepavg':False})
+    list_options.append({'n_individual_weights':1, 'compute_sepsavg':False})
 
     has_mpi = True
     try:
@@ -107,7 +107,7 @@ def test_estimator(mode='s'):
             shifted1.append(subsampler.label(shifted1[:npos]))
             shifted2.append(subsampler.label(shifted2[:npos]))
 
-            def run_nojacknife(ii=None, **kwargs):
+            def run_nojackknife(ii=None, **kwargs):
                 data_positions1, data_weights1, data_samples1 = data1[:npos], data1[npos:-1], data1[-1]
                 data_positions2, data_weights2, data_samples2 = data2[:npos], data2[npos:-1], data2[-1]
                 randoms_positions1, randoms_weights1, randoms_samples1 = randoms1[:npos], randoms1[npos:-1], randoms1[-1]
@@ -136,7 +136,7 @@ def test_estimator(mode='s'):
                                                    shifted_weights1=shifted_weights1 if with_shifted else None, shifted_weights2=None if autocorr else shifted_weights2,
                                                    **options, **kwargs)
 
-            def run_jacknife(pass_none=False, **kwargs):
+            def run_jackknife(pass_none=False, **kwargs):
                 return TwoPointCorrelationFunction(mode=mode, edges=edges, engine=engine, data_positions1=None if pass_none else data1[:npos], data_positions2=None if pass_none or autocorr else data2[:npos],
                                                    data_weights1=None if pass_none else data1[npos:-1], data_weights2=None if pass_none or autocorr else data2[npos:-1],
                                                    randoms_positions1=randoms1[:npos] if with_randoms and not pass_none else None, randoms_positions2=None if pass_none or autocorr else randoms2[:npos],
@@ -158,20 +158,20 @@ def test_estimator(mode='s'):
                 assert np.allclose(res1.corr[mask], res2.corr[mask])
                 #assert np.allclose(res1.sep[mask], res2.sep[mask])
 
-            estimator_nojacknife = run_nojacknife()
-            estimator_jacknife = run_jacknife()
-            assert_allclose_estimators(estimator_jacknife, estimator_nojacknife)
+            estimator_nojackknife = run_nojackknife()
+            estimator_jackknife = run_jackknife()
+            assert_allclose_estimators(estimator_jackknife, estimator_nojackknife)
             if mode in ['theta', 'rp']:
-                assert estimator_jacknife.cov().shape == (estimator_jacknife.shape[0],)*2
+                assert estimator_jackknife.cov().shape == (estimator_jackknife.shape[0],)*2
 
             nsplits = 10
-            estimator_jacknife = JackknifeTwoPointEstimator.concatenate(*[run_jacknife(samples=samples) for samples in np.array_split(np.unique(data1[-1]), nsplits)])
-            assert_allclose_estimators(estimator_jacknife, estimator_nojacknife)
+            estimator_jackknife = JackknifeTwoPointEstimator.concatenate(*[run_jackknife(samples=samples) for samples in np.array_split(np.unique(data1[-1]), nsplits)])
+            assert_allclose_estimators(estimator_jackknife, estimator_nojackknife)
 
             ii = data1[-1][0]
-            estimator_nojacknife_ii = run_nojacknife(ii=ii)
-            estimator_jacknife_ii = estimator_jacknife.realization(ii, correction=None)
-            assert_allclose_estimators(estimator_jacknife_ii, estimator_nojacknife_ii)
+            estimator_nojackknife_ii = run_nojackknife(ii=ii)
+            estimator_jackknife_ii = estimator_jackknife.realization(ii, correction=None)
+            assert_allclose_estimators(estimator_jackknife_ii, estimator_nojackknife_ii)
 
             options_counts = options.copy()
             estimator = options_counts.pop('estimator', 'landyszalay')
@@ -179,67 +179,69 @@ def test_estimator(mode='s'):
             D1D2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:npos], positions2=None if autocorr else data2[:npos],
                                    weights1=data1[npos:-1], weights2=None if autocorr else data2[npos:-1], **options_counts)
 
-            assert_allclose(D1D2, estimator_jacknife.D1D2)
+            assert_allclose(D1D2, estimator_jackknife.D1D2)
             if with_shifted:
                 if estimator in ['landyszalay', 'natural']:
                     R1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:npos], positions2=None if autocorr else randoms2[:npos],
                                            weights1=randoms1[npos:-1], weights2=None if autocorr else randoms2[npos:-1], **options_counts)
-                    assert_allclose(R1R2, estimator_jacknife.R1R2)
+                    assert_allclose(R1R2, estimator_jackknife.R1R2)
                 # for following computation
                 randoms1 = shifted1
                 randoms2 = shifted2
             if estimator in ['landyszalay', 'davispeebles']:
                 D1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:npos], positions2=randoms1[:npos] if autocorr else randoms2[:npos],
                                        weights1=data1[npos:-1], weights2=randoms1[npos:-1] if autocorr else randoms2[npos:-1], **options_counts)
-                assert_allclose(D1R2, estimator_jacknife.D1S2)
+                assert_allclose(D1R2, estimator_jackknife.D1S2)
                 if not autocorr and estimator in ['landyszalay']:
                     D2R1 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:npos], positions2=data2[:npos],
                                            weights1=randoms1[npos:-1], weights2=data2[npos:-1], **options_counts)
                     #D2R1 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data2[:3], positions2=randoms1[:3],
                     #                       weights1=data2[3:], weights2=randoms1[3:], **options_counts)
-                    assert_allclose(D2R1, estimator_jacknife.D2S1)
+                    assert_allclose(D2R1, estimator_jackknife.D2S1)
                 else:
-                    assert_allclose(D1R2, estimator_jacknife.D2S1)
+                    assert_allclose(D1R2, estimator_jackknife.D2S1)
             if estimator in ['landyszalay', 'natural', 'weight'] and with_randoms:
                 R1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:npos], positions2=None if autocorr else randoms2[:npos],
                                        weights1=randoms1[npos:-1], weights2=None if autocorr else randoms2[npos:-1], **options_counts)
-                assert_allclose(R1R2, estimator_jacknife.S1S2)
+                assert_allclose(R1R2, estimator_jackknife.S1S2)
             if estimator in ['natural'] and not with_randoms:
-                R1R2 = TwoPointCounter(mode=mode, edges=edges, engine='analytic', boxsize=estimator_jacknife.D1D2.boxsize,
-                                       size1=estimator_jacknife.D1D2.size1, size2=None if estimator_jacknife.autocorr else estimator_jacknife.D1D2.size2, los=options_counts['los'])
-                assert_allclose(R1R2, estimator_jacknife.R1R2)
+                R1R2 = TwoPointCounter(mode=mode, edges=edges, engine='analytic', boxsize=estimator_jackknife.D1D2.boxsize,
+                                       size1=estimator_jackknife.D1D2.size1, size2=None if estimator_jackknife.autocorr else estimator_jackknife.D1D2.size2, los=options_counts['los'])
+                assert_allclose(R1R2, estimator_jackknife.R1R2)
 
-            if estimator_jacknife.D1D2.mode == 'smu':
-                sep, xiell = project_to_multipoles(estimator_nojacknife, ells=(0,2,4))
-                sep, xiell, cov = project_to_multipoles(estimator_jacknife, ells=(0,2,4))
+            if estimator_jackknife.D1D2.mode == 'smu':
+                sep, xiell = project_to_multipoles(estimator_nojackknife, ells=(0,2,4))
+                sep, xiell, cov = project_to_multipoles(estimator_jackknife, ells=(0,2,4))
                 assert cov.shape == (sum([len(xi) for xi in xiell]),)*2
-            if estimator_jacknife.D1D2.mode == 'rppi':
-                sep, wp = project_to_wp(estimator_nojacknife)
-                sep, wp, cov = project_to_wp(estimator_jacknife)
-                sep, wp, cov = project_to_wp(estimator_jacknife, pimax=40)
+            if estimator_jackknife.D1D2.mode == 'rppi':
+                sep, wp = project_to_wp(estimator_nojackknife)
+                sep, wp, cov = project_to_wp(estimator_jackknife)
+                sep, wp, cov = project_to_wp(estimator_jackknife, pimax=40)
                 assert cov.shape == (len(wp),)*2
 
             with tempfile.TemporaryDirectory() as tmp_dir:
                 fn = os.path.join(tmp_dir,'tmp.npy')
-                for test in [estimator_nojacknife, estimator_jacknife]:
+                for test in [estimator_nojackknife, estimator_jackknife]:
                     test.save(fn)
                     test2 = TwoPointEstimator.load(fn)
                     assert test2.__class__ is test.__class__
                     assert test2.autocorr is test.autocorr
+                    test3 = test2.copy()
                     test2.rebin((2,5) if len(edges) == 2 else (2,))
-                    test2 = run_jacknife(R1R2=test.R1R2)
+                    assert_allclose_estimators(test3, test)
+                    test2 = run_jackknife(R1R2=test.R1R2)
                     assert_allclose_estimators(test2, test)
 
             if mpicomm is not None:
-                test_mpi = run_jacknife(mpicomm=mpicomm, pass_none=mpicomm.rank != 0, mpiroot=0)
-                assert_allclose_estimators(test_mpi, estimator_jacknife)
+                test_mpi = run_jackknife(mpicomm=mpicomm, pass_none=mpicomm.rank != 0, mpiroot=0)
+                assert_allclose_estimators(test_mpi, estimator_jackknife)
 
                 data1 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data1]
                 data2 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data2]
                 randoms1 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in randoms1]
                 randoms2 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in randoms2]
-                test_mpi = run_nojacknife(mpicomm=mpicomm)
-                assert_allclose_estimators(test_mpi, estimator_jacknife)
+                test_mpi = run_nojackknife(mpicomm=mpicomm)
+                assert_allclose_estimators(test_mpi, estimator_jackknife)
 
 
 if __name__ == '__main__':

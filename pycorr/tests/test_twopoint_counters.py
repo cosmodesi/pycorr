@@ -46,8 +46,15 @@ def get_weight(xyz1, xyz2, weights1, weights2, n_bitwise_weights=0, twopoint_wei
     return weight
 
 
+def divide(sep, counts):
+    with np.errstate(divide='ignore'):
+        sep = sep/counts
+    return sep
+
+
 def ref_theta(edges, data1, data2=None, boxsize=None, los='midpoint', **kwargs):
-    toret = np.zeros(len(edges)-1, dtype='f8')
+    counts = np.zeros(len(edges)-1, dtype='f8')
+    sep = np.zeros(len(edges)-1, dtype='f8')
     if data2 is None: data2 = data1
     for xyzw1 in zip(*data1):
         for xyzw2 in zip(*data2):
@@ -57,12 +64,14 @@ def ref_theta(edges, data1, data2=None, boxsize=None, los='midpoint', **kwargs):
                 ind = np.searchsorted(edges, dist, side='right', sorter=None) - 1
                 weights1, weights2 = xyzw1[3:], xyzw2[3:]
                 weight = get_weight(xyz1, xyz2, weights1, weights2, **kwargs)
-                toret[ind] += weight
-    return toret
+                counts[ind] += weight
+                sep[ind] += weight*dist
+    return counts, divide(sep, counts)
 
 
 def ref_s(edges, data1, data2=None, boxsize=None, los='midpoint', **kwargs):
-    toret = np.zeros(len(edges)-1, dtype='f8')
+    counts = np.zeros(len(edges)-1, dtype='f8')
+    sep = np.zeros(len(edges)-1, dtype='f8')
     if data2 is None: data2 = data1
     for xyzw1 in zip(*data1):
         for xyzw2 in zip(*data2):
@@ -77,8 +86,9 @@ def ref_s(edges, data1, data2=None, boxsize=None, los='midpoint', **kwargs):
                 ind = np.searchsorted(edges, dist, side='right', sorter=None) - 1
                 weights1, weights2 = xyzw1[3:], xyzw2[3:]
                 weight = get_weight(xyz1, xyz2, weights1, weights2, **kwargs)
-                toret[ind] += weight
-    return toret
+                counts[ind] += weight
+                sep[ind] += weight*dist
+    return counts, divide(sep, counts)
 
 
 def ref_smu(edges, data1, data2=None, boxsize=None, weight_type=None, los='midpoint', **kwargs):
@@ -86,7 +96,8 @@ def ref_smu(edges, data1, data2=None, boxsize=None, weight_type=None, los='midpo
         los = 'm'
     else:
         los = [1 if i == 'xyz'.index(los) else 0 for i in range(3)]
-    toret = np.zeros([len(e)-1 for e in edges], dtype='f8')
+    counts = np.zeros([len(e)-1 for e in edges], dtype='f8')
+    sep = np.zeros([len(e)-1 for e in edges], dtype='f8')
     if data2 is None: data2 = data1
     for xyzw1 in zip(*data1):
         for xyzw2 in zip(*data2):
@@ -104,8 +115,9 @@ def ref_smu(edges, data1, data2=None, boxsize=None, weight_type=None, los='midpo
                     ind_mu = np.searchsorted(edges[1], mu, side='right', sorter=None) - 1
                     weights1, weights2 = xyzw1[3:], xyzw2[3:]
                     weight = get_weight(xyz1, xyz2, weights1, weights2, **kwargs)
-                    toret[ind,ind_mu] += weight
-    return toret
+                    counts[ind, ind_mu] += weight
+                    sep[ind, ind_mu] += weight*dist
+    return counts, divide(sep, counts)
 
 
 def ref_rppi(edges, data1, data2=None, boxsize=None, weight_type=None, los='midpoint', **kwargs):
@@ -113,7 +125,8 @@ def ref_rppi(edges, data1, data2=None, boxsize=None, weight_type=None, los='midp
         los = 'm'
     else:
         los = [1 if i == 'xyz'.index(los) else 0 for i in range(3)]
-    toret = np.zeros([len(e)-1 for e in edges], dtype='f8')
+    counts = np.zeros([len(e)-1 for e in edges], dtype='f8')
+    sep = np.zeros([len(e)-1 for e in edges], dtype='f8')
     if data2 is None: data2 = data1
     for xyzw1 in zip(*data1):
         for xyzw2 in zip(*data2):
@@ -132,12 +145,14 @@ def ref_rppi(edges, data1, data2=None, boxsize=None, weight_type=None, los='midp
                 ind_pi = np.searchsorted(edges[1], pi, side='right', sorter=None) - 1
                 weights1, weights2 = xyzw1[3:], xyzw2[3:]
                 weight = get_weight(xyz1, xyz2, weights1, weights2, **kwargs)
-                toret[ind_rp,ind_pi] += weight
-    return toret
+                counts[ind_rp, ind_pi] += weight
+                sep[ind_rp, ind_pi] += weight*rp
+    return counts, divide(sep, counts)
 
 
 def ref_rp(edges, *args, **kwargs):
-    return ref_rppi((edges,[0,np.inf]), *args, **kwargs).flatten()
+    counts, sep = ref_rppi((edges, [0,np.inf]), *args, **kwargs)
+    return counts.ravel(), sep.ravel()
 
 
 def generate_catalogs(size=100, boxsize=(1000,)*3, offset=(1000.,0,0), n_individual_weights=1, n_bitwise_weights=0, seed=42):
@@ -157,7 +172,9 @@ def test_twopoint_counter(mode='s'):
 
     ref_func = {'theta':ref_theta, 's':ref_s, 'smu':ref_smu, 'rppi':ref_rppi, 'rp':ref_rp}[mode]
     list_engine = ['corrfunc']
-    edges = np.linspace(1,100,11)
+    ref_edges = np.linspace(1,200,11)
+    if mode == 'theta':
+        ref_edges = np.linspace(1e-1,10,11) # below 1e-5 for float64 (1e-1 for float32), self pairs are counted by Corrfunc
     size = 100
     boxsize = (1000,)*3
     list_options = []
@@ -165,8 +182,9 @@ def test_twopoint_counter(mode='s'):
     if mode not in ['theta', 'rp']:
         list_options.append({'boxsize':boxsize})
         list_options.append({'autocorr':True, 'boxsize':boxsize})
+        list_options.append({'n_individual_weights':1,'autocorr':True, 'boxsize':boxsize})
 
-    list_options.append({'autocorr':True})
+    list_options.append({'autocorr':True, 'compute_sepsavg':False, 'edges':np.array([1, 3, 4])})
     list_options.append({'n_individual_weights':1, 'bin_type':'custom'})
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1})
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'iip':1, 'dtype':'f4'})
@@ -195,15 +213,14 @@ def test_twopoint_counter(mode='s'):
         list_options.append({'n_individual_weights':1, 'mpicomm':mpi.COMM_WORLD})
         list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'mpicomm':mpi.COMM_WORLD})
 
-    if mode == 'smu':
-        edges = (edges, np.linspace(0,1,101))
-    elif mode == 'rppi':
-        edges = (edges, np.linspace(0,140,141))
-    elif mode == 'theta':
-        edges = np.linspace(1e-1,10,11) # below 1e-5 for float64 (1e-1 for float32), self pairs are counted by Corrfunc
     for engine in list_engine:
         for options in list_options:
             options = options.copy()
+            edges = options.pop('edges', ref_edges)
+            if mode == 'smu':
+                edges = (edges, np.linspace(0,1,101))
+            elif mode == 'rppi':
+                edges = (edges, np.linspace(0,140,141))
             n_individual_weights = options.pop('n_individual_weights',0)
             n_bitwise_weights = options.pop('n_bitwise_weights',0)
             data1, data2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights)
@@ -217,8 +234,9 @@ def test_twopoint_counter(mode='s'):
             iip = options.pop('iip', False)
             position_type = options.pop('position_type', 'xyz')
             dtype = options.pop('dtype', None)
-            refoptions = options.copy()
-            weight_attrs = refoptions.pop('weight_attrs', {}).copy()
+            options_ref = options.copy()
+            weight_attrs = options_ref.pop('weight_attrs', {}).copy()
+            compute_sepavg = options_ref.pop('compute_sepsavg', True)
 
             def setdefaultnone(di, key, value):
                 if di.get(key, None) is None:
@@ -263,11 +281,11 @@ def test_twopoint_counter(mode='s'):
                         refdata1[ii] = np.asarray(refdata1[ii], dtype=dtype)
                         refdata2[ii] = np.asarray(refdata2[ii], dtype=dtype)
 
-            twopoint_weights = refoptions.pop('twopoint_weights', None)
+            twopoint_weights = options_ref.pop('twopoint_weights', None)
             if twopoint_weights is not None:
                 twopoint_weights = TwoPointWeight(np.cos(np.radians(twopoint_weights.sep[::-1], dtype=dtype)), np.asarray(twopoint_weights.weight[::-1], dtype=dtype))
 
-            wcounts_ref = ref_func(edges, refdata1, data2=None if autocorr else refdata2, n_bitwise_weights=n_bitwise_weights, twopoint_weights=twopoint_weights, **refoptions, **weight_attrs)
+            wcounts_ref, sep_ref = ref_func(edges, refdata1, data2=None if autocorr else refdata2, n_bitwise_weights=n_bitwise_weights, twopoint_weights=twopoint_weights, **options_ref, **weight_attrs)
 
             if bitwise_type is not None and n_bitwise_weights > 0:
 
@@ -330,10 +348,14 @@ def test_twopoint_counter(mode='s'):
                 test.save(fn)
                 test2 = TwoPointCounter.load(fn)
                 assert np.allclose(test2.wcounts, wcounts_ref, **tol)
+                if compute_sepavg:
+                    assert np.allclose(test2.sep, sep_ref, **tol, equal_nan=True)
                 assert np.allclose(test2.wnorm, norm_ref, **tol)
                 assert np.allclose(test2.size1, test.size1) and np.allclose(test2.size2, test.size2)
+                test3 = test2.copy()
                 test2.rebin((2,2) if len(edges) == 2 else (2,))
                 assert np.allclose(np.sum(test2.wcounts), np.sum(wcounts_ref), **tol)
+                assert np.allclose(test3.wcounts, test.wcounts)
 
             if mpicomm is not None:
                 test_mpi = run(mpicomm=mpicomm, pass_none=mpicomm.rank != 0, mpiroot=0)

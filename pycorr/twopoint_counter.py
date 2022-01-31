@@ -258,7 +258,7 @@ class BaseTwoPointCounter(BaseClass):
     """
     def __init__(self, mode, edges, positions1, positions2=None, weights1=None, weights2=None,
                  bin_type='auto', position_type='auto', weight_type='auto', weight_attrs=None,
-                 twopoint_weights=None, los='midpoint', boxsize=None, compute_sepavg=True, dtype=None,
+                 twopoint_weights=None, los='midpoint', boxsize=None, compute_sepsavg=True, dtype=None,
                  nthreads=None, mpicomm=None, mpiroot=None, **kwargs):
         r"""
         Initialize :class:`BaseTwoPointCounter`, and run actual two-point counts
@@ -301,7 +301,7 @@ class BaseTwoPointCounter(BaseClass):
             In this case, the bin number for a pair separated by a (3D, projected, angular...) separation
             ``sep`` is given by ``(sep - edges[0])/(edges[-1] - edges[0])*(len(edges) - 1)``,
             i.e. only the first and last bins of input edges are considered.
-            Then setting ``compute_sepavg`` is virtually costless.
+            Then setting ``compute_sepsavg`` is virtually costless.
             For non-linear binning, set to "custom".
             "auto" allows for auto-detection of the binning type:
             linear binning will be chosen if input edges are
@@ -361,7 +361,7 @@ class BaseTwoPointCounter(BaseClass):
         boxsize : array, float, default=None
             For periodic wrapping, the side-length(s) of the periodic cube.
 
-        compute_sepavg : bool, default=True
+        compute_sepsavg : bool, default=True
             Set to ``False`` to *not* calculate the average separation for each bin.
             This can make the two-point counts faster if ``bin_type`` is "custom".
             In this case, :attr:`sep` will be set the midpoint of input edges.
@@ -383,6 +383,7 @@ class BaseTwoPointCounter(BaseClass):
         kwargs : dict
             Two-point counter engine-specific options.
         """
+        self.attrs = kwargs
         self.mode = mode.lower()
         self.nthreads = nthreads
         if nthreads is None:
@@ -395,8 +396,7 @@ class BaseTwoPointCounter(BaseClass):
         self._set_edges(edges, bin_type=bin_type)
         self._set_boxsize(boxsize)
         self._set_los(los)
-        self.compute_sepavg = compute_sepavg
-        self.attrs = kwargs
+        self._set_compute_sepsavg(compute_sepsavg)
         self.wnorm = self.normalization()
         self._set_zeros()
         if self.size1 * self.size2:
@@ -411,9 +411,19 @@ class BaseTwoPointCounter(BaseClass):
         raise NotImplementedError('Implement method "run" in your {}'.format(self.__class__.__name__))
 
     def _set_zeros(self):
-        self._set_default_separation()
+        self._set_default_seps()
         self.wcounts = np.zeros_like(self.sep)
         self.ncounts = np.zeros_like(self.sep, dtype='i8')
+
+    def _set_compute_sepsavg(self, compute_sepsavg):
+        if 'compute_sepavg' in self.attrs:
+            self.log_warning('Use compute_sepsavg instead of compute_sepavg.')
+            compute_sepsavg = self.attrs.pop('compute_sepavg')
+        if np.ndim(compute_sepsavg) == 0:
+            compute_sepsavg = (compute_sepsavg,)*self.ndim
+        self.compute_sepsavg = [bool(c) for c in compute_sepsavg]
+        if len(self.compute_sepsavg) != self.ndim:
+            raise TwoPointCounterError('compute_sepsavg must be either a boolean or its length must match number of dimensions = {:d} for mode = {:d}'.format(self.ndim, self.mode))
 
     def _set_edges(self, edges, bin_type='auto'):
         if np.ndim(edges[0]) == 0:
@@ -573,7 +583,7 @@ class BaseTwoPointCounter(BaseClass):
                                               positions2=self.positions2, weights2=self.weights2, boxsize=self.boxsize)
         return (self.positions1, self.weights1), (self.positions2, self.weights2)
 
-    def _set_default_separation(self):
+    def _set_default_seps(self):
         mid = [(edges[1:] + edges[:-1])/2. for edges in self.edges]
         self.seps = list(np.meshgrid(*mid, indexing='ij'))
 
@@ -667,6 +677,15 @@ class BaseTwoPointCounter(BaseClass):
     def sep(self, sep):
         self.seps[0] = sep
 
+    @property
+    def compute_sepavg(self):
+        """Whether to compute average of separation values for first dimension (e.g. :math:`s` if :attr:`mode` is "smu")."""
+        return self.compute_sepsavg[0]
+
+    @compute_sepavg.setter
+    def compute_sepavg(self, compute_sepavg):
+        self.compute_sepsavg[0] = compute_sepavg
+
     def normalized_wcounts(self):
         """Return normalized two-point counts, i.e. :attr:`wcounts` divided by :meth:`normalization`."""
         return self.wcounts/self.wnorm
@@ -689,15 +708,17 @@ class BaseTwoPointCounter(BaseClass):
         if hasattr(self, 'ncounts'):
             self.ncounts = utils.rebin(self.ncounts, new_shape, statistic=np.sum)
         self.edges = [edges[::f] for edges, f in zip(self.edges, factor)]
-        if self.compute_sepavg:
-            self.seps = [utils.rebin(_nan_to_zero(sep)*wcounts, new_shape, statistic=np.sum)/self.wcounts for sep in self.seps]
-        else:
-            self._set_default_separation()
+        seps = self.seps
+        self._set_default_seps() # reset self.seps to default
+        for idim, (sep, compute_sepavg) in enumerate(zip(seps, self.compute_sepsavg)):
+            if compute_sepavg:
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    self.seps[idim] = utils.rebin(_nan_to_zero(sep)*wcounts, new_shape, statistic=np.sum)/self.wcounts
 
     def __getstate__(self):
         state = {}
         for name in ['name', 'autocorr', 'seps', 'ncounts', 'wcounts', 'wnorm', 'size1', 'size2', 'edges', 'mode', 'bin_type',
-                     'boxsize', 'los', 'compute_sepavg', 'weight_attrs', 'attrs']:
+                     'boxsize', 'los', 'compute_sepsavg', 'weight_attrs', 'attrs']:
             if hasattr(self, name):
                 state[name] = getattr(self, name)
         return state
@@ -754,6 +775,7 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
             Line-of-sight to be used when ``mode`` is "rp", in case of non-cubic box;
             one of cartesian axes "x", "y" or "z".
         """
+        self.attrs = {}
         self.mode = mode.lower()
         self._set_edges(edges)
         self._set_boxsize(boxsize)
@@ -761,8 +783,8 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
         self.size1 = size1
         self.size2 = size2
         self.autocorr = size2 is None
-        self.compute_sepavg = False
-        self._set_default_separation()
+        self._set_compute_sepsavg(False)
+        self._set_default_seps()
         self.run()
         self.wnorm = self.normalization()
 

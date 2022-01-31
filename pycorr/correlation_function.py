@@ -176,7 +176,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         In this case, the bin number for a pair separated by a (3D, projected, angular...) separation
         ``sep`` is given by ``(sep - edges[0])/(edges[-1] - edges[0])*(len(edges) - 1)``,
         i.e. only the first and last bins of input edges are considered.
-        Then setting ``compute_sepavg`` is virtually costless.
+        Then setting ``compute_sepsavg`` is virtually costless.
         For non-linear binning, set to "custom".
         "auto" allows for auto-detection of the binning type:
         linear binning will be chosen if input edges are
@@ -212,7 +212,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     boxsize : array, float, default=None
         For periodic wrapping, the side-length(s) of the periodic cube.
 
-    compute_sepavg : bool, default=True
+    compute_sepsavg : bool, default=True
         Set to ``False`` to *not* calculate the average separation for each bin.
         This can make the two-point counts faster if ``bin_type`` is "custom".
         In this case, :attr:`sep` will be set the midpoint of input edges.
