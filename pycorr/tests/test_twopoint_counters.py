@@ -224,9 +224,9 @@ def test_twopoint_counter(mode='s'):
             options = options.copy()
             edges = options.pop('edges', ref_edges)
             if mode == 'smu':
-                edges = (edges, np.linspace(0,1,101))
+                edges = (edges, np.linspace(0, 1, 101))
             elif mode == 'rppi':
-                edges = (edges, np.linspace(0,140,141))
+                edges = (edges, np.linspace(0, 140, 101))
             n_individual_weights = options.pop('n_individual_weights',0)
             n_bitwise_weights = options.pop('n_bitwise_weights',0)
             data1, data2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights)

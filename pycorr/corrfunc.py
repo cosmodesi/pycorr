@@ -34,17 +34,17 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             edges = self.edges[1]
             if edges[0] != 0:
                 raise TwoPointCounterError('Corrfunc only supports mu starting at 0')
-            lin = np.linspace(edges[0],edges[-1],len(edges))
-            if not np.allclose(edges,lin):
+            lin = np.linspace(edges[0], edges[-1], len(edges))
+            if not np.allclose(edges, lin):
                 raise TwoPointCounterError('Corrfunc only supports linear mu binning')
 
         def check_pi():
             edges = self.edges[1]
             if edges[0] != 0:
                 raise TwoPointCounterError('Corrfunc only supports pi starting at 0')
-            lin = np.linspace(edges[0],edges[-1],int(edges[-1])+1)
-            if len(lin) != len(edges) or not np.allclose(edges,lin):
-                raise TwoPointCounterError('Corrfunc only supports linear pi binning, with n = int(pimax) bins')
+            lin = np.linspace(edges[0], edges[-1], len(edges))
+            if not np.allclose(edges, lin):
+                raise TwoPointCounterError('Corrfunc only supports linear pi binning')
 
         autocorr = self.autocorr and not self.with_mpi
 
@@ -149,7 +149,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                 if self.los in ['x','y','z']:
                     positions1, positions2 = rotated_positions()
                     result = call_corrfunc(theory.DDsmu, autocorr, nthreads=self.nthreads,
-                                           binfile=self.edges[0], mu_max=self.edges[1].max(), nmu_bins=len(self.edges[1]) - 1,
+                                           binfile=self.edges[0], mumax=self.edges[1].max(), nmubins=len(self.edges[1]) - 1,
                                            X1=positions1[0], Y1=positions1[1], Z1=positions1[2],
                                            X2=positions2[0], Y2=positions2[1], Z2=positions2[2],
                                            periodic=self.periodic, boxsize=boxsize(),
@@ -158,7 +158,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                     check_los()
                     positions1, positions2 = sky_positions()
                     result = call_corrfunc(mocks.DDsmu_mocks, autocorr, cosmology=1, nthreads=self.nthreads,
-                                           mu_max=self.edges[1].max(), nmu_bins=len(self.edges[1]) - 1, binfile=self.edges[0],
+                                           binfile=self.edges[0], mumax=self.edges[1].max(), nmubins=len(self.edges[1]) - 1,
                                            RA1=positions1[0], DEC1=positions1[1], CZ1=positions1[2],
                                            RA2=positions2[0], DEC2=positions2[1], CZ2=positions2[2],
                                            is_comoving_dist=True,
@@ -171,7 +171,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                 if self.los in ['x','y','z']:
                     positions1, positions2 = rotated_positions()
                     result = call_corrfunc(theory.DDrppi, autocorr, nthreads=self.nthreads,
-                                           binfile=self.edges[0], pimax=self.edges[1].max(),
+                                           binfile=self.edges[0], pimax=self.edges[1].max(), npibins=len(self.edges[1]) - 1,
                                            X1=positions1[0], Y1=positions1[1], Z1=positions1[2],
                                            X2=positions2[0], Y2=positions2[1], Z2=positions2[2],
                                            periodic=self.periodic, boxsize=boxsize(),
@@ -180,7 +180,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                     check_los()
                     positions1, positions2 = sky_positions()
                     result = call_corrfunc(mocks.DDrppi_mocks, autocorr, cosmology=1, nthreads=self.nthreads,
-                                           pimax=self.edges[1].max(), binfile=self.edges[0],
+                                           binfile=self.edges[0], pimax=self.edges[1].max(), npibins=len(self.edges[1]) - 1,
                                            RA1=positions1[0], DEC1=positions1[1], CZ1=positions1[2],
                                            RA2=positions2[0], DEC2=positions2[1], CZ2=positions2[2],
                                            is_comoving_dist=True,
@@ -195,7 +195,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                     boxsize = boxsize()
                     pimax = boxsize + 1. # los axis is z
                     result = call_corrfunc(theory.DDrppi, autocorr, nthreads=self.nthreads,
-                                           binfile=self.edges[0], pimax=pimax,
+                                           binfile=self.edges[0], pimax=pimax, npibins=1,
                                            X1=positions1[0], Y1=positions1[1], Z1=positions1[2],
                                            X2=positions2[0], Y2=positions2[1], Z2=positions2[2],
                                            periodic=self.periodic, boxsize=boxsize,
@@ -216,7 +216,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                         boxsize = [max(p1.max(), p2.max()) - min(p1.min(), p2.min()) for p1, p2 in zip(dpositions1, dpositions2)]
                     pimax = sum(p**2 for p in boxsize)**0.5 + 1.
                     result = call_corrfunc(mocks.DDrppi_mocks, autocorr, cosmology=1, nthreads=self.nthreads,
-                                           pimax=pimax, binfile=self.edges[0],
+                                           binfile=self.edges[0], pimax=pimax, npibins=1,
                                            RA1=positions1[0], DEC1=positions1[1], CZ1=positions1[2],
                                            RA2=positions2[0], DEC2=positions2[1], CZ2=positions2[2],
                                            is_comoving_dist=True,
