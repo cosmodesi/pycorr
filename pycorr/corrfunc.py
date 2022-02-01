@@ -109,10 +109,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                   'bin_type': self.bin_type, 'weight_type': weight_type,
                   'pair_weights': pair_weights, 'sep_pair_weights': sep_pair_weights,
                   'attrs_pair_weights': weight_attrs, 'verbose': False,
-                  'isa': 'fallback'} # to be set to 'fastest' when bitwise weights included in all kernels
-        #kwargs = {'weights1': weights1, 'weights2': weights2,
-        #          'weight_type': weight_type, 'verbose': False,
-        #          'isa': 'fallback'}
+                  'isa': self.attrs.get('isa', 'fallback')} # to be set to 'fastest' when bitwise weights included in all kernels
 
         positions2 = dpositions2
         if autocorr:

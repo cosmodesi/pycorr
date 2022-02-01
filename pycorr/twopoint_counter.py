@@ -391,12 +391,12 @@ class BaseTwoPointCounter(BaseClass):
         self.mpicomm = mpicomm
         if self.mpicomm is None and mpiroot is not None:
             raise TwoPointCounterError('mpiroot is not None, but no mpicomm provided')
-        self._set_positions(positions1, positions2, position_type=position_type, dtype=dtype, mpiroot=mpiroot)
-        self._set_weights(weights1, weights2, weight_type=weight_type, twopoint_weights=twopoint_weights, weight_attrs=weight_attrs, mpiroot=mpiroot)
-        self._set_edges(edges, bin_type=bin_type)
         self._set_boxsize(boxsize)
+        self._set_edges(edges, bin_type=bin_type)
         self._set_los(los)
         self._set_compute_sepsavg(compute_sepsavg)
+        self._set_positions(positions1, positions2, position_type=position_type, dtype=dtype, mpiroot=mpiroot)
+        self._set_weights(weights1, weights2, weight_type=weight_type, twopoint_weights=twopoint_weights, weight_attrs=weight_attrs, mpiroot=mpiroot)
         self.wnorm = self.normalization()
         self._set_zeros()
         if self.size1 * self.size2:
@@ -555,6 +555,8 @@ class BaseTwoPointCounter(BaseClass):
         self.twopoint_weights = twopoint_weights
         self.cos_twopoint_weights = None
         if twopoint_weights is not None:
+            if self.periodic:
+                raise TwoPointCounterError('Cannot use angular weights in case of periodic boundary conditions (boxsize)')
             from collections import namedtuple
             TwoPointWeight = namedtuple('TwoPointWeight', ['sep', 'weight'])
             try:
@@ -595,7 +597,7 @@ class BaseTwoPointCounter(BaseClass):
         if self.periodic and self.mode != 's':
             allowed_los = ['x', 'y', 'z']
             if self.los not in allowed_los:
-                raise TwoPointCounterError('When boxsize is provided, los should be one of {}'.format(allowed_los))
+                raise TwoPointCounterError('los should be one of {} in case of periodic boundary conditions (boxsize)'.format(allowed_los))
 
     def _set_boxsize(self, boxsize):
         self.boxsize = boxsize
@@ -777,8 +779,8 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
         """
         self.attrs = {}
         self.mode = mode.lower()
-        self._set_edges(edges)
         self._set_boxsize(boxsize)
+        self._set_edges(edges)
         self._set_los(los)
         self.size1 = size1
         self.size2 = size2

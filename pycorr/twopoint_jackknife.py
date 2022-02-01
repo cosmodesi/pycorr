@@ -458,17 +458,20 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         if nthreads is None:
             self.nthreads = int(os.getenv('OMP_NUM_THREADS','1'))
         self.mpicomm = mpicomm
+        if self.mpicomm is None and mpiroot is not None:
+            raise TwoPointCounterError('mpiroot is not None, but no mpicomm provided')
         self.nprocs_per_real = nprocs_per_real
-        self._set_positions(positions1, positions2, position_type=position_type, dtype=dtype, mpiroot=mpiroot)
-        self._set_weights(weights1, weights2, weight_type=weight_type, twopoint_weights=twopoint_weights, weight_attrs=weight_attrs, mpiroot=mpiroot)
-        self._set_edges(edges, bin_type=bin_type)
         self._set_boxsize(boxsize)
+        self._set_edges(edges, bin_type=bin_type)
         self._set_los(los)
         self._set_compute_sepsavg(compute_sepsavg)
-        self._set_zeros()
+        self._set_positions(positions1, positions2, position_type=position_type, dtype=dtype, mpiroot=mpiroot)
+        self._set_weights(weights1, weights2, weight_type=weight_type, twopoint_weights=twopoint_weights, weight_attrs=weight_attrs, mpiroot=mpiroot)
         self._set_samples(samples1, samples2, mpiroot=mpiroot)
+        self._set_zeros()
         self.auto, self.cross12, self.cross21 = {}, {}, {}
         self.run(samples=samples)
+        del self.positions1, self.positions2, self.weights1, self.weights2, self.samples1, self.samples2
 
     def _set_samples(self, samples1, samples2=None, mpiroot=None):
 

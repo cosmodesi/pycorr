@@ -172,12 +172,13 @@ def test_twopoint_counter(mode='s'):
 
     ref_func = {'theta':ref_theta, 's':ref_s, 'smu':ref_smu, 'rppi':ref_rppi, 'rp':ref_rp}[mode]
     list_engine = ['corrfunc']
-    ref_edges = np.linspace(1,200,11)
+    ref_edges = np.linspace(1,100,11)
     if mode == 'theta':
         ref_edges = np.linspace(1e-1,10,11) # below 1e-5 for float64 (1e-1 for float32), self pairs are counted by Corrfunc
-    size = 100
-    boxsize = (1000,)*3
+    size = 200
+    boxsize = (500,)*3
     list_options = []
+
     list_options.append({})
     if mode not in ['theta', 'rp']:
         list_options.append({'boxsize':boxsize})
@@ -199,8 +200,13 @@ def test_twopoint_counter(mode='s'):
     from collections import namedtuple
     TwoPointWeight = namedtuple('TwoPointWeight', ['sep', 'weight'])
     twopoint_weights = TwoPointWeight(np.logspace(-4, 0, 40), np.linspace(4., 1., 40))
-    #list_options.append({'autocorr':True, 'twopoint_weights':twopoint_weights})
-    list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'dtype':'f4'})
+    list_options.append({'autocorr':True, 'twopoint_weights':twopoint_weights})
+    list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'dtype':'f8'})
+    for isa in ['fallback', 'sse42', 'avx', 'avx512f']:
+        list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'dtype':'f8', 'isa':isa})
+        list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'los':'y', 'dtype':'f8', 'isa':isa})
+    #list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'dtype':'f8', 'boxsize':boxsize})
+    #list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'dtype':'f8', 'boxsize':boxsize})
 
     mpi = False
     try:
@@ -237,6 +243,7 @@ def test_twopoint_counter(mode='s'):
             options_ref = options.copy()
             weight_attrs = options_ref.pop('weight_attrs', {}).copy()
             compute_sepavg = options_ref.pop('compute_sepsavg', True)
+            options_ref.pop('isa', 'fallback')
 
             def setdefaultnone(di, key, value):
                 if di.get(key, None) is None:
