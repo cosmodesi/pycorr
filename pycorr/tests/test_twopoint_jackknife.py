@@ -64,7 +64,7 @@ def test_subsampler():
 def test_twopoint_counter(mode='s'):
 
     list_engine = ['corrfunc']
-    edges = np.linspace(1,100,11)
+    edges = np.linspace(0., 100., 11)
     size = 1000
     boxsize = (1000,)*3
     list_options = []
@@ -100,11 +100,11 @@ def test_twopoint_counter(mode='s'):
         list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'mpicomm':mpi.COMM_WORLD})
 
     if mode == 'smu':
-        edges = (edges, np.linspace(0,1,21))
+        edges = (edges, np.linspace(0., 1., 21))
     elif mode == 'rppi':
-        edges = (edges, np.linspace(0,40,41))
+        edges = (edges, np.linspace(0., 40., 41))
     elif mode == 'theta':
-        edges = np.linspace(1e-1,10,21) # below 1e-5 for float64 (1e-1 for float32), self pairs are counted by Corrfunc
+        edges = np.linspace(1e-1, 10., 21) # below 1e-5 for float64 (1e-1 for float32), self pairs are counted by Corrfunc
     for engine in list_engine:
         for options in list_options:
             options = options.copy()

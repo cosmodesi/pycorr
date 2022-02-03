@@ -280,6 +280,13 @@ class BaseTwoPointCounter(BaseClass):
             and optionally second (e.g. :math:`\pi`) dimensions.
             In case of single-dimension binning (e.g. ``mode`` is "theta", "s" or "rp"),
             the single array of bin edges can be provided directly.
+            Edges are inclusive on the low end, exclusive on the high end,
+            i.e. a pair separated by `s` falls in bin `i` if ``edges[i] <= s < edges[i+1]``.
+            In case ``mode`` is "smu", this means that pairs at :math:`\mu = 1` are not included.
+            Pairs at separation :math:`s = 0` are included in the :math:`\mu = 0` bin.
+            In case of auto-correlation (no ``positions2`` provided), auto-pairs (pairs of same objects) are not counted.
+            In case of cross-correlation, all pairs are counted.
+            In any case, duplicate objects will be counted (with separation zero).
 
         positions1 : list, array
             Positions in the first catalog. Typically of shape (3, N), but can be (2, N) when ``mode`` is "theta".
@@ -369,6 +376,8 @@ class BaseTwoPointCounter(BaseClass):
         dtype : string, np.dtype, default=None
             Array type for positions and weights.
             If ``None``, defaults to type of first ``positions1`` array.
+            Double precision is highly recommended in case ``mode`` is "theta",
+            or ``twopoint_weights`` is provided (due to cosine).
 
         nthreads : int, default=None
             Number of OpenMP threads to use.
@@ -569,8 +578,9 @@ class BaseTwoPointCounter(BaseClass):
                 except IndexError:
                     sep, weight = twopoint_weights
             # just to make sure we use the correct dtype
-            self.cos_twopoint_weights = TwoPointWeight(sep=np.cos(np.radians(sep[::-1]), dtype=self.dtype),
-                                                       weight=np.array(weight[::-1], dtype=self.dtype))
+            sep = np.cos(np.radians(np.array(sep, dtype=self.dtype)))
+            argsort = np.argsort(sep)
+            self.cos_twopoint_weights = TwoPointWeight(sep=np.array(sep[argsort], dtype=self.dtype), weight=np.array(weight[argsort], dtype=self.dtype))
 
     def _mpi_decompose(self):
         if self.with_mpi:
@@ -603,6 +613,26 @@ class BaseTwoPointCounter(BaseClass):
         self.boxsize = boxsize
         if self.periodic:
             self.boxsize = _make_array(boxsize, 3, dtype='f8')
+
+    def _autocounts(self):
+        """Return auto-counts, that are pairs of same objects."""
+        if not self.autocorr:
+            return 0.
+        weights = 1.
+        if self.cos_twopoint_weights is not None and self.cos_twopoint_weights.sep[-1] == 1.:
+            weights *= np.interp(1., self.cos_twopoint_weights.sep, self.cos_twopoint_weights.weight)
+        if not self.weights1:
+            return self.size1*weights
+        if self.n_bitwise_weights:
+            weights *= get_inverse_probability_weight(self.weights1[:self.n_bitwise_weights], self.weights1[:self.n_bitwise_weights], nrealizations=self.weight_attrs['nrealizations'],
+                                                      noffset=self.weight_attrs['noffset'], default_value=self.weight_attrs['default_value'], dtype=self.dtype)
+        for ii in range(self.n_bitwise_weights, len(self.weights1)):
+            weights *= self.weights1[ii]**2
+        assert weights.size == self.size1
+        weights = np.sum(weights)
+        if self.with_mpi:
+            weights = self.mpicomm.allreduce(weights)
+        return weights
 
     def normalization(self):
         r"""

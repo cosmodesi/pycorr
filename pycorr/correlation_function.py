@@ -34,6 +34,13 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         and optionally second (e.g. :math:`\pi`) dimensions.
         In case of single-dimension binning (e.g. ``mode`` is "theta", "s" or "rp"),
         the single array of bin edges can be provided directly.
+        Edges are inclusive on the low end, exclusive on the high end,
+        i.e. a pair separated by `s` falls in bin `i` if ``edges[i] <= s < edges[i+1]``.
+        In case ``mode`` is "smu", this means that pairs at :math:`\mu = 1` are not included.
+        Pairs at separation :math:`s = 0` are included in the :math:`\mu = 0` bin.
+        In case of auto-correlation (no ``positions2`` provided), auto-pairs (pairs of same objects) are not counted.
+        In case of cross-correlation, all pairs are counted.
+        In any case, duplicate objects will be counted (with separation zero).
 
     data_positions1 : array
         Positions in the first data catalog. Typically of shape (3, N), but can be (2, N) when ``mode`` is "theta".
@@ -220,6 +227,8 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     dtype : string, np.dtype, default=None
         Array type for positions and weights.
         If ``None``, defaults to type of first array of positions.
+        Double precision is highly recommended in case ``mode`` is "theta",
+        or ``twopoint_weights`` is provided (due to cosine).
 
     nthreads : int
         Number of OpenMP threads to use.

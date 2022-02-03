@@ -109,7 +109,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                   'bin_type': self.bin_type, 'weight_type': weight_type,
                   'pair_weights': pair_weights, 'sep_pair_weights': sep_pair_weights,
                   'attrs_pair_weights': weight_attrs, 'verbose': False,
-                  'isa': self.attrs.get('isa', 'fallback')} # to be set to 'fastest' when bitwise weights included in all kernels
+                  'isa': self.attrs.get('isa', 'avx')} # to be set to 'fastest' when bitwise weights included in all kernels
 
         positions2 = dpositions2
         if autocorr:
@@ -215,6 +215,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                     else:
                         boxsize = [max(p1.max(), p2.max()) - min(p1.min(), p2.min()) for p1, p2 in zip(dpositions1, dpositions2)]
                     pimax = sum(p**2 for p in boxsize)**0.5 + 1.
+                    #print(pimax)
                     result = call_corrfunc(mocks.DDrppi_mocks, autocorr, cosmology=1, nthreads=self.nthreads,
                                            binfile=self.edges[0], pimax=pimax, npibins=1,
                                            RA1=positions1[0], DEC1=positions1[1], CZ1=positions1[2],
@@ -252,5 +253,14 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             if self.compute_sepavg:
                 with np.errstate(divide='ignore', invalid='ignore'):
                     self.sep = self.mpicomm.allreduce(self.sep * wcounts)/self.wcounts
+
+
+        if self.autocorr and all(edges[0] == 0. for edges in self.edges):
+            self.ncounts.flat[0] -= self.size1
+            autocounts = self._autocounts()
+            if self.compute_sepavg:
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    self.sep.flat[0] *= self.wcounts.flat[0]/(self.wcounts.flat[0] - autocounts)
+            self.wcounts.flat[0] -= autocounts
 
         self.sep[self.ncounts == 0] = np.nan
