@@ -495,8 +495,9 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
             self._set_zeros()
             return
         for auto in self.auto.values(): break
+        self.edges = auto.edges.copy() # useful when rebinning
         for name in ['wcounts', 'wnorm', 'ncounts']:
-            if hasattr(auto, name):
+            if getattr(auto, name, None) is not None:
                 setattr(self, name, sum(getattr(r, name) for r in self.auto.values()) + sum(getattr(r, name) for r in self.cross12.values()))
 
         self._set_default_seps() # reset self.seps to default
@@ -649,7 +650,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
             alpha = float(correction)
         state = self.auto[ii].__getstate__()
         for name in ['wcounts', 'wnorm', 'ncounts']:
-            if hasattr(self, name):
+            if getattr(self, name, None) is not None:
                 state[name] = getattr(self, name) - getattr(self.auto[ii], name) - alpha * (getattr(self.cross12[ii], name) + getattr(self.cross21[ii], name))
 
         state['seps'] = state['seps'].copy()
@@ -683,6 +684,21 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         """
         return (self.nrealizations - 1) * np.cov([self.realization(ii, **kwargs).normalized_wcounts().ravel() for ii in self.realizations], rowvar=False, ddof=0)
 
+    def slice(self, *slices):
+        """
+        Slice counts in place. If slice step is not 1, use :meth:`rebin`.
+        For example:
+
+        .. code-block:: python
+
+            counts.slice(slice(0, 10, 2), slice(0, 6, 3)) # rebin by factor 2 (resp. 3) along axis 0 (resp. 1), up to index 10 (resp. 6)
+            counts[:10:2,:6:3] # same as above, but return new instance.
+
+        """
+        for name in self._result_names:
+            for r in getattr(self, name).values(): r.slice(*slices)
+        self._set_sum()
+
     def rebin(self, factor=1):
         """
         Rebin two-point counts, by factor(s) ``factor``.
@@ -691,7 +707,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         """
         for name in self._result_names:
             for r in getattr(self, name).values(): r.rebin(factor=factor)
-        super(JackknifeTwoPointCounter, self).rebin(factor=factor)
+        self._set_sum()
 
     @classmethod
     def concatenate(cls, *others):

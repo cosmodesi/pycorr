@@ -2,7 +2,7 @@ import os
 import numpy as np
 
 from pycorr import TwoPointCorrelationFunction, utils, setup_logging
-from pycorr.estimator import BaseTwoPointEstimator
+from pycorr.twopoint_estimator import BaseTwoPointEstimator
 
 
 def test():
@@ -193,7 +193,7 @@ def save_reference(base_dir):
                 data_weights1, data_weights2, randoms_weights1, randoms_weights2 = data1[3:-1], data2[3:-1], np.ones_like(randoms1[0]), np.ones_like(randoms2[0])
             if 'individual_bitwise_weights' in weight:
                 data_weights1, data_weights2, randoms_weights1, randoms_weights2 = data1[3:], data2[3:], randoms1[3:], randoms2[3:]
-            kwargs = {'weight_attrs':weight_attrs, 'position_type':'xyz', 'compute_sepavg':True}
+            kwargs = {'weight_attrs':weight_attrs, 'position_type':'xyz', 'compute_sepsavg':True}
             if 'angular' in weight:
                 kwargs['D1D2_twopoint_weights'] = kwargs['D1R2_twopoint_weights'] = kwargs['D2R1_twopoint_weights'] = angular_upweights
             result = TwoPointCorrelationFunction(mode, edges, data_positions1=data1[:3], data_weights1=data_weights1,
@@ -216,7 +216,7 @@ def save_reference(base_dir):
     data_weights1, data_weights2 = data1[3:-1], data2[3:-1]
     randoms_weights1, randoms_weights2 = np.ones_like(randoms1[0]), np.ones_like(randoms2[0])
     parent_weights1, parent_weights2 = np.ones_like(parent1[0]), np.ones_like(parent2[0])
-    kwargs = {'weight_attrs':weight_attrs, 'position_type':'xyz', 'compute_sepavg':True}
+    kwargs = {'weight_attrs':weight_attrs, 'position_type':'xyz', 'compute_sepsavg':True}
     # D1_parentD2_parent/D1D2_pip
     result = TwoPointCorrelationFunction(mode, edges, data_positions1=data1[:3], data_weights1=data_weights1,
                                          data_positions2=data2[:3], data_weights2=data_weights2,
@@ -276,7 +276,7 @@ def test_reference(base_dir):
                 data_weights1, data_weights2, randoms_weights1, randoms_weights2 = data1[3:-1], data2[3:-1], np.ones_like(randoms1[0]), np.ones_like(randoms2[0])
             if 'individual_bitwise_weights' in weight:
                 data_weights1, data_weights2, randoms_weights1, randoms_weights2 = data1[3:], data2[3:], randoms1[3:], randoms2[3:]
-            kwargs = {'weight_attrs':weight_attrs, 'position_type':'xyz', 'compute_sepavg':True}
+            kwargs = {'weight_attrs':weight_attrs, 'position_type':'xyz', 'compute_sepsavg':True}
             if 'angular' in weight:
                 kwargs['D1D2_twopoint_weights'] = kwargs['D1R2_twopoint_weights'] = kwargs['D2R1_twopoint_weights'] = angular_upweights
             result = TwoPointCorrelationFunction(mode, edges, data_positions1=data1[:3], data_weights1=data_weights1,
@@ -301,7 +301,7 @@ def test_reference(base_dir):
     data_weights1, data_weights2 = data1[3:-1], data2[3:-1]
     randoms_weights1, randoms_weights2 = np.ones_like(randoms1[0]), np.ones_like(randoms2[0])
     parent_weights1, parent_weights2 = np.ones_like(parent1[0]), np.ones_like(parent2[0])
-    kwargs = {'weight_attrs':weight_attrs, 'position_type':'xyz', 'compute_sepavg':True}
+    kwargs = {'weight_attrs':weight_attrs, 'position_type':'xyz', 'compute_sepsavg':True}
     # D1_parentD2_parent/D1D2_pip
     result = TwoPointCorrelationFunction(mode, edges, data_positions1=data1[:3], data_weights1=data_weights1,
                                          data_positions2=data2[:3], data_weights2=data_weights2,

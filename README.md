@@ -29,7 +29,7 @@ Example notebooks presenting most use cases are provided in directory nb/.
 
 Documentation is hosted on Read the Docs, [pycorr docs](https://py2pcf.readthedocs.io/).
 
-# Requirements
+## Requirements
 
 Strict requirements are:
 

@@ -181,7 +181,7 @@ def test_twopoint_counter(mode='s'):
     ref_func = {'theta':ref_theta, 's':ref_s, 'smu':ref_smu, 'rppi':ref_rppi, 'rp':ref_rp}[mode]
     list_engine = ['corrfunc']
     #ref_edges = np.linspace(1., 100., 11)
-    ref_edges = np.linspace(0., 100., 11)
+    ref_edges = np.linspace(0., 100., 41)
     if mode == 'theta':
         #ref_edges = np.linspace(1e-1, 10., 11) # below 1e-5 for float64 (1e-1 for float32), self pairs are counted by Corrfunc
         ref_edges = np.linspace(0., 80., 41)
@@ -194,7 +194,7 @@ def test_twopoint_counter(mode='s'):
         list_options.append({'autocorr':True, 'boxsize':boxsize})
         list_options.append({'n_individual_weights':1,'autocorr':True, 'boxsize':boxsize})
 
-    list_options.append({'autocorr':True, 'compute_sepsavg':False, 'edges':np.array([1, 3, 4])})
+    list_options.append({'autocorr':True, 'compute_sepsavg':False, 'edges':np.array([1, 8, 20, 42, 60])})
     list_options.append({'n_individual_weights':1, 'bin_type':'custom'})
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1})
     if mode != 'theta':
@@ -376,9 +376,14 @@ def test_twopoint_counter(mode='s'):
                 assert np.allclose(test2.wnorm, norm_ref, **tol)
                 assert np.allclose(test2.size1, test.size1) and np.allclose(test2.size2, test.size2)
                 test3 = test2.copy()
-                test2.rebin((2,2) if len(edges) == 2 else (2,))
-                assert np.allclose(np.sum(test2.wcounts), np.sum(wcounts_ref), **tol)
-                assert np.allclose(test3.wcounts, test.wcounts)
+                test3.rebin((2,2) if len(edges) == 2 else (2,))
+                assert np.allclose(np.sum(test3.wcounts), np.sum(wcounts_ref))
+                assert np.allclose(test2.wcounts, test.wcounts)
+                test2 = test2[::2,::2] if len(edges) == 2 else test2[::2]
+                assert test2.shape == test3.shape
+                assert np.allclose(test2.wcounts, test3.wcounts)
+                test3.select((0, 20.))
+                assert np.all((test3.sepavg(axis=0) <= 20.) | np.isnan(test3.sepavg(axis=0)))
 
             if mpicomm is not None:
                 test_mpi = run(mpicomm=mpicomm, pass_none=mpicomm.rank != 0, mpiroot=0)
@@ -408,7 +413,7 @@ def test_pip_normalization(mode='s'):
 
 
 def test_analytic_twopoint_counter(mode='s'):
-    edges = np.linspace(50,100,5)
+    edges = np.linspace(50, 100, 5)
     size = 10000
     boxsize = (1000,)*3
     #list_options.append({'weight_type':'inverse_bitwise','n_bitwise_weights':2})
@@ -438,6 +443,11 @@ def test_analytic_twopoint_counter(mode='s'):
             ref = test.copy()
             test.rebin((2,2) if len(edges) == 2 else (2,))
             assert np.allclose(np.sum(test.wcounts), np.sum(ref.wcounts))
+            test2 = ref[::2,::2] if len(edges) == 2 else ref[::2]
+            assert test2.shape == test.shape
+            assert np.allclose(test2.wcounts, test.wcounts, equal_nan=True)
+            test2.select((0, 80.))
+            assert np.all((test2.sepavg(axis=0) <= 80.) | np.isnan(test2.sepavg(axis=0)))
 
 
 def test_rebin():
@@ -466,10 +476,11 @@ def test_rebin():
 if __name__ == '__main__':
 
     setup_logging()
-    for mode in ['theta','s','smu','rppi','rp']:
+
+    for mode in ['theta', 's', 'smu', 'rppi', 'rp']:
         test_twopoint_counter(mode=mode)
 
-    for mode in ['s','smu','rppi']:
+    for mode in ['s', 'smu', 'rppi']:
         test_analytic_twopoint_counter(mode=mode)
 
     test_rebin()

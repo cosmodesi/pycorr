@@ -20,23 +20,27 @@ def generate_catalogs(size=100, boxsize=(1000,)*3, offset=(0,0,0), n_individual_
 
 def test_multipoles():
 
-    class Estimator(object): pass
+    class Estimator(object):
+
+        def sepavg(self, axis=0):
+            return estimator.sep[:,0]
+
     from scipy import special
 
     estimator = Estimator()
     for muedges in [np.linspace(0., 1., 10), np.linspace(0., 1., 100), np.linspace(-1., 1., 100)]:
-        edges = [np.linspace(0., 1., 10), np.linspace(0., 1., 100)]
-        s, mu = np.meshgrid(*[(e[:-1] + e[1:])/2. for e in edges], indexing='ij')
-        estimator.sep, estimator.edges, estimator.corr = s, edges, np.ones_like(s)
+        edges = [np.linspace(0., 1., 10), muedges]
+        ss, mumu = np.meshgrid(*[(e[:-1] + e[1:])/2. for e in edges], indexing='ij')
+        estimator.sep, estimator.edges, estimator.corr = ss, edges, np.ones_like(ss)
         s, xi = project_to_multipoles(estimator, ells=(0,2,4))
         assert np.allclose(xi[0], 1., atol=1e-9)
         for xiell in xi[1:]: assert np.allclose(xiell, 0., atol=1e-9)
 
     edges = [np.linspace(0., 1., 10), np.linspace(0., 1., 100)]
-    s, mu = np.meshgrid(*[(e[:-1] + e[1:])/2. for e in edges], indexing='ij')
+    ss, mumu = np.meshgrid(*[(e[:-1] + e[1:])/2. for e in edges], indexing='ij')
     ells = (0, 2, 4)
     for ellin in ells[1:]:
-        estimator.sep, estimator.edges, estimator.corr = s, edges, special.legendre(ellin)(mu)
+        estimator.sep, estimator.edges, estimator.corr = ss, edges, special.legendre(ellin)(mumu)
         s, xi = project_to_multipoles(estimator, ells=ells)
         for ell, xiell in zip(ells, xi):
             assert np.allclose(xiell, 1. if ell == ellin else 0., atol=1e-3)
@@ -47,7 +51,7 @@ def test_estimator(mode='s'):
     from pycorr import KMeansSubsampler
 
     list_engine = ['corrfunc']
-    edges = np.linspace(1,100,10)
+    edges = np.linspace(1, 100, 10)
     size = 100
     boxsize = (1000,)*3
     list_options = []
@@ -74,13 +78,13 @@ def test_estimator(mode='s'):
         list_options.append({'mpicomm': mpi.COMM_WORLD})
 
     #list_options.append({'weight_type':'inverse_bitwise','n_bitwise_weights':2})
-    edges = np.linspace(1e-9,100,11)
+    edges = np.linspace(1e-9, 100, 11)
     if mode == 'smu':
-        edges = (edges, np.linspace(0,1,21))
+        edges = (edges, np.linspace(0, 1, 21))
     elif mode == 'rppi':
-        edges = (edges, np.linspace(0,20,21))
+        edges = (edges, np.linspace(0, 20, 21))
     elif mode == 'theta':
-        edges = np.linspace(1e-5,10,11) # below 1e-5, self pairs are counted by Corrfunc
+        edges = np.linspace(1e-5, 10, 11) # below 1e-5, self pairs are counted by Corrfunc
 
     for engine in list_engine:
         for options in list_options:
@@ -199,7 +203,7 @@ def test_estimator(mode='s'):
                     #                       weights1=data2[3:], weights2=randoms1[3:], **options_counts)
                     assert_allclose(D2R1, estimator_jackknife.D2S1)
                 else:
-                    assert_allclose(D1R2, estimator_jackknife.D2S1)
+                    assert_allclose(D1R2, estimator_jackknife.D1S2)
             if estimator in ['landyszalay', 'natural', 'weight'] and with_randoms:
                 R1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:npos], positions2=None if autocorr else randoms2[:npos],
                                        weights1=randoms1[npos:-1], weights2=None if autocorr else randoms2[npos:-1], **options_counts)
@@ -227,10 +231,15 @@ def test_estimator(mode='s'):
                     assert test2.__class__ is test.__class__
                     assert test2.autocorr is test.autocorr
                     test3 = test2.copy()
-                    test2.rebin((2,5) if len(edges) == 2 else (2,))
-                    assert_allclose_estimators(test3, test)
-                    test2 = run_jackknife(R1R2=test.R1R2)
-                    assert_allclose_estimators(test2, test)
+                    test3.rebin((2,5) if len(edges) == 2 else (2,))
+                    assert test3.shape[0] == test2.shape[0]//2
+                    test2 = test2[::2,::5] if len(edges) == 2 else test2[::2]
+                    assert_allclose_estimators(test2, test3)
+                    test3.select((0, 50.))
+                    assert np.all((test3.sepavg(axis=0) <= 50.) | np.isnan(test3.sepavg(axis=0)))
+                    if 'davispeebles' not in test.name:
+                        test2 = run_jackknife(R1R2=test.R1R2)
+                        assert_allclose_estimators(test2, test)
 
             if mpicomm is not None:
                 test_mpi = run_jackknife(mpicomm=mpicomm, pass_none=mpicomm.rank != 0, mpiroot=0)
@@ -247,7 +256,7 @@ def test_estimator(mode='s'):
 if __name__ == '__main__':
 
     setup_logging()
-    test_multipoles()
 
-    for mode in ['theta','s','smu','rppi','rp']:
+    test_multipoles()
+    for mode in ['theta', 's', 'smu', 'rppi', 'rp']:
         test_estimator(mode=mode)

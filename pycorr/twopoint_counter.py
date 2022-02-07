@@ -722,6 +722,92 @@ class BaseTwoPointCounter(BaseClass):
         """Return normalized two-point counts, i.e. :attr:`wcounts` divided by :meth:`normalization`."""
         return self.wcounts/self.wnorm
 
+    def sepavg(self, axis=0):
+        """Return average of separation for input axis; this is an 1D array of size :attr:`shape[axis]`."""
+        axis = axis % self.ndim
+        if self.compute_sepsavg[axis]:
+            axes_to_sum_over = tuple(ii for ii in range(self.ndim) if ii != axis)
+            with np.errstate(divide='ignore', invalid='ignore'):
+                toret = np.sum(_nan_to_zero(self.seps[axis])*self.wcounts, axis=axes_to_sum_over)/np.sum(self.wcounts, axis=axes_to_sum_over)
+        else:
+            toret = self.seps[axis][tuple(Ellipsis if ii == axis else 0 for ii in range(self.ndim))]
+        return toret
+
+    def __getitem__(self, slices):
+        """Call :meth:`slice`."""
+        new = self.copy()
+        if isinstance(slices, tuple):
+            new.slice(*slices)
+        else:
+            new.slice(slices)
+        return new
+
+    def select(self, *xlims):
+        """
+        Restrict counts to provided coordinate limits in place.
+
+        For example:
+
+        .. code-block:: python
+
+            counts.select((0, 0.3)) # restrict first axis to (0, 0.3)
+            counts.select(None, (0, 0.2)) # restrict second axis to (0, 0.2)
+
+        """
+        if len(xlims) > self.ndim:
+            raise IndexError('Too many limits: statistics is {:d}-dimensional, but {:d} were indexed'.format(self.ndim, len(xlims)))
+        slices = []
+        for iaxis, xlim in enumerate(xlims):
+            if xlim is None:
+                slices.append(slice(None))
+            else:
+                x = self.sepavg(axis=iaxis)
+                indices = np.flatnonzero((x >= xlim[0]) & (x <= xlim[1]))
+                if indices.size:
+                    slices.append(slice(indices[0], indices[-1]+1, 1))
+                else:
+                    slices.append(slice(0))
+        self.slice(*slices)
+
+    def slice(self, *slices):
+        """
+        Slice counts in place. If slice step is not 1, use :meth:`rebin`.
+        For example:
+
+        .. code-block:: python
+
+            counts.slice(slice(0, 10, 2), slice(0, 6, 3)) # rebin by factor 2 (resp. 3) along axis 0 (resp. 1), up to index 10 (resp. 6)
+            counts[:10:2,:6:3] # same as above, but return new instance.
+
+        """
+        inslices = list(slices) + [slice(None)]*(self.ndim - len(slices))
+        if len(inslices) > self.ndim:
+            raise IndexError('Too many indices: statistics is {:d}-dimensional, but {:d} were indexed'.format(self.ndim, len(slices)))
+        slices, eslices, factor = [], [], []
+        for iaxis, sl in enumerate(inslices):
+            start, stop, step = sl.start, sl.stop, sl.step
+            if start is None: start = 0
+            if step is None: step = 1
+            indices = np.arange(self.wcounts.shape[iaxis])[slice(start, stop, 1)]
+            if indices.size:
+                stop = indices[-1] + 1 # somewhat hacky, but correct!
+            else:
+                stop = 0
+            slices.append(slice(start, stop, 1))
+            eslices.append(slice(start, stop+1, 1))
+            factor.append(step)
+        slices = tuple(slices)
+        for name in ['seps', 'wcounts', 'ncounts']:
+            tmp = getattr(self, name, None)
+            if tmp is None: continue
+            if isinstance(tmp, list):
+                setattr(self, name, [tt[slices] for tt in tmp])
+            else:
+                setattr(self, name, tmp[slices])
+        self.edges = [edges[eslice] for edges, eslice in zip(self.edges, eslices)]
+        if not all(f == 1 for f in factor):
+            self.rebin(factor=factor)
+
     def rebin(self, factor=1):
         """
         Rebin two-point counts, by factor(s) ``factor``.
@@ -737,7 +823,7 @@ class BaseTwoPointCounter(BaseClass):
         new_shape = tuple(s//f for s,f in zip(self.shape, factor))
         wcounts = self.wcounts
         self.wcounts = utils.rebin(wcounts, new_shape, statistic=np.sum)
-        if hasattr(self, 'ncounts'):
+        if getattr(self, 'ncounts', None) is not None:
             self.ncounts = utils.rebin(self.ncounts, new_shape, statistic=np.sum)
         self.edges = [edges[::f] for edges, f in zip(self.edges, factor)]
         seps = self.seps

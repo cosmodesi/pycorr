@@ -238,8 +238,16 @@ def test_twopoint_counter(mode='s'):
                 test.save(fn)
                 test2 = JackknifeTwoPointCounter.load(fn)
                 assert_allclose(test2, ref)
-                test2.rebin((2,2) if len(edges) == 2 else (2,))
-                assert np.allclose(np.sum(test2.wcounts), np.sum(ref.wcounts))
+                test3 = test2.copy()
+                test3.rebin((2,2) if len(edges) == 2 else (2,))
+                assert test3.shape[0] == test2.shape[0]//2
+                assert np.allclose(np.sum(test3.wcounts), np.sum(ref.wcounts))
+                assert np.allclose(test2.wcounts, ref.wcounts)
+                test2 = test2[::2,::2] if len(edges) == 2 else test2[::2]
+                assert test2.shape == test3.shape
+                assert np.allclose(test2.wcounts, test3.wcounts, equal_nan=True)
+                test3.select((0, 20.))
+                assert np.all((test3.sepavg(axis=0) <= 20.) | np.isnan(test3.sepavg(axis=0)))
 
             if mpicomm is not None:
                 test_mpi = run(mpicomm=mpicomm, pass_none=mpicomm.rank != 0, mpiroot=0, nprocs_per_real=2)
@@ -253,6 +261,7 @@ def test_twopoint_counter(mode='s'):
 if __name__ == '__main__':
 
     setup_logging()
+
     test_subsampler()
-    for mode in ['theta','s','smu','rppi','rp']:
+    for mode in ['theta', 's', 'smu', 'rppi', 'rp']:
         test_twopoint_counter(mode=mode)

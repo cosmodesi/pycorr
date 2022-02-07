@@ -3,7 +3,7 @@
 import numpy as np
 from scipy import special
 
-from .twopoint_counter import TwoPointCounter
+from .twopoint_counter import BaseTwoPointCounter, TwoPointCounter
 from .utils import BaseClass
 
 
@@ -139,39 +139,43 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
         S1D2 : BaseTwoPointCounter, default=None
             S1D2 two-point counts, see ``S1S2``. Defaults to ``D2R1``.
         """
-        self.D1D2 = D1D2
-        self.R1R2 = R1R2
-        self.D1R2 = D1R2
-        self.D2R1 = D2R1
-        self.S1S2 = S1S2
-        self.D1S2 = D1S2
-        self.D2S1 = D2S1
-        if D2R1 is None: # D1 = D2 and R1 = R2
-            self.D2R1 = D1R2
-        if S1S2 is None:
-            self.S1S2 = self.R1R2
-        if D1S2 is None:
-            self.D1S2 = self.D1R2
-        if D2S1 is None:
-            if D1S2 is not None: # autocorr
-                self.D2S1 = self.D1S2
-            else:
-                self.D2S1 = self.D2R1
+        self.with_shifted = S1S2 is not None or D1S2 is not None or D2S1 is not None
+        self.autocorr = D1D2.autocorr
+        for name in self._count_names:
+            counts = locals()[name]
+            if locals()[name] is None:
+                raise TwoPointEstimatorError('Counts {} must be provided'.format(name))
+            setattr(self, name, counts)
         self.run()
+
+    def __getattr__(self, name):
+        if name in ['D2R1', 'D2S1'] and self.autocorr:
+            conv = {'1':'2', '2':'1'}
+            name = ''.join([conv.get(nn, nn) for nn in name])
+            return getattr(self, name)
+        if name in ['S1S2', 'D1S2', 'D2S1'] and not self.with_shifted:
+            return getattr(self, name.replace('S', 'R'))
+        raise AttributeError('Counts {} do not exist'.format(name))
 
     @property
     def sep(self):
         """Array of separation values of first dimension, taken from :attr:`R1R2` if provided, else :attr:`D1D2`."""
-        if self.R1R2 is not None:
+        if getattr(self, 'R1R2', None) is not None:
             return self.R1R2.sep
         return self.D1D2.sep
 
     @property
     def seps(self):
         """Array of separation values, taken from :attr:`R1R2` if provided, else :attr:`D1D2`."""
-        if self.R1R2 is not None:
+        if getattr(self, 'R1R2', None) is not None:
             return self.R1R2.seps
         return self.D1D2.seps
+
+    def sepavg(self, axis=0):
+        """Return average of separation for input axis; this is an 1D array of size :attr:`shape[axis]`."""
+        if getattr(self, 'R1R2', None) is not None:
+            return self.R1R2.sepavg(axis=axis)
+        return self.D1D2.sepavg(axis=axis)
 
     @property
     def edges(self):
@@ -192,16 +196,6 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
     def ndim(self):
         """Return binning dimensionality."""
         return len(self.edges)
-
-    @property
-    def autocorr(self):
-        """Is this an autocorrelation?"""
-        return self.D1D2.autocorr
-
-    @property
-    def with_shifted(self):
-        """Do we have "shifted" (e.g. for reconstruction) two-point counts?"""
-        return self.S1S2 is not self.R1R2 or self.D1S2 is not self.D1R2 or self.D2S1 is not self.D2R1
 
     @classmethod
     def requires(cls, autocorr=False, with_shifted=False, join=None):
@@ -231,6 +225,35 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
     def _count_names(self):
         """Return list of counts used in estimator."""
         return self.requires(autocorr=self.autocorr, with_shifted=self.with_shifted, join='')
+
+    def __getitem__(self, slices):
+        """Call :meth:`slice`."""
+        new = self.copy()
+        if isinstance(slices, tuple):
+            new.slice(*slices)
+        else:
+            new.slice(slices)
+        return new
+
+    def select(self, *args, **kwargs):
+        """
+        Restrict estimator to provided coordinate limits in place.
+
+        For example:
+
+        .. code-block:: python
+
+            estimator.select((0, 0.3)) # restrict first axis to (0, 0.3)
+            estimator.select(None, (0, 0.2)) # restrict second axis to (0, 0.2)
+
+        """
+        BaseTwoPointCounter.select(self, *args, **kwargs)
+
+    def slice(self, *args, **kwargs):
+        """Slice estimator, by rebinning all two-point counts. See :meth:`BaseTwoPointCounter.slice`."""
+        for name in self._count_names:
+            getattr(self, name).slice(*args, **kwargs)
+        self.run()
 
     def rebin(self, *args, **kwargs):
         """Rebin estimator, by rebinning all two-point counts. See :meth:`BaseTwoPointCounter.rebin`."""
@@ -430,7 +453,7 @@ def project_to_multipoles(estimator, ells=(0,2,4), **kwargs):
         ells = (ells,)
     ells = tuple(ells)
     muedges = estimator.edges[1]
-    sep = np.nanmean(estimator.sep, axis=-1)
+    sep = estimator.sepavg(axis=0)
     poles = []
     for ill, ell in enumerate(ells):
         # \sum_{i} \xi_{i} \int_{\mu_{i}}^{\mu_{i+1}} L_{\ell}(\mu^{\prime}) d\mu^{\prime}
@@ -474,9 +497,10 @@ def project_to_wp(estimator, pimax=None, **kwargs):
     """
     mask = Ellipsis
     if pimax is not None:
-        mask = (estimator.edges[1] <= pimax)[:-1]
-    sep = np.nanmean(estimator.sep[:,mask], axis=-1)
-    wp = 2.*np.sum(estimator.corr[:,mask]*np.diff(estimator.edges[1])[mask], axis=-1)
+        estimator = estimator.copy()
+        estimator.select(None, (0, pimax))
+    sep = estimator.sepavg(axis=0)
+    wp = 2.*np.sum(estimator.corr*np.diff(estimator.edges[1]), axis=-1)
     try:
         realizations = [project_to_wp(estimator.realization(ii, **kwargs), pimax=pimax)[1] for ii in estimator.realizations]
     except AttributeError:
