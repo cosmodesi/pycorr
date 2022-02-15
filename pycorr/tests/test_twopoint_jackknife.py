@@ -93,7 +93,8 @@ def test_twopoint_counter(mode='s'):
     except ImportError:
         pass
 
-    for dtype in ['f8']: # in theta mode, lots of rounding errors!
+    for dtype in ['f8']:
+        itemsize = np.dtype(dtype).itemsize
         for isa in ['fastest']:
             # binning
             edges = np.array([1, 8, 20, 42, 60])
@@ -111,7 +112,7 @@ def test_twopoint_counter(mode='s'):
             list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'weight_attrs':{'nrealizations':42,'noffset':3}, 'dtype':dtype, 'isa':isa})
             list_options.append({'n_individual_weights':1, 'n_bitwise_weights':2, 'iip':2, 'weight_attrs':{'noffset':0,'default_value':0.8}, 'dtype':dtype, 'isa':isa})
             # twopoint_weights
-            if np.dtype(dtype).itemsize > 4:
+            if itemsize > 4:
                 list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'dtype':dtype, 'isa':isa})
                 list_options.append({'twopoint_weights':twopoint_weights, 'los':'y', 'dtype':dtype, 'isa':isa})
             # boxsize
@@ -126,6 +127,8 @@ def test_twopoint_counter(mode='s'):
                 list_options.append({'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
                 list_options.append({'n_individual_weights':1, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
                 list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
+                list_options.append({'autocorr':True, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
+                list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
             # labels
             list_options.append({'offset_label':2})
 
@@ -248,10 +251,6 @@ def test_twopoint_counter(mode='s'):
                 assert np.allclose(res2.wcounts, res1.wcounts, **tol)
                 assert np.allclose(res2.wnorm, res1.wnorm, **tol)
                 if compute_sepavg:
-                    ratio = res2.sep/res1.sep
-                    mask = np.isnan(res2.sep) != np.isnan(res1.sep)
-                    ind = np.unravel_index(np.flatnonzero(mask), mask.shape, order='C')
-                    #print(np.abs(ratio[~np.isnan(ratio)] - 1.).max())
                     assert np.allclose(res2.sep, res1.sep, **tol, equal_nan=True)
                 assert res1.size1 == res2.size1
                 assert res1.size2 == res2.size2

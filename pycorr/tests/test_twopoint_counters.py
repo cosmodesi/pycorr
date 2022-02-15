@@ -214,8 +214,8 @@ def test_twopoint_counter(mode='s'):
         pass
 
     for dtype in (['f8'] if mode == 'theta' else ['f4', 'f8']): # in theta mode, lots of rounding errors!
+        itemsize = np.dtype(dtype).itemsize
         for isa in ['fallback', 'sse42', 'avx', 'avx512f']:
-
             # binning
             edges = np.array([1, 8, 20, 42, 60])
             if mode == 'smu':
@@ -232,7 +232,7 @@ def test_twopoint_counter(mode='s'):
             list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'weight_attrs':{'nrealizations':42,'noffset':3}, 'dtype':dtype, 'isa':isa})
             list_options.append({'n_individual_weights':1, 'n_bitwise_weights':2, 'iip':2, 'weight_attrs':{'noffset':0,'default_value':0.8}, 'dtype':dtype, 'isa':isa})
             # twopoint_weights
-            if np.dtype(dtype).itemsize > 4:
+            if itemsize > 4:
                 list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'dtype':dtype, 'isa':isa})
                 list_options.append({'twopoint_weights':twopoint_weights, 'los':'y', 'dtype':dtype, 'isa':isa})
             # boxsize
@@ -246,7 +246,8 @@ def test_twopoint_counter(mode='s'):
             if mpi:
                 list_options.append({'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
                 list_options.append({'n_individual_weights':1, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
-                list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
+                list_options.append({'autocorr':True, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
+                list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
 
     for engine in list_engine:
         for options in list_options:
@@ -373,12 +374,10 @@ def test_twopoint_counter(mode='s'):
                 ref_reversed = test.reversed()
                 if itemsize <= 4:
                     assert np.isclose(test_reversed.wcounts, ref_reversed.wcounts, **tol).sum() > 0.95 * ref_reversed.wcounts.size
-                    if compute_sepavg:
-                        assert np.isclose(test_reversed.sep, ref_reversed.sep, **tol, equal_nan=True).sum() > 0.95 * np.sum(~np.isnan(ref_reversed.sep))
+                    assert np.isclose(test_reversed.sep, ref_reversed.sep, **tol, equal_nan=True).sum() > 0.95 * np.sum(~np.isnan(ref_reversed.sep))
                 else:
                     assert np.allclose(test_reversed.wcounts, ref_reversed.wcounts, **tol)
-                    if compute_sepavg:
-                        assert np.allclose(test_reversed.sep, ref_reversed.sep, **tol, equal_nan=True)
+                    assert np.allclose(test_reversed.sep, ref_reversed.sep, **tol, equal_nan=True)
 
             if n_bitwise_weights == 0:
                 if n_individual_weights == 0:
@@ -411,7 +410,7 @@ def test_twopoint_counter(mode='s'):
                 assert np.allclose(test.wcounts[~mask_zero], wcounts_ref[~mask_zero], **tol)
                 if compute_sepavg:
                     assert np.allclose(test.sep, sep_ref, **tol, equal_nan=True)
-            assert np.allclose(test.wcounts[mask_zero], wcounts_ref[mask_zero], atol=0., rtol=2e-1 if itemsize <= 4 else 1e-4)
+            assert np.allclose(test.wcounts[mask_zero], wcounts_ref[mask_zero], atol=0., rtol=3e-1 if itemsize <= 4 else 1e-4)
             test.wcounts[mask_zero] = wcounts_ref[mask_zero]
 
             with tempfile.TemporaryDirectory() as tmp_dir:
@@ -447,12 +446,14 @@ def test_twopoint_counter(mode='s'):
 
             if mpicomm is not None:
                 test_mpi = run(mpicomm=mpicomm, pass_none=mpicomm.rank != 0, mpiroot=0)
-                assert np.allclose(test_mpi.wcounts, test.wcounts, **tol)
+                if itemsize <= 4: mask = ~mask_zero
+                else: mask = Ellipsis
+                assert np.allclose(test_mpi.wcounts[mask], test.wcounts[mask], **tol)
                 assert np.allclose(test_mpi.wnorm, test.wnorm, **tol)
                 data1 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data1]
                 data2 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data2]
                 test_mpi = run(mpicomm=mpicomm)
-                assert np.allclose(test_mpi.wcounts, test.wcounts, **tol)
+                assert np.allclose(test_mpi.wcounts[mask], test.wcounts[mask], **tol)
                 assert np.allclose(test_mpi.wnorm, test.wnorm, **tol)
 
 

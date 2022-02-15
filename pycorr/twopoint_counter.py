@@ -630,7 +630,7 @@ class BaseTwoPointCounter(BaseClass):
         if not self.autocorr:
             return 0.
         weights = 1.
-        if self.cos_twopoint_weights is not None and self.cos_twopoint_weights.sep[-1] == 1.:
+        if self.cos_twopoint_weights is not None and self.cos_twopoint_weights.sep[-1] >= 1.:
             weights *= np.interp(1., self.cos_twopoint_weights.sep, self.cos_twopoint_weights.weight)
         if not self.weights1:
             return self.size1*weights
@@ -639,7 +639,7 @@ class BaseTwoPointCounter(BaseClass):
                                                       noffset=self.weight_attrs['noffset'], default_value=self.weight_attrs['default_value'], dtype=self.dtype)
         for ii in range(self.n_bitwise_weights, len(self.weights1)):
             weights *= self.weights1[ii]**2
-        assert weights.size == self.size1
+        #assert weights.size == len(self.positions1[0])
         weights = np.sum(weights)
         if self.with_mpi:
             weights = self.mpicomm.allreduce(weights)

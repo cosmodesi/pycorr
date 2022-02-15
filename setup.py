@@ -1,8 +1,14 @@
 from setuptools import setup
 
 
-setup(name='pycorr',
-      version='1.0.0',
+package_basename = 'pycorr'
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), package_basename))
+import _version
+version = _version.__version__
+
+
+setup(name=package_basename,
+      version=version,
       author='cosmodesi',
       author_email='',
       description='Estimation of correlation functions',

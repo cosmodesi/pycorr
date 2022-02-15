@@ -819,8 +819,9 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
             posmin2, posmax2 = get_boxsize(cpositions2)
             posmin = np.min([posmin, posmin2], axis=0)
             posmax = np.max([posmax, posmax2], axis=0)
-        posmin -= 1e-9 # margin to make sure all positions will be included
-        posmax += 1e-9
+        diff = max(np.abs(posmax - posmin).max(), 1.)
+        posmin -= 1e-6 * diff # margin to make sure all positions will be included
+        posmax += 1e-6 * diff
 
     # domain decomposition
     grid = [np.linspace(pmin, pmax, grid + 1, endpoint=True) for pmin, pmax, grid in zip(posmin, posmax, ngrid)]
@@ -854,7 +855,8 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
             if multiple_weights: weights2 = list(weights2)
             else: weights2 = [weights2]
 
-    assert mpicomm.allreduce(len(positions1[0])) == size1, 'some particles disappeared...'
+    nsize1 = mpicomm.allreduce(len(positions1[0]))
+    assert nsize1 == size1, 'some particles1 disappeared (after: {:d} v.s. before: {:d})...'.format(nsize1, size1)
 
     positions1 = list(positions1) # exchange returns tuple
     positions2 = list(positions2)
