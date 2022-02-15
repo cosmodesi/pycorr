@@ -39,9 +39,9 @@ or if **pycorr** is already installed::
 
   python -m pip install git+https://github.com/adematti/Corrfunc@desi
 
-To perform MPI parallelization::
+To further perform MPI parallelization or use scikit-learn's KMeans algorithm to split catalog into subsamples for jackknife estimates::
 
-  python -m pip install git+https://github.com/cosmodesi/pycorr#egg=pycorr[mpi]
+  python -m pip install git+https://github.com/cosmodesi/pycorr#egg=pycorr[mpi,jackknife,corrfunc]
 
 git
 ---

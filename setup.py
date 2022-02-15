@@ -1,3 +1,5 @@
+import os
+import sys
 from setuptools import setup
 
 
@@ -15,6 +17,6 @@ setup(name=package_basename,
       license='BSD3',
       url='http://github.com/cosmodesi/pycorr',
       install_requires=['numpy', 'scipy'],
-      extras_require={'mpi':['mpi4py','pmesh'], 'corrfunc':['Corrfunc @ git+https://github.com/adematti/Corrfunc@desi'], 'jacknife':['scikit-learn']},
+      extras_require={'mpi':['mpi4py', 'pmesh'], 'jackknife':['scikit-learn', 'healpy'], 'corrfunc':['Corrfunc @ git+https://github.com/adematti/Corrfunc@DESI-1.0.0']},
       packages=['pycorr']
 )
