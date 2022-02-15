@@ -277,12 +277,13 @@ class BaseTwoPointCounter(BaseClass):
 
         edges : tuple, array
             Tuple of bin edges (arrays), for the first (e.g. :math:`r_{p}`)
-            and optionally second (e.g. :math:`\pi`) dimensions.
+            and optionally second (e.g. :math:`\pi > 0`, :math:`\mu \in [-1, 1]`) dimensions.
             In case of single-dimension binning (e.g. ``mode`` is "theta", "s" or "rp"),
             the single array of bin edges can be provided directly.
             Edges are inclusive on the low end, exclusive on the high end,
-            i.e. a pair separated by `s` falls in bin `i` if ``edges[i] <= s < edges[i+1]``.
-            In case ``mode`` is "smu", this means that pairs at :math:`\mu = 1` are not included.
+            i.e. a pair separated by :math:`s` falls in bin `i` if ``edges[i] <= s < edges[i+1]``.
+            In case ``mode`` is "smu" however, first :math:`\mu`-bin is exclusive on the low end
+            (increase the :math:`\mu`-range by a tiny value to include :math:`\mu = \pm 1`).
             Pairs at separation :math:`s = 0` are included in the :math:`\mu = 0` bin.
             In case of auto-correlation (no ``positions2`` provided), auto-pairs (pairs of same objects) are not counted.
             In case of cross-correlation, all pairs are counted.
@@ -393,13 +394,11 @@ class BaseTwoPointCounter(BaseClass):
             Two-point counter engine-specific options.
         """
         self.attrs = kwargs
-        self.mode = mode.lower()
-        self.nthreads = nthreads
-        if nthreads is None:
-            self.nthreads = int(os.getenv('OMP_NUM_THREADS','1'))
         self.mpicomm = mpicomm
         if self.mpicomm is None and mpiroot is not None:
             raise TwoPointCounterError('mpiroot is not None, but no mpicomm provided')
+        self._set_nthreads(nthreads)
+        self._set_mode(mode)
         self._set_boxsize(boxsize)
         self._set_edges(edges, bin_type=bin_type)
         self._set_los(los)
@@ -418,6 +417,16 @@ class BaseTwoPointCounter(BaseClass):
         to be implemented in your new engine.
         """
         raise NotImplementedError('Implement method "run" in your {}'.format(self.__class__.__name__))
+
+    def _set_nthreads(self, nthreads):
+        if nthreads is None:
+            self.nthreads = int(os.getenv('OMP_NUM_THREADS','1'))
+        else:
+            self.nthreads = int(nthreads)
+
+    def _set_mode(self, mode):
+        self.mode = mode.lower()
+        self.is_reversable = self.mode in ['theta', 's', 'rp', 'rppi']
 
     def _set_zeros(self):
         self._set_default_seps()
@@ -555,11 +564,11 @@ class BaseTwoPointCounter(BaseClass):
                 self.weight_attrs.update(nrealizations=nrealizations)
 
         if len(self.weights1) == len(self.weights2) + 1:
-            self.weights2.append(np.ones(len(self.positions1), dtype=self.dtype))
+            self.weights2.append(np.ones(len(self.positions2[0]), dtype=self.dtype))
         elif len(self.weights1) == len(self.weights2) - 1:
-            self.weights1.append(np.ones(len(self.positions2), dtype=self.dtype))
+            self.weights1.append(np.ones(len(self.positions1[0]), dtype=self.dtype))
         elif len(self.weights1) != len(self.weights2):
-            raise ValueError('Something fishy happened with weights; number of weights1/weights2 is {:d}/{:d}'.format(len(self.weights1),len(self.weights2)))
+            raise ValueError('Something fishy happened with weights; number of weights1/weights2 is {:d}/{:d}'.format(len(self.weights1), len(self.weights2)))
 
         self.twopoint_weights = twopoint_weights
         self.cos_twopoint_weights = None
@@ -595,9 +604,11 @@ class BaseTwoPointCounter(BaseClass):
                                               positions2=self.positions2, weights2=self.weights2, boxsize=self.boxsize)
         return (self.positions1, self.weights1), (self.positions2, self.weights2)
 
+    def _get_default_seps(self):
+        return [(edges[1:] + edges[:-1])/2. for edges in self.edges]
+
     def _set_default_seps(self):
-        mid = [(edges[1:] + edges[:-1])/2. for edges in self.edges]
-        self.seps = list(np.meshgrid(*mid, indexing='ij'))
+        self.seps = list(np.meshgrid(*self._get_default_seps(), indexing='ij'))
 
     def _set_los(self, los):
         self.los = los.lower()
@@ -722,15 +733,22 @@ class BaseTwoPointCounter(BaseClass):
         """Return normalized two-point counts, i.e. :attr:`wcounts` divided by :meth:`normalization`."""
         return self.wcounts/self.wnorm
 
-    def sepavg(self, axis=0):
+    def sepavg(self, axis=0, method=None):
         """Return average of separation for input axis; this is an 1D array of size :attr:`shape[axis]`."""
         axis = axis % self.ndim
-        if self.compute_sepsavg[axis]:
-            axes_to_sum_over = tuple(ii for ii in range(self.ndim) if ii != axis)
-            with np.errstate(divide='ignore', invalid='ignore'):
-                toret = np.sum(_nan_to_zero(self.seps[axis])*self.wcounts, axis=axes_to_sum_over)/np.sum(self.wcounts, axis=axes_to_sum_over)
-        else:
-            toret = self.seps[axis][tuple(Ellipsis if ii == axis else 0 for ii in range(self.ndim))]
+        if method is None:
+            if self.compute_sepsavg[axis]:
+                axes_to_sum_over = tuple(ii for ii in range(self.ndim) if ii != axis)
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    toret = np.sum(_nan_to_zero(self.seps[axis])*self.wcounts, axis=axes_to_sum_over)/np.sum(self.wcounts, axis=axes_to_sum_over)
+            else:
+                toret = self.seps[axis][tuple(Ellipsis if ii == axis else 0 for ii in range(self.ndim))]
+        elif isinstance(method, str):
+            allowed_methods = ['mid']
+            if method not in allowed_methods:
+                raise TwoPointCounterError('method should be one of {}'.format(allowed_methods))
+            elif method == 'mid':
+                toret = self._get_default_seps()[axis]
         return toret
 
     def __getitem__(self, slices):
@@ -761,7 +779,7 @@ class BaseTwoPointCounter(BaseClass):
             if xlim is None:
                 slices.append(slice(None))
             else:
-                x = self.sepavg(axis=iaxis)
+                x = self.sepavg(axis=iaxis, method='mid')
                 indices = np.flatnonzero((x >= xlim[0]) & (x <= xlim[1]))
                 if indices.size:
                     slices.append(slice(indices[0], indices[-1]+1, 1))
@@ -833,9 +851,21 @@ class BaseTwoPointCounter(BaseClass):
                 with np.errstate(divide='ignore', invalid='ignore'):
                     self.seps[idim] = utils.rebin(_nan_to_zero(sep)*wcounts, new_shape, statistic=np.sum)/self.wcounts
 
+    def reversed(self):
+        """Return counts for reversed positions1/weights1 and positions2/weights2."""
+        if not self.is_reversable:
+            raise TwoPointCounterError('These counts are not reversable')
+        new = self.deepcopy()
+        new.size1, new.size2 = new.size2, new.size1
+        return new
+
+    def deepcopy(self):
+        import copy
+        return copy.deepcopy(self)
+
     def __getstate__(self):
         state = {}
-        for name in ['name', 'autocorr', 'seps', 'ncounts', 'wcounts', 'wnorm', 'size1', 'size2', 'edges', 'mode', 'bin_type',
+        for name in ['name', 'autocorr', 'is_reversable', 'seps', 'ncounts', 'wcounts', 'wnorm', 'size1', 'size2', 'edges', 'mode', 'bin_type',
                      'boxsize', 'los', 'compute_sepsavg', 'weight_attrs', 'attrs']:
             if hasattr(self, name):
                 state[name] = getattr(self, name)
@@ -894,7 +924,7 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
             one of cartesian axes "x", "y" or "z".
         """
         self.attrs = {}
-        self.mode = mode.lower()
+        self._set_mode(mode)
         self._set_boxsize(boxsize)
         self._set_edges(edges)
         self._set_los(los)
@@ -912,8 +942,8 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
             v = 4./3. * np.pi * self.edges[0]**3
             dv = np.diff(v, axis=0)
         elif self.mode == 'smu':
-            # we bin in abs(mu)
-            v = 4./3. * np.pi * self.edges[0][:,None]**3 * self.edges[1]
+            # we bin in mu
+            v = 2./3. * np.pi * self.edges[0][:,None]**3 * self.edges[1]
             dv = np.diff(np.diff(v, axis=0), axis=-1)
         elif self.mode == 'rppi':
             # height is double pimax

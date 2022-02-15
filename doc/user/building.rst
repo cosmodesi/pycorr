@@ -12,7 +12,7 @@ Strict requirements are:
 
 To use Corrfunc as two-point counter engine (only engine linked so far):
 
-  - git+https://github.com/adematti/Corrfunc@pipweights
+  - git+https://github.com/adematti/Corrfunc@desi
 
 To perform MPI parallelization:
 
@@ -26,7 +26,7 @@ To install **pycorr** alone (without two-point counter engine, so fairly useless
   python -m pip install git+https://github.com/cosmodesi/pycorr
 
 Corrfunc is currently the only two-point counter engine implemented. We currently use a branch of Corrfunc,
-located `here <https://github.com/adematti/Corrfunc/tree/pipweights>`_.
+located `here <https://github.com/adematti/Corrfunc/tree/desi>`_.
 Uninstall previous Corrfunc version (if any)::
 
   pip uninstall Corrfunc
@@ -34,6 +34,10 @@ Uninstall previous Corrfunc version (if any)::
 then::
 
   python -m pip install git+https://github.com/cosmodesi/pycorr#egg=pycorr[corrfunc]
+
+or if **pycorr** is already installed::
+
+  python -m pip install git+https://github.com/adematti/Corrfunc@desi
 
 To perform MPI parallelization::
 

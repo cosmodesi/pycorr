@@ -333,9 +333,17 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
 
         edges : tuple, array
             Tuple of bin edges (arrays), for the first (e.g. :math:`r_{p}`)
-            and optionally second (e.g. :math:`\pi`) dimensions.
+            and optionally second (e.g. :math:`\pi > 0`, :math:`\mu \in [-1, 1]`) dimensions.
             In case of single-dimension binning (e.g. ``mode`` is "theta", "s" or "rp"),
             the single array of bin edges can be provided directly.
+            Edges are inclusive on the low end, exclusive on the high end,
+            i.e. a pair separated by :math:`s` falls in bin `i` if ``edges[i] <= s < edges[i+1]``.
+            In case ``mode`` is "smu" however, first :math:`\mu`-bin is exclusive on the low end
+            (increase the :math:`\mu`-range by a tiny value to include :math:`\mu = \pm 1`).
+            Pairs at separation :math:`s = 0` are included in the :math:`\mu = 0` bin.
+            In case of auto-correlation (no ``positions2`` provided), auto-pairs (pairs of same objects) are not counted.
+            In case of cross-correlation, all pairs are counted.
+            In any case, duplicate objects will be counted (with separation zero).
 
         positions1 : list, array
             Positions in the first catalog. Typically of shape (3, N), but can be (2, N) when ``mode`` is "theta".
@@ -453,13 +461,11 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
             Two-point counter engine-specific options.
         """
         self.attrs = kwargs
-        self.mode = mode.lower()
-        self.nthreads = nthreads
-        if nthreads is None:
-            self.nthreads = int(os.getenv('OMP_NUM_THREADS','1'))
         self.mpicomm = mpicomm
         if self.mpicomm is None and mpiroot is not None:
             raise TwoPointCounterError('mpiroot is not None, but no mpicomm provided')
+        self._set_nthreads(nthreads)
+        self._set_mode(mode)
         self.nprocs_per_real = nprocs_per_real
         self._set_boxsize(boxsize)
         self._set_edges(edges, bin_type=bin_type)
@@ -491,10 +497,12 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
     def _set_sum(self):
         # Set global :attr:`wcounts` (and :attr:`sep`) based on all jackknife realizations.
         if not self.auto:
-            self.wnorm = self.normalization()
+            self.wnorm = 0.
             self._set_zeros()
             return
         for auto in self.auto.values(): break
+        for name in ['is_reversable', 'compute_sepsavg']:
+            setattr(self, name, getattr(auto, name))
         self.edges = auto.edges.copy() # useful when rebinning
         for name in ['wcounts', 'wnorm', 'ncounts']:
             if getattr(auto, name, None) is not None:
@@ -508,7 +516,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
                     self.seps[idim] /= self.wcounts
 
     def run(self, samples=None):
-        """Run kackknife two-point counts."""
+        """Run jackknife two-point counts."""
         if samples is None:
             samples = np.unique(self.samples1)
             if self.with_mpi:
@@ -551,12 +559,13 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
                 mask2 = mask1 = samples1 == ii
                 spositions1, sweights1 = None, None
                 spositions2, sweights2 = None, None
-                if not self.with_mpi or tm.mpicomm.rank == 0:
+                is_root = not self.with_mpi or tm.mpicomm.rank == 0
+                if is_root:
                     spositions1 = [position[mask1] for position in positions1]
                     sweights1 = [weight[mask1] for weight in weights1]
                 if not self.autocorr:
                     mask2 = samples2 == ii
-                    if not self.with_mpi or tm.mpicomm.rank == 0:
+                    if is_root:
                         spositions2 = [position[mask2] for position in positions2]
                         sweights2 = [weight[mask2] for weight in weights2]
                 mpiroot = 0 if self.with_mpi else None
@@ -564,22 +573,26 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
                 kwargs['position_type'] = 'rd' if self.mode == 'theta' else 'xyz'
                 kwargs.update(self.attrs)
                 tmp = TwoPointCounter(self.mode, edges=self.edges, positions1=spositions1, weights1=sweights1, positions2=spositions2, weights2=sweights2, mpicomm=tm.mpicomm, mpiroot=mpiroot, **kwargs)
-                if not self.with_mpi or tm.mpicomm.rank == 0:
+                if is_root:
                     self.auto[ii] = tmp
-                if not self.with_mpi or tm.mpicomm.rank == 0:
+                if is_root:
                     spositions2 = [position[~mask2] for position in positions2]
                     sweights2 = [weight[~mask2] for weight in weights2]
                 tmp = TwoPointCounter(self.mode, edges=self.edges, positions1=spositions1, weights1=sweights1, positions2=spositions2, weights2=sweights2, mpicomm=tm.mpicomm, mpiroot=mpiroot, **kwargs)
-                if not self.with_mpi or tm.mpicomm.rank == 0:
-                    self.cross21[ii] = self.cross12[ii] = tmp
-                if not self.autocorr:
-                    if not self.with_mpi or tm.mpicomm.rank == 0:
+                if is_root:
+                    self.cross12[ii] = tmp
+                if self.autocorr and tmp.is_reversable:
+                    tmp = tmp.reversed()
+                    if is_root:
+                        self.cross21[ii] = tmp
+                else:
+                    if is_root:
                         spositions1 = [position[~mask1] for position in positions1]
                         sweights1 = [weight[~mask1] for weight in weights1]
                         spositions2 = [position[mask2] for position in positions2]
                         sweights2 = [weight[mask2] for weight in weights2]
                     tmp = TwoPointCounter(self.mode, edges=self.edges, positions1=spositions1, weights1=sweights1, positions2=spositions2, weights2=sweights2, mpicomm=tm.mpicomm, mpiroot=mpiroot, **kwargs)
-                    if not self.with_mpi or tm.mpicomm.rank == 0:
+                    if is_root:
                         self.cross21[ii] = tmp
 
         if self.with_mpi:
@@ -661,8 +674,11 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
                     state['seps'][idim] /= state['wcounts']
                 # The above may lead to rounding errors
                 # such that seps may be non-zero even if wcounts is zero.
-                # We restrict to those separations which lie in between the lower and upper edges
-                mask = np.apply_along_axis(lambda x: (x >= self.edges[idim][:-1]) & (x <= self.edges[idim][1:]), idim, state['seps'][idim])
+                mask = np.ones_like(state['seps'][idim], dtype='?')
+                for name in ['wcounts', 'ncounts']:
+                    if name in state: mask &= state[name] > 0 # if ncounts/wcounts computed, good indicator of whether pairs exist or not
+                # For more robustness we restrict to those separations which lie in between the lower and upper edges
+                mask &= np.apply_along_axis(lambda x: (x >= self.edges[idim][:-1]) & (x <= self.edges[idim][1:]), idim, state['seps'][idim])
                 state['seps'][idim][~mask] = np.nan
         for name in ['size1', 'size2']:
             state[name] = getattr(self, name) - getattr(self.auto[ii], name)
@@ -735,6 +751,13 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         new = super(JackknifeTwoPointCounter, self).__copy__()
         for name in self._result_names:
             setattr(new, name, {ii: r.__copy__() for ii, r in getattr(self, name).items()})
+        return new
+
+    def reversed(self):
+        new = self.copy()
+        for name in self._result_names:
+            setattr(new, name, {k: r.reversed() for k, r in getattr(self, name).items()})
+        new._set_sum()
         return new
 
     def __getstate__(self):
@@ -823,10 +846,10 @@ class JackknifeTwoPointEstimator(BaseTwoPointEstimator):
 
     def __setstate__(self, state):
         kwargs = {}
-        counts = set(self.requires(autocorr=False, with_shifted=True, join='')) | set(self.requires(autocorr=False, with_shifted=False, join='')) # most general list
+        counts = set(self.requires(with_reversed=True, with_shifted=True, join='')) | set(self.requires(with_reversed=True, with_shifted=False, join='')) # most general list
         for name in counts:
             if name in state:
-                if 'jackknife' in state[name].get('name',''):
+                if 'jackknife' in state[name].get('name', ''):
                     kwargs[name] = JackknifeTwoPointCounter.from_state(state[name])
                 else:
                     kwargs[name] = TwoPointCounter.from_state(state[name])

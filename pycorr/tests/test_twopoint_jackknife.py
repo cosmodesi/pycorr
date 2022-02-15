@@ -64,59 +64,88 @@ def test_subsampler():
 def test_twopoint_counter(mode='s'):
 
     list_engine = ['corrfunc']
-    edges = np.linspace(0., 100., 11)
     size = 1000
-    boxsize = (1000,)*3
-    list_options = []
-    list_options.append({})
-    if mode not in ['theta', 'rp']:
-        list_options.append({'boxsize':boxsize})
-        list_options.append({'autocorr':True, 'boxsize':boxsize})
+    boxsize = (500,)*3
 
-    list_options.append({'autocorr':True, 'nthreads':2})
-    list_options.append({'n_individual_weights':1, 'bin_type':'custom'})
-    list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1})
-    list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'iip':1, 'dtype':'f4'})
-    list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'bitwise_type': 'i4', 'iip':1})
-    list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'position_type':'rdd', 'weight_attrs':{'nrealizations':42,'noffset':3}})
-    list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'position_type':'pos', 'weight_attrs':{'nrealizations':42,'noffset':3}})
-    list_options.append({'n_individual_weights':1, 'n_bitwise_weights':2, 'iip':2, 'weight_attrs':{'noffset':0,'default_value':0.8}})
+    ref_edges = np.linspace(0., 100., 41)
     if mode == 'theta':
-        list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'position_type':'rd'})
+        #ref_edges = np.linspace(1e-1, 10., 11) # below 1e-5 for float64 (1e-1 for float32), self pairs are counted by Corrfunc
+        ref_edges = np.linspace(0., 10., 21)
+    elif mode == 'smu':
+        ref_edges = (ref_edges, np.linspace(-1., 1., 22))
+    elif mode == 'rppi':
+        ref_edges = (ref_edges, np.linspace(0., 40., 28))
+
     from collections import namedtuple
     TwoPointWeight = namedtuple('TwoPointWeight', ['sep', 'weight'])
     twopoint_weights = TwoPointWeight(np.logspace(-4, 0, 40), np.linspace(4., 1., 40))
-    #list_options.append({'autocorr':True, 'twopoint_weights':twopoint_weights})
-    list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'dtype':'f8'})
+
+    list_options = []
+    list_options.append({})
+    list_options.append({'weights_one':[1]})
+    for position_type in ['rdd', 'pos', 'xyz'] + (['rd'] if mode == 'theta' else []):
+        list_options.append({'position_type':position_type})
+
     mpi = False
     try:
         from pycorr import mpi
+        print('Has MPI')
     except ImportError:
         pass
-    if mpi:
-        print('Has MPI')
-        list_options.append({'mpicomm':mpi.COMM_WORLD})
-        list_options.append({'n_individual_weights':1, 'mpicomm':mpi.COMM_WORLD})
-        list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'mpicomm':mpi.COMM_WORLD})
 
-    if mode == 'smu':
-        edges = (edges, np.linspace(0., 1., 21))
-    elif mode == 'rppi':
-        edges = (edges, np.linspace(0., 40., 41))
-    elif mode == 'theta':
-        edges = np.linspace(1e-1, 10., 21) # below 1e-5 for float64 (1e-1 for float32), self pairs are counted by Corrfunc
+    for dtype in ['f8']: # in theta mode, lots of rounding errors!
+        for isa in ['fastest']:
+            # binning
+            edges = np.array([1, 8, 20, 42, 60])
+            if mode == 'smu':
+                edges = (edges, np.linspace(-0.8, 0.8, 61))
+            if mode == 'rppi':
+                edges = (edges, np.linspace(0., 90., 91))
+            list_options.append({'autocorr':True, 'compute_sepsavg':False, 'edges':edges, 'dtype':dtype, 'isa':isa})
+            list_options.append({'n_individual_weights':1, 'bin_type':'custom', 'dtype':dtype, 'isa':isa})
+            # pip
+            list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'dtype':dtype, 'isa':isa})
+            list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'y', 'dtype':dtype, 'isa':isa})
+            list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'iip':1, 'dtype':dtype, 'isa':isa})
+            list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'bitwise_type': 'i4', 'iip':1, 'dtype':dtype, 'isa':isa})
+            list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'weight_attrs':{'nrealizations':42,'noffset':3}, 'dtype':dtype, 'isa':isa})
+            list_options.append({'n_individual_weights':1, 'n_bitwise_weights':2, 'iip':2, 'weight_attrs':{'noffset':0,'default_value':0.8}, 'dtype':dtype, 'isa':isa})
+            # twopoint_weights
+            if np.dtype(dtype).itemsize > 4:
+                list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'dtype':dtype, 'isa':isa})
+                list_options.append({'twopoint_weights':twopoint_weights, 'los':'y', 'dtype':dtype, 'isa':isa})
+            # boxsize
+            if mode not in ['theta', 'rp']:
+                list_options.append({'boxsize':boxsize, 'dtype':dtype, 'isa':isa})
+                list_options.append({'autocorr':True, 'boxsize':boxsize, 'dtype':dtype, 'isa':isa})
+                list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'boxsize':boxsize, 'los':'x', 'dtype':dtype, 'isa':isa})
+                list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'boxsize':boxsize, 'los':'y', 'dtype':dtype, 'isa':isa})
+                list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'boxsize':boxsize, 'los':'z', 'dtype':dtype, 'isa':isa})
+            # mpi
+            if mpi:
+                list_options.append({'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
+                list_options.append({'n_individual_weights':1, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
+                list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
+            # labels
+            list_options.append({'offset_label':2})
+
     for engine in list_engine:
         for options in list_options:
             options = options.copy()
+            if 'edges' in options:
+                edges = options.pop('edges')
+            else:
+                edges = ref_edges
             twopoint_weights = options.get('twopoint_weights', None)
             n_individual_weights = options.pop('n_individual_weights',0)
             n_bitwise_weights = options.pop('n_bitwise_weights',0)
+            offset_label = options.pop('offset_label', 0)
             npos = 3
             data1, data2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights)
 
             subsampler = KMeansSubsampler(mode='angular', positions=data1[:npos], nsamples=5, nside=512, random_state=42, position_type='xyz')
-            data1.append(subsampler.label(data1[:npos]))
-            data2.append(subsampler.label(data2[:npos]))
+            data1.append(subsampler.label(data1[:npos]) + offset_label)
+            data2.append(subsampler.label(data2[:npos]) + offset_label)
 
             autocorr = options.pop('autocorr', False)
             options.setdefault('boxsize', None)
@@ -201,37 +230,55 @@ def test_twopoint_counter(mode='s'):
                                        weights1=weights1, weights2=None if autocorr else weights2, position_type=position_type, bin_type=bin_type,
                                        dtype=dtype, **kwargs, **options)
 
-            def run(pass_none=False, **kwargs):
-                positions1 = data1[:npos]
-                positions2 = data2[:npos]
+            def run(pass_none=False, reverse=False, **kwargs):
+                tmpdata1, tmpdata2 = data1, data2
+                if reverse and not autocorr:
+                    tmpdata1, tmpdata2 = data2, data1
+                positions1 = tmpdata1[:npos]
+                positions2 = tmpdata2[:npos]
                 if position_type == 'pos':
                     positions1 = np.array(positions1).T
                     positions2 = np.array(positions2).T
-                return JackknifeTwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=None if pass_none else positions1, weights1=None if pass_none else data1[npos:-1],
-                                               positions2=None if pass_none or autocorr else positions2, weights2=None if pass_none or autocorr else data2[npos:-1],
-                                               samples1=None if pass_none else data1[-1], samples2=None if pass_none or autocorr else data2[-1],
+                return JackknifeTwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=None if pass_none else positions1, weights1=None if pass_none else tmpdata1[npos:-1],
+                                               positions2=None if pass_none or autocorr else positions2, weights2=None if pass_none or autocorr else tmpdata2[npos:-1],
+                                               samples1=None if pass_none else tmpdata1[-1], samples2=None if pass_none or autocorr else tmpdata2[-1],
                                                position_type=position_type, bin_type=bin_type, dtype=dtype, **kwargs, **options)
 
             def assert_allclose(res2, res1):
                 assert np.allclose(res2.wcounts, res1.wcounts, **tol)
                 assert np.allclose(res2.wnorm, res1.wnorm, **tol)
                 if compute_sepavg:
+                    ratio = res2.sep/res1.sep
+                    mask = np.isnan(res2.sep) != np.isnan(res1.sep)
+                    ind = np.unravel_index(np.flatnonzero(mask), mask.shape, order='C')
+                    #print(np.abs(ratio[~np.isnan(ratio)] - 1.).max())
                     assert np.allclose(res2.sep, res1.sep, **tol, equal_nan=True)
                 assert res1.size1 == res2.size1
                 assert res1.size2 == res2.size2
 
             ref = run_ref()
             test = run()
-            #assert_allclose(test, ref)
+            assert_allclose(test, ref)
 
             nsplits = 10
             test = JackknifeTwoPointCounter.concatenate(*[run(samples=samples) for samples in np.array_split(np.unique(data1[-1]), nsplits)])
-            #assert_allclose(test, ref)
+            assert_allclose(test, ref)
 
             ii = data1[-1][0]
             ref_ii = run_ref(ii=ii)
             test_ii = test.realization(ii, correction=None)
             assert_allclose(test_ii, ref_ii)
+
+            if engine == 'corrfunc':
+                assert test.is_reversable
+            if test.is_reversable:
+                test_reversed = run(reverse=True)
+                ref_reversed = test.reversed()
+                assert np.allclose(test_reversed.wcounts, ref_reversed.wcounts, **tol)
+                assert np.allclose(test_reversed.sep, ref_reversed.sep, **tol, equal_nan=True)
+                for ii in ref_reversed.realizations:
+                    assert np.allclose(test_reversed.realization(ii).wcounts, ref_reversed.realization(ii).wcounts, **tol)
+                    assert np.allclose(test_reversed.realization(ii).sep, ref_reversed.realization(ii).sep, **tol, equal_nan=True)
 
             with tempfile.TemporaryDirectory() as tmp_dir:
                 fn = os.path.join(tmp_dir, 'tmp.npy')
@@ -239,15 +286,27 @@ def test_twopoint_counter(mode='s'):
                 test2 = JackknifeTwoPointCounter.load(fn)
                 assert_allclose(test2, ref)
                 test3 = test2.copy()
-                test3.rebin((2,2) if len(edges) == 2 else (2,))
+                test3.rebin((2, 3) if len(edges) == 2 else (2,))
                 assert test3.shape[0] == test2.shape[0]//2
                 assert np.allclose(np.sum(test3.wcounts), np.sum(ref.wcounts))
                 assert np.allclose(test2.wcounts, ref.wcounts)
-                test2 = test2[::2,::2] if len(edges) == 2 else test2[::2]
+                test2 = test2[::2,::3] if len(edges) == 2 else test2[::2]
                 assert test2.shape == test3.shape
                 assert np.allclose(test2.wcounts, test3.wcounts, equal_nan=True)
-                test3.select((0, 20.))
-                assert np.all((test3.sepavg(axis=0) <= 20.) | np.isnan(test3.sepavg(axis=0)))
+                sepmax = 20.
+                if mode == 'smu': sepmax = 0.8
+                test3.select((0, sepmax))
+                assert np.all((test3.sepavg(axis=0) <= sepmax) | np.isnan(test3.sepavg(axis=0)))
+
+                def check_seps(test):
+                    for iaxis in range(test.ndim):
+                        if not test.compute_sepsavg[iaxis]:
+                            mid = (test.edges[iaxis][:-1] + test.edges[iaxis][1:])/2.
+                            if test.ndim == 2 and iaxis == 0: mid = mid[:,None]
+                            assert np.allclose(test.seps[iaxis], mid)
+
+                check_seps(test2)
+                check_seps(test3)
 
             if mpicomm is not None:
                 test_mpi = run(mpicomm=mpicomm, pass_none=mpicomm.rank != 0, mpiroot=0, nprocs_per_real=2)

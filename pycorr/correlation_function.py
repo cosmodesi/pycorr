@@ -3,7 +3,7 @@
 import logging
 import numpy as np
 
-from .twopoint_estimator import get_twopoint_estimator
+from .twopoint_estimator import get_twopoint_estimator, TwoPointEstimator
 from .twopoint_counter import TwoPointCounter, AnalyticTwoPointCounter
 from .twopoint_jackknife import JackknifeTwoPointCounter
 from .utils import BaseClass
@@ -12,8 +12,8 @@ from .utils import BaseClass
 def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=None, randoms_positions1=None, randoms_positions2=None, shifted_positions1=None, shifted_positions2=None,
                                 data_weights1=None, data_weights2=None, randoms_weights1=None, randoms_weights2=None, shifted_weights1=None, shifted_weights2=None, R1R2=None,
                                 data_samples1=None, data_samples2=None, randoms_samples1=None, randoms_samples2=None, shifted_samples1=None, shifted_samples2=None,
-                                D1D2_weight_type='auto', D1R2_weight_type='auto', D2R1_weight_type='auto', R1R2_weight_type='auto', S1S2_weight_type='auto', D1S2_weight_type='auto', D2S1_weight_type='auto',
-                                D1D2_twopoint_weights=None, D1R2_twopoint_weights=None, D2R1_twopoint_weights=None, R1R2_twopoint_weights=None, S1S2_twopoint_weights=None, D1S2_twopoint_weights=None, D2S1_twopoint_weights=None,
+                                D1D2_weight_type='auto', D1R2_weight_type='auto', R1D2_weight_type='auto', R1R2_weight_type='auto', S1S2_weight_type='auto', D1S2_weight_type='auto', S1D2_weight_type='auto',
+                                D1D2_twopoint_weights=None, D1R2_twopoint_weights=None, R1D2_twopoint_weights=None, R1R2_twopoint_weights=None, S1S2_twopoint_weights=None, D1S2_twopoint_weights=None, S1D2_twopoint_weights=None,
                                 estimator='auto', boxsize=None, mpicomm=None, mpiroot=None, **kwargs):
     r"""
     Compute two-point counts and correlation function estimation, optionally with jackknife realizations.
@@ -31,12 +31,13 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
 
     edges : tuple, array
         Tuple of bin edges (arrays), for the first (e.g. :math:`r_{p}`)
-        and optionally second (e.g. :math:`\pi`) dimensions.
+        and optionally second (e.g. :math:`\pi > 0`, :math:`\mu \in [-1, 1]`) dimensions.
         In case of single-dimension binning (e.g. ``mode`` is "theta", "s" or "rp"),
         the single array of bin edges can be provided directly.
         Edges are inclusive on the low end, exclusive on the high end,
-        i.e. a pair separated by `s` falls in bin `i` if ``edges[i] <= s < edges[i+1]``.
-        In case ``mode`` is "smu", this means that pairs at :math:`\mu = 1` are not included.
+        i.e. a pair separated by :math:`s` falls in bin `i` if ``edges[i] <= s < edges[i+1]``.
+        In case ``mode`` is "smu" however, first :math:`\mu`-bin is exclusive on the low end
+        (increase the :math:`\mu`-range by a tiny value to include :math:`\mu = \pm 1`).
         Pairs at separation :math:`s = 0` are included in the :math:`\mu = 0` bin.
         In case of auto-correlation (no ``positions2`` provided), auto-pairs (pairs of same objects) are not counted.
         In case of cross-correlation, all pairs are counted.
@@ -126,8 +127,8 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     D1R2_weight_type : string, default='auto'
         Same as ``D1D2_weight_type``, for D1R2 two-point counts.
 
-    D2R1_weight_type : string, default='auto'
-        Same as ``D1D2_weight_type``, for D2R1 two-point counts.
+    R1D2_weight_type : string, default='auto'
+        Same as ``D1D2_weight_type``, for R1D2 two-point counts.
 
     R1R2_weight_type : string, default='auto'
         Same as ``D1D2_weight_type``, for R1R2 two-point counts.
@@ -138,8 +139,8 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     D1S2_weight_type : string, default='auto'
         Same as ``D1D2_weight_type``, for D1S2 two-point counts.
 
-    D2S1_weight_type : string, default='auto'
-        Same as ``D1D2_weight_type``, for D2S1 two-point counts.
+    S1D2_weight_type : string, default='auto'
+        Same as ``D1D2_weight_type``, for S1D2 two-point counts.
 
     D1D2_twopoint_weights : WeightTwoPointEstimator, default=None
         Weights to be applied to each pair of particles between first and second data catalogs.
@@ -153,7 +154,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         Weights to be applied to each pair of particles between first data catalog and second randoms catalog.
         See ``D1D2_twopoint_weights``.
 
-    D2R1_twopoint_weights : WeightTwoPointEstimator, default=None
+    R1D2_twopoint_weights : WeightTwoPointEstimator, default=None
         Weights to be applied to each pair of particles between second data catalog and first randoms catalog.
         See ``D1D2_twopoint_weights``.
 
@@ -169,7 +170,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         Weights to be applied to each pair of particles between first data catalog and second shifted catalog.
         See ``D1D2_twopoint_weights``.
 
-    D2S1_twopoint_weights : WeightTwoPointEstimator, default=None
+    S1D2_twopoint_weights : WeightTwoPointEstimator, default=None
         Weights to be applied to each pair of particles between second data catalog and first shifted catalog.
         See ``D1D2_twopoint_weights``.
 
@@ -271,17 +272,20 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     positions = {'D1':data_positions1, 'D2':data_positions2, 'R1':randoms_positions1, 'R2':randoms_positions2, 'S1': shifted_positions1, 'S2':shifted_positions2}
     weights = {'D1':data_weights1, 'D2':data_weights2, 'R1':randoms_weights1, 'R2':randoms_weights2, 'S1':shifted_weights1, 'S2':shifted_weights2}
     samples = {'D1':data_samples1, 'D2':data_samples2, 'R1':randoms_samples1, 'R2':randoms_samples2, 'S1':shifted_samples1, 'S2':shifted_samples2}
-    twopoint_weights = {'D1D2':D1D2_twopoint_weights, 'D1R2':D1R2_twopoint_weights, 'D2R1':D2R1_twopoint_weights, 'R1R2':R1R2_twopoint_weights, 'S1S2':S1S2_twopoint_weights, 'D1S2':D1S2_twopoint_weights, 'D2S1':D2S1_twopoint_weights}
-    weight_type = {'D1D2':D1D2_weight_type, 'D1R2':D1R2_weight_type, 'D2R1':D2R1_weight_type, 'R1R2':R1R2_weight_type, 'S1S2':S1S2_weight_type, 'D1S2':D1S2_weight_type, 'D2S1':D2S1_weight_type}
+    twopoint_weights = {'D1D2':D1D2_twopoint_weights, 'D1R2':D1R2_twopoint_weights, 'R1D2':R1D2_twopoint_weights, 'R1R2':R1R2_twopoint_weights, 'S1S2':S1S2_twopoint_weights, 'D1S2':D1S2_twopoint_weights, 'S1D2':S1D2_twopoint_weights}
+    weight_type = {'D1D2':D1D2_weight_type, 'D1R2':D1R2_weight_type, 'R1D2':R1D2_weight_type, 'R1R2':R1R2_weight_type, 'S1S2':S1S2_weight_type, 'D1S2':D1S2_weight_type, 'S1D2':S1D2_weight_type}
     precomputed = {'R1R2':R1R2}
 
     counts = {}
-    for label1, label2 in Estimator.requires(autocorr=(not with_randoms) or is_none(randoms_positions2), with_shifted=with_shifted):
+    for label1, label2 in Estimator.requires(with_reversed=True, with_shifted=with_shifted):
         label12 = label1 + label2
         pre = precomputed.get(label12, None)
         if pre is not None:
             if log: logger.info('Using precomputed two-point counts {}.'.format(label12))
             counts[label12] = pre
+            continue
+        label21 = label2.replace('2', '1') + label1.replace('1', '2')
+        if autocorr and label21 in counts and counts[label21].is_reversable:
             continue
         if label12 == 'R1R2' and not with_randoms:
                 if log: logger.info('Analytically computing two-point counts {}.'.format(label12))
@@ -294,9 +298,8 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
             if log: logger.info('Computing two-point counts {}.'.format(label12))
             # label12 is D1R2, but we only have R1, so switch label2 to R1; same for D1S2
             # No need for e.g. R1R2, as R2 being None, TwoPointCounter will understand it has to run the autocorrelation; same for S1S2
-            if autocorr:
-                if label12 == 'D1R2': label2 = 'R1'
-                if label12 == 'D1S2': label2 = 'S1'
+            if autocorr and label2[:-1] != label1[:-1]:
+                label2 = label2.replace('2', '1')
             jackknife_kwargs = {}
             if with_jackknife:
                 jackknife_kwargs['samples1'] = samples[label1]
@@ -306,3 +309,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
                                       twopoint_weights=twopoint_weights[label12], weight_type=weight_type[label12],
                                       boxsize=boxsize, mpicomm=mpicomm, mpiroot=mpiroot, **jackknife_kwargs, **kwargs)
     return Estimator(**counts)
+
+
+TwoPointCorrelationFunction.from_state = TwoPointEstimator.from_state
+TwoPointCorrelationFunction.load = TwoPointEstimator.load

@@ -55,6 +55,7 @@ def test_estimator(mode='s'):
     size = 100
     boxsize = (1000,)*3
     list_options = []
+    list_options.append({'weights_one':['D1', 'R2']})
     list_options.append({'estimator':'natural'})
     if mode not in ['theta', 'rp']:
         list_options.append({'estimator':'natural', 'boxsize':boxsize, 'with_randoms':False})
@@ -63,8 +64,8 @@ def test_estimator(mode='s'):
     list_options.append({'estimator':'weight'})
     list_options.append({'with_shifted':True})
     list_options.append({'with_shifted':True, 'autocorr':True})
-    list_options.append({'autocorr':True})
-    list_options.append({'n_individual_weights':1, 'compute_sepsavg':False})
+    list_options.append({'n_individual_weights':0})
+    list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'compute_sepsavg':False})
 
     has_mpi = True
     try:
@@ -80,7 +81,7 @@ def test_estimator(mode='s'):
     #list_options.append({'weight_type':'inverse_bitwise','n_bitwise_weights':2})
     edges = np.linspace(1e-9, 100, 11)
     if mode == 'smu':
-        edges = (edges, np.linspace(0, 1, 21))
+        edges = (edges, np.linspace(-1, 1, 21))
     elif mode == 'rppi':
         edges = (edges, np.linspace(0, 20, 21))
     elif mode == 'theta':
@@ -89,6 +90,7 @@ def test_estimator(mode='s'):
     for engine in list_engine:
         for options in list_options:
             options = options.copy()
+            weights_one = options.pop('weights_one', [])
             n_individual_weights = options.get('n_individual_weights',1)
             n_bitwise_weights = options.get('n_bitwise_weights',0)
             data1, data2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights, seed=42)
@@ -102,6 +104,9 @@ def test_estimator(mode='s'):
             options['los'] = 'z' if options['boxsize'] is not None else 'midpoint'
             options['position_type'] = 'xyz'
             npos = 3
+            for label, catalog in zip(['D1','D2','R1','R2'], [data1, data2, randoms1, randoms2]):
+                if label in weights_one:
+                    catalog.append(np.ones_like(catalog[0]))
 
             subsampler = KMeansSubsampler(mode='theta', positions=data1[:npos], nsamples=5, position_type='xyz')
             data1.append(subsampler.label(data1[:npos]))
@@ -197,11 +202,9 @@ def test_estimator(mode='s'):
                                        weights1=data1[npos:-1], weights2=randoms1[npos:-1] if autocorr else randoms2[npos:-1], **options_counts)
                 assert_allclose(D1R2, estimator_jackknife.D1S2)
                 if not autocorr and estimator in ['landyszalay']:
-                    D2R1 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:npos], positions2=data2[:npos],
+                    R1D2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:npos], positions2=data2[:npos],
                                            weights1=randoms1[npos:-1], weights2=data2[npos:-1], **options_counts)
-                    #D2R1 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data2[:3], positions2=randoms1[:3],
-                    #                       weights1=data2[3:], weights2=randoms1[3:], **options_counts)
-                    assert_allclose(D2R1, estimator_jackknife.D2S1)
+                    assert_allclose(R1D2, estimator_jackknife.S1D2)
                 else:
                     assert_allclose(D1R2, estimator_jackknife.D1S2)
             if estimator in ['landyszalay', 'natural', 'weight'] and with_randoms:
@@ -210,7 +213,7 @@ def test_estimator(mode='s'):
                 assert_allclose(R1R2, estimator_jackknife.S1S2)
             if estimator in ['natural'] and not with_randoms:
                 R1R2 = TwoPointCounter(mode=mode, edges=edges, engine='analytic', boxsize=estimator_jackknife.D1D2.boxsize,
-                                       size1=estimator_jackknife.D1D2.size1, size2=None if estimator_jackknife.autocorr else estimator_jackknife.D1D2.size2, los=options_counts['los'])
+                                       size1=estimator_jackknife.D1D2.size1, size2=None if estimator_jackknife.D1D2.autocorr else estimator_jackknife.D1D2.size2, los=options_counts['los'])
                 assert_allclose(R1R2, estimator_jackknife.R1R2)
 
             if estimator_jackknife.D1D2.mode == 'smu':
@@ -218,18 +221,39 @@ def test_estimator(mode='s'):
                 sep, xiell, cov = project_to_multipoles(estimator_jackknife, ells=(0,2,4))
                 assert cov.shape == (sum([len(xi) for xi in xiell]),)*2
             if estimator_jackknife.D1D2.mode == 'rppi':
-                sep, wp = project_to_wp(estimator_nojackknife)
+
+                def get_sepavg(estimator, sepmax):
+                    mid = [(edges[:-1] + edges[1:])/2. for edges in estimator.edges]
+                    if not estimator.D1D2.compute_sepavg:
+                        return mid[0]
+                    mask = mid[1] <= sepmax
+                    sep = estimator.seps[0]
+                    sep[np.isnan(sep)] = 0.
+                    if getattr(estimator, 'R1R2', None) is not None:
+                        wcounts = estimator.R1R2.wcounts
+                    else:
+                        wcounts = estimator.D1D2.wcounts
+                    with np.errstate(divide='ignore', invalid='ignore'):
+                        return np.sum(sep[:,mask]*wcounts[:,mask], axis=-1)/np.sum(wcounts[:,mask], axis=-1)
+
+                pimax = 40
+                sep, wp = project_to_wp(estimator_nojackknife, pimax=pimax)
+                assert np.allclose(sep, get_sepavg(estimator_nojackknife, pimax), equal_nan=True)
                 sep, wp, cov = project_to_wp(estimator_jackknife)
-                sep, wp, cov = project_to_wp(estimator_jackknife, pimax=40)
-                assert cov.shape == (len(wp),)*2
+                sep, wp, cov = project_to_wp(estimator_jackknife, pimax=pimax)
+                assert np.allclose(sep, get_sepavg(estimator_jackknife, pimax), equal_nan=True)
+                assert cov.shape == (len(sep),)*2 == (len(wp),)*2
 
             with tempfile.TemporaryDirectory() as tmp_dir:
                 fn = os.path.join(tmp_dir,'tmp.npy')
                 for test in [estimator_nojackknife, estimator_jackknife]:
                     test.save(fn)
                     test2 = TwoPointEstimator.load(fn)
+                    assert type(TwoPointCorrelationFunction.from_state(test2.__getstate__())) is type(test2)
+                    test2 = TwoPointCorrelationFunction.load(fn)
                     assert test2.__class__ is test.__class__
-                    assert test2.autocorr is test.autocorr
+                    assert test2.with_shifted is test.with_shifted
+                    assert test2.with_reversed is test.with_reversed
                     test3 = test2.copy()
                     test3.rebin((2,5) if len(edges) == 2 else (2,))
                     assert test3.shape[0] == test2.shape[0]//2

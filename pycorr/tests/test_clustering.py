@@ -2,8 +2,11 @@ import os
 
 import numpy as np
 from matplotlib import pyplot as plt
-import fitsio
 
+from cosmoprimo import PowerToCorrelation
+from cosmoprimo.fiducial import DESI
+from mockfactory import EulerianLinearMock
+from mockfactory.make_survey import RandomBoxCatalog
 from pycorr import TwoPointCorrelationFunction, project_to_multipoles,\
                     project_to_wp, setup_logging
 
@@ -11,86 +14,56 @@ from pycorr import TwoPointCorrelationFunction, project_to_multipoles,\
 catalog_dir = os.path.join(os.path.dirname(__file__), '_catalogs')
 data_fn = os.path.join(catalog_dir, 'data.fits')
 randoms_fn = os.path.join(catalog_dir, 'randoms.fits')
-bias = 2.0
+
+cosmo = DESI()
+z = 1.
+pklin = cosmo.get_fourier().pk_interpolator().to_1d(z=z)
+f = cosmo.get_fourier().sigma8_z(z=z, of='theta_cb')/cosmo.get_fourier().sigma8_z(z=z, of='delta_cb')
+bias = 1.5
+boxsize = 1000.
+boxcenter = np.array([600., 0., 0.])
+nbar = 1e-4
 
 
-def mkdir(dirname):
-    try:
-        os.makedirs(dirname)
-    except OSError:
-        pass
+def pk_kaiser_model(k, ell=0):
+    pk = bias**2*pklin(k)
+    beta = f/bias
+    if ell == 0: return (1. + 2./3.*beta + 1./5.*beta**2)*pk + 1./nbar
+    if ell == 2: return (4./3.*beta + 4./7.*beta**2)*pk
+    if ell == 4: return 8./35*beta**2*pk
+    return np.zeros_like(k)
 
 
-def save_lognormal_catalogs(data_fn, randoms_fn, seed=42):
-    from nbodykit.lab import cosmology, LogNormalCatalog, UniformCatalog
-    from nbodykit.transform import CartesianToSky
-    from nbodykit.utils import GatherArray
-
-    def save_fits(cat, fn):
-        array = np.empty(cat.size,dtype=[(col,cat[col].dtype,cat[col].shape[1:]) for col in cat.columns])
-        for col in cat.columns: array[col] = cat[col].compute()
-        array = GatherArray(array,comm=cat.comm)
-        if cat.comm.rank == 0:
-            fitsio.write(fn,array,clobber=True)
-
-    redshift = 0.7
-    cosmo = cosmology.Planck15.match(Omega0_m=0.3)
-    Plin = cosmology.LinearPower(cosmo,redshift,transfer='CLASS')
-    nbar = 1e-4
-    BoxSize = 800
-    catalog = LogNormalCatalog(Plin=Plin, nbar=nbar, BoxSize=BoxSize, Nmesh=256, bias=bias, seed=seed)
-    #print(redshift,cosmo.scale_independent_growth_rate(redshift),cosmo.comoving_distance(redshift))
-
-    offset = cosmo.comoving_distance(redshift) - BoxSize/2.
-    offset = np.array([offset,0,0])
-    catalog['Position'] += offset
-    distance = np.sum(catalog['Position']**2,axis=-1)**0.5
-    los = catalog['Position']/distance[:,None]
-    catalog['Position'] += (catalog['VelocityOffset']*los).sum(axis=-1)[:,None]*los
-    #mask = (catalog['Position'] >= offset) & (catalog['Position'] < offset + BoxSize)
-    #catalog = catalog[np.all(mask,axis=-1)]
-    catalog['NZ'] = nbar*np.ones(catalog.size,dtype='f8')
-    catalog['Weight'] = np.ones(catalog.size,dtype='f8')
-    catalog['RA'],catalog['DEC'],catalog['Z'] = CartesianToSky(catalog['Position'],cosmo)
-    save_fits(catalog,data_fn)
-
-    catalog = UniformCatalog(BoxSize=BoxSize, nbar=nbar*5, seed=seed)
-    catalog['Position'] += offset
-    catalog['Weight'] = np.ones(catalog.size,dtype='f8')
-    catalog['NZ'] = nbar*np.ones(catalog.size,dtype='f8')
-    catalog['RA'],catalog['DEC'],catalog['Z'] = CartesianToSky(catalog['Position'],cosmo)
-    save_fits(catalog,randoms_fn)
+def xi_kaiser_model(s, ell=0):
+    k = np.logspace(-4, 2, 1000)
+    slog, xiell = PowerToCorrelation(k, ell=ell)(pk_kaiser_model(k, ell))
+    return np.interp(s, slog, xiell)
 
 
-def setup():
-    mkdir(catalog_dir)
-    save_lognormal_catalogs(data_fn, randoms_fn, seed=42)
+def test_clustering(seed=42):
 
+    nmesh = 128
+    mock = EulerianLinearMock(pklin, nmesh=nmesh, boxsize=boxsize, boxcenter=boxcenter, seed=seed, unitary_amplitude=True)
+    mock.set_real_delta_field(bias=bias)
+    mock.set_rsd(f=f, los=None)
 
-def compute_correlation_function():
+    data = RandomBoxCatalog(nbar=nbar, boxsize=boxsize, boxcenter=boxcenter, seed=seed)
+    randoms = RandomBoxCatalog(nbar=2*nbar, boxsize=boxsize, boxcenter=boxcenter, seed=seed)
+    data['Weight'] = mock.readout(data['Position'], field='delta', resampler='tsc', compensate=True) + 1.
 
-    data = fitsio.read(data_fn)
-    randoms = fitsio.read(randoms_fn)
-
-    def get_positions_weights(catalog):
-        return catalog['Position'].T, None #catalog['Weight']
-
-    data_positions, data_weights = get_positions_weights(data)
-    randoms_positions, randoms_weights = get_positions_weights(randoms)
-
-    def run(mode, edges, ells=(0,2,4)):
+    def run(mode, edges, ells=(0, 2, 4)):
         corrmode = mode
         if mode == 'multi':
             corrmode = 'smu'
         if mode == 'wp':
             corrmode = 'rppi'
         if corrmode == 'smu':
-            edges = (edges, np.linspace(0, 1, 101))
+            edges = (edges, np.linspace(-1, 1, 101))
         if corrmode == 'rppi':
             edges = (edges, np.linspace(0, 40, 41))
-        result = TwoPointCorrelationFunction(corrmode, edges, data_positions1=data_positions, data_weights1=data_weights,
-                                         randoms_positions1=randoms_positions, randoms_weights1=randoms_weights,
-                                         engine='corrfunc', position_type='xyz', estimator='landyszalay', nthreads=4)
+        result = TwoPointCorrelationFunction(corrmode, edges, data_positions1=data['Position'], data_weights1=data['Weight'],
+                                             randoms_positions1=randoms['Position'], engine='corrfunc', position_type='pos',
+                                             estimator='landyszalay', nthreads=4, mpicomm=data.mpicomm)
         if mode == 'multi':
             return project_to_multipoles(result, ells=ells)
         if mode == 'wp':
@@ -108,9 +81,11 @@ def compute_correlation_function():
     ax.set_ylabel(r'$\theta w(\theta)$')
     ax = lax[1]
     ells = (0,2,4)
-    sep, xi = run('multi', edges=np.linspace(1e-3, 140, 41), ells=ells)
-    for ill,ell in enumerate(ells):
-        ax.plot(sep, sep**2*xi[ill], label='$\ell = {:d}$'.format(ell))
+    sep, xi = run('multi', edges=np.linspace(10, 80, 41), ells=ells)
+    for ill, ell in enumerate(ells):
+        ax.plot(sep, sep**2*xi[ill], label='$\ell = {:d}$'.format(ell), color='C{:d}'.format(ill))
+        xi_theory = xi_kaiser_model(sep, ell=ell)
+        ax.plot(sep, sep**2*xi_theory, label='theory' if ill == 0 else None, color='C{:d}'.format(ill), linestyle=':')
     ax.set_xlabel('$s$ [$\mathrm{Mpc}/h$]')
     ax.set_ylabel(r'$s^{2}\xi_{\ell}(s)$ [$(\mathrm{Mpc}/h)^{2}$]')
     ax.legend()
@@ -126,5 +101,5 @@ def compute_correlation_function():
 if __name__ == '__main__':
 
     setup_logging()
-    setup()
-    compute_correlation_function()
+
+    test_clustering()

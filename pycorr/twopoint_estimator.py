@@ -47,15 +47,7 @@ def get_twopoint_estimator(estimator='auto', with_DR=True, with_jackknife=False)
     return estimator
 
 
-class MetaTwoPointEstimator(type(BaseClass)):
-
-    """Metaclass to return correct estimator."""
-
-    def __call__(cls, *args, estimator='landyszalay', **kwargs):
-        return get_twopoint_estimator(estimator=estimator)(*args, **kwargs)
-
-
-class TwoPointEstimator(BaseClass, metaclass=MetaTwoPointEstimator):
+class TwoPointEstimator(BaseClass):
     """
     Entry point to two-point estimators.
 
@@ -75,8 +67,8 @@ class TwoPointEstimator(BaseClass, metaclass=MetaTwoPointEstimator):
     estimator : BaseTwoPointEstimator
         Estimator instance.
     """
-    @classmethod
-    def from_state(cls, state):
+    @staticmethod
+    def from_state(state):
         """Return new estimator based on state dictionary."""
         cls = get_twopoint_estimator(state.pop('name'))
         new = cls.__new__(cls)
@@ -96,7 +88,7 @@ class RegisteredTwoPointEstimator(type(BaseClass)):
         return cls
 
 
-class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
+class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
     """
     Base class for estimators.
     Extend this class to implement a new estimator.
@@ -108,7 +100,7 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
     """
     name = 'base'
 
-    def __init__(self, D1D2=None, R1R2=None, D1R2=None, D2R1=None, S1S2=None, D1S2=None, D2S1=None):
+    def __init__(self, D1D2=None, R1R2=None, D1R2=None, R1D2=None, S1S2=None, D1S2=None, S1D2=None):
         """
         Initialize :class:`BaseTwoPointEstimator`, and set correlation
         estimation :attr:`corr` (calling :meth:`run`).
@@ -124,23 +116,23 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
         D1R2 : BaseTwoPointCounter, default=None
             D1R2 two-point counts, e.g. for :class:`LandySzalayTwoPointEstimator`.
 
-        D2R1 : BaseTwoPointCounter, default=None
-            D2R1 two-point counts, e.g. for :class:`LandySzalayTwoPointEstimator`,
+        R1D2 : BaseTwoPointCounter, default=None
+            R1D2 two-point counts, e.g. for :class:`LandySzalayTwoPointEstimator`,
             in case of cross-correlation.
 
         S1S2 : BaseTwoPointCounter, default=None
             S1S2 two-point counts, e.g. with reconstruction, the Landy-Szalay estimator is commonly written:
-            :math:`(D1D2 - D1S2 - D2S1 - S1S2)/R1R2`, with S1 and S2 shifted random catalogs.
+            :math:`(D1D2 - D1S2 - S1D2 - S1S2)/R1R2`, with S1 and S2 shifted random catalogs.
             Defaults to ``R1R2``.
 
         D1S2 : BaseTwoPointCounter, default=None
             D1S2 two-point counts, see ``S1S2``. Defaults to ``D1R2``.
 
         S1D2 : BaseTwoPointCounter, default=None
-            S1D2 two-point counts, see ``S1S2``. Defaults to ``D2R1``.
+            S1D2 two-point counts, see ``S1S2``. Defaults to ``R1D2``.
         """
-        self.with_shifted = S1S2 is not None or D1S2 is not None or D2S1 is not None
-        self.autocorr = D1D2.autocorr
+        self.with_shifted = S1S2 is not None or D1S2 is not None or S1D2 is not None
+        self.with_reversed = R1D2 is not None or S1D2 is not None
         for name in self._count_names:
             counts = locals()[name]
             if locals()[name] is None:
@@ -149,13 +141,13 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
         self.run()
 
     def __getattr__(self, name):
-        if name in ['D2R1', 'D2S1'] and self.autocorr:
-            conv = {'1':'2', '2':'1'}
-            name = ''.join([conv.get(nn, nn) for nn in name])
-            return getattr(self, name)
-        if name in ['S1S2', 'D1S2', 'D2S1'] and not self.with_shifted:
+        if name in ['R1D2', 'S1D2'] and not self.with_reversed:
+            name = ''.join([{'1':'2', '2':'1'}.get(nn, nn) for nn in name])
+            counts = getattr(self, name[-2:] + name[:2])
+            return counts.reversed()
+        if name in ['S1S2', 'D1S2', 'S1D2'] and not self.with_shifted:
             return getattr(self, name.replace('S', 'R'))
-        raise AttributeError('Counts {} do not exist'.format(name))
+        raise AttributeError('Attribute {} does not exist'.format(name))
 
     @property
     def sep(self):
@@ -171,11 +163,11 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
             return self.R1R2.seps
         return self.D1D2.seps
 
-    def sepavg(self, axis=0):
+    def sepavg(self, *args, **kwargs):
         """Return average of separation for input axis; this is an 1D array of size :attr:`shape[axis]`."""
         if getattr(self, 'R1R2', None) is not None:
-            return self.R1R2.sepavg(axis=axis)
-        return self.D1D2.sepavg(axis=axis)
+            return self.R1R2.sepavg(*args, **kwargs)
+        return self.D1D2.sepavg(*args, **kwargs)
 
     @property
     def edges(self):
@@ -198,10 +190,10 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
         return len(self.edges)
 
     @classmethod
-    def requires(cls, autocorr=False, with_shifted=False, join=None):
+    def requires(cls, with_reversed=False, with_shifted=False, join=None):
         """List required counts."""
         toret = []
-        for tu in cls._tuple_requires(autocorr=autocorr, with_shifted=with_shifted):
+        for tu in cls._tuple_requires(with_reversed=with_reversed, with_shifted=with_shifted):
             if join is not None:
                 toret.append(join.join(tu))
             else:
@@ -209,13 +201,13 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
         return toret
 
     @classmethod
-    def _tuple_requires(cls, autocorr=False, with_shifted=False, join=None):
+    def _tuple_requires(cls, with_reversed=False, with_shifted=False, join=None):
         toret = []
         toret.append(('D1','D2'))
         key = 'S' if with_shifted else 'R'
         toret.append(('D1','{}2'.format(key)))
-        if not autocorr:
-            toret.append(('D2','{}1'.format(key)))
+        if with_reversed:
+            toret.append(('{}1'.format(key), 'D2'))
         toret.append(('{}1'.format(key),'{}2'.format(key)))
         if with_shifted:
             toret.append(('R1','R2'))
@@ -224,7 +216,7 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
     @property
     def _count_names(self):
         """Return list of counts used in estimator."""
-        return self.requires(autocorr=self.autocorr, with_shifted=self.with_shifted, join='')
+        return self.requires(with_reversed=self.with_reversed, with_shifted=self.with_shifted, join='')
 
     def __getitem__(self, slices):
         """Call :meth:`slice`."""
@@ -278,7 +270,7 @@ class BaseTwoPointEstimator(BaseClass,metaclass=RegisteredTwoPointEstimator):
 
     def __setstate__(self, state):
         kwargs = {}
-        counts = set(self.requires(autocorr=False, with_shifted=True, join='')) | set(self.requires(autocorr=False, with_shifted=False, join='')) # most general list
+        counts = set(self.requires(with_reversed=True, with_shifted=True, join='')) | set(self.requires(with_reversed=True, with_shifted=False, join='')) # most general list
         for name in counts:
             if name in state:
                 kwargs[name] = TwoPointCounter.from_state(state[name])
@@ -316,7 +308,7 @@ class NaturalTwoPointEstimator(BaseTwoPointEstimator):
         self.corr = corr
 
     @classmethod
-    def _tuple_requires(cls, autocorr=False, with_shifted=False, join=None):
+    def _tuple_requires(cls, with_reversed=False, with_shifted=False, join=None):
         toret = []
         toret.append(('D1','D2'))
         key = 'S' if with_shifted else 'R'
@@ -350,7 +342,7 @@ class DavisPeeblesTwoPointEstimator(BaseTwoPointEstimator):
         self.corr = corr
 
     @classmethod
-    def _tuple_requires(cls, autocorr=False, with_shifted=False, join=None):
+    def _tuple_requires(cls, with_reversed=False, with_shifted=False, join=None):
         """Yield required two-point counts."""
         toret = []
         toret.append(('D1','D2'))
@@ -368,7 +360,7 @@ class LandySzalayTwoPointEstimator(BaseTwoPointEstimator):
     def run(self):
         """
         Set correlation function estimate :attr:`corr` based on the Landy-Szalay estimator
-        :math:`(D1D2 - D1S2 - D2S1 - S1S2)/R1R2`.
+        :math:`(D1D2 - D1S2 - S1D2 - S1S2)/R1R2`.
         """
         nonzero = self.R1R2.wcounts != 0
         # init
@@ -380,7 +372,7 @@ class LandySzalayTwoPointEstimator(BaseTwoPointEstimator):
         DD = self.D1D2.normalized_wcounts()[nonzero]
         RR = self.R1R2.normalized_wcounts()[nonzero]
         DS = self.D1S2.normalized_wcounts()[nonzero]
-        SD = self.D2S1.normalized_wcounts()[nonzero]
+        SD = self.S1D2.normalized_wcounts()[nonzero]
         SS = self.S1S2.normalized_wcounts()[nonzero]
 
         tmp = (DD - DS - SD + SS)/RR
@@ -410,7 +402,7 @@ class WeightTwoPointEstimator(NaturalTwoPointEstimator):
         self.corr = corr
 
     @classmethod
-    def _yield_requires(cls, autocorr=False, with_shifted=False, join=None):
+    def _yield_requires(cls, with_reversed=False, with_shifted=False, join=None):
         toret = []
         toret.append(('D1','D2'))
         toret.append(('R1','R2'))
@@ -502,7 +494,7 @@ def project_to_wp(estimator, pimax=None, **kwargs):
     sep = estimator.sepavg(axis=0)
     wp = 2.*np.sum(estimator.corr*np.diff(estimator.edges[1]), axis=-1)
     try:
-        realizations = [project_to_wp(estimator.realization(ii, **kwargs), pimax=pimax)[1] for ii in estimator.realizations]
+        realizations = [project_to_wp(estimator.realization(ii, **kwargs))[1] for ii in estimator.realizations] # no need to provide pimax, as selection already performed
     except AttributeError:
         return sep, wp
     cov = (len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0)
