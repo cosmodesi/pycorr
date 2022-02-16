@@ -362,9 +362,20 @@ def test_twopoint_counter(mode='s'):
                 if position_type == 'pos':
                     positions1 = np.array(positions1).T
                     positions2 = np.array(positions2).T
-                return TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=None if pass_none else positions1, positions2=None if pass_none or autocorr else positions2,
-                                       weights1=None if pass_none else tmpdata1[npos:], weights2=None if pass_none or autocorr else tmpdata2[npos:], position_type=position_type, bin_type=bin_type,
+                weights1 = tmpdata1[npos:]
+                weights2 = tmpdata2[npos:]
+                positions1_bak = np.array(positions1, copy=True)
+                positions2_bak = np.array(positions2, copy=True)
+                if weights1: weights1_bak = np.array(weights1, copy=True)
+                if weights2: weights2_bak = np.array(weights2, copy=True)
+                toret = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=None if pass_none else positions1, positions2=None if pass_none or autocorr else positions2,
+                                       weights1=None if pass_none else weights1, weights2=None if pass_none or autocorr else weights2, position_type=position_type, bin_type=bin_type,
                                        dtype=dtype, **kwargs, **options)
+                assert np.allclose(positions1, positions1_bak)
+                assert np.allclose(positions2, positions2_bak)
+                if weights1: assert np.allclose(weights1, weights1_bak)
+                if weights2: assert np.allclose(weights2, weights2_bak)
+                return toret
 
             test = run()
             if engine == 'corrfunc':

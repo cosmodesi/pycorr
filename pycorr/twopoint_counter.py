@@ -139,7 +139,7 @@ def get_inverse_probability_weight(*weights, noffset=1, nrealizations=None, defa
     return toret
 
 
-def _format_positions(positions, mode='auto', position_type='xyz', dtype=None, mpicomm=None, mpiroot=None):
+def _format_positions(positions, mode='auto', position_type='xyz', dtype=None, copy=True, mpicomm=None, mpiroot=None):
     # Format input array of positions
     # position_type in ["xyz", "rdd", "pos"]
     mode = mode.lower()
@@ -150,7 +150,7 @@ def _format_positions(positions, mode='auto', position_type='xyz', dtype=None, m
 
     def __format_positions(positions, position_type=position_type, dtype=dtype):
         if position_type == 'pos': # array of shape (N, 3)
-            positions = np.asarray(positions, dtype=dtype)
+            positions = np.array(positions, dtype=dtype, copy=copy)
             if positions.shape[-1] != 3:
                 return None, 'For position type = {}, please provide a (N, 3) array for positions'.format(position_type)
             position_type = 'xyz'
@@ -282,12 +282,12 @@ class BaseTwoPointCounter(BaseClass):
             the single array of bin edges can be provided directly.
             Edges are inclusive on the low end, exclusive on the high end,
             i.e. a pair separated by :math:`s` falls in bin `i` if ``edges[i] <= s < edges[i+1]``.
-            In case ``mode`` is "smu" however, first :math:`\mu`-bin is exclusive on the low end
+            In case ``mode`` is "smu" however, the first :math:`\mu`-bin is exclusive on the low end
             (increase the :math:`\mu`-range by a tiny value to include :math:`\mu = \pm 1`).
             Pairs at separation :math:`s = 0` are included in the :math:`\mu = 0` bin.
             In case of auto-correlation (no ``positions2`` provided), auto-pairs (pairs of same objects) are not counted.
             In case of cross-correlation, all pairs are counted.
-            In any case, duplicate objects will be counted (with separation zero).
+            In any case, duplicate objects (with separation zero) will be counted.
 
         positions1 : list, array
             Positions in the first catalog. Typically of shape (3, N), but can be (2, N) when ``mode`` is "theta".

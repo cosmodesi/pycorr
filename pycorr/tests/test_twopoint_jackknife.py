@@ -30,13 +30,16 @@ def test_subsampler():
     boxsize = np.array([1000.]*3)
     boxcenter = np.array([100., 0., 0.])
     catalog = generate_catalogs(size=1000, boxsize=boxsize, offset=boxcenter-boxsize/2.)[0]
+    positions = catalog[:3]
+    positions_bak = np.array(positions, copy=True)
     nsamples = 27
     subsampler = BoxSubsampler(boxsize=boxsize, boxcenter=boxcenter, nsamples=nsamples)
     assert np.allclose(subsampler.boxsize, boxsize, rtol=1e-2)
-    labels = subsampler.label(catalog[:3])
+    labels = subsampler.label(positions)
     assert np.max(labels) < nsamples
+    assert np.allclose(positions, positions_bak)
 
-    subsampler = BoxSubsampler(positions=catalog[:3], nsamples=nsamples)
+    subsampler = BoxSubsampler(positions=positions, nsamples=nsamples)
     assert np.allclose(subsampler.boxsize, boxsize, rtol=1e-2)
     labels = subsampler.label(catalog[:3])
     assert np.max(labels) < nsamples
@@ -44,13 +47,14 @@ def test_subsampler():
     for nside in [None, 512]:
 
         nsamples = 100
-        subsampler = KMeansSubsampler(mode='angular', positions=catalog[:3], nsamples=nsamples, nside=nside, random_state=42, position_type='xyz')
-        labels = subsampler.label(catalog[:3])
+        subsampler = KMeansSubsampler(mode='angular', positions=positions, nsamples=nsamples, nside=nside, random_state=42, position_type='xyz')
+        labels = subsampler.label(positions)
         assert np.max(labels) < nsamples
+        assert np.allclose(positions, positions_bak)
 
         if mpi:
             mpicomm = mpi.COMM_WORLD
-            subsampler_mpi = KMeansSubsampler(mode='angular', positions=catalog[:3], nsamples=nsamples, nside=nside, random_state=42, position_type='xyz', mpicomm=mpicomm, mpiroot=0)
+            subsampler_mpi = KMeansSubsampler(mode='angular', positions=positions, nsamples=nsamples, nside=nside, random_state=42, position_type='xyz', mpicomm=mpicomm, mpiroot=0)
             labels_mpi = subsampler.label(catalog[:3])
             assert np.allclose(labels_mpi, labels)
             if mpicomm.rank == 0:
@@ -242,10 +246,27 @@ def test_twopoint_counter(mode='s'):
                 if position_type == 'pos':
                     positions1 = np.array(positions1).T
                     positions2 = np.array(positions2).T
-                return JackknifeTwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=None if pass_none else positions1, weights1=None if pass_none else tmpdata1[npos:-1],
-                                               positions2=None if pass_none or autocorr else positions2, weights2=None if pass_none or autocorr else tmpdata2[npos:-1],
-                                               samples1=None if pass_none else tmpdata1[-1], samples2=None if pass_none or autocorr else tmpdata2[-1],
+                weights1 = tmpdata1[npos:-1]
+                weights2 = tmpdata2[npos:-1]
+                samples1 = tmpdata1[-1]
+                samples2 =tmpdata2[-1]
+                positions1_bak = np.array(positions1, copy=True)
+                positions2_bak = np.array(positions2, copy=True)
+                if weights1: weights1_bak = np.array(weights1, copy=True)
+                if weights2: weights2_bak = np.array(weights2, copy=True)
+                samples1_bak = np.array(samples1, copy=True)
+                samples2_bak = np.array(samples2, copy=True)
+                toret = JackknifeTwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=None if pass_none else positions1, weights1=None if pass_none else weights1,
+                                               positions2=None if pass_none or autocorr else positions2, weights2=None if pass_none or autocorr else weights2,
+                                               samples1=None if pass_none else samples1, samples2=None if pass_none or autocorr else samples2,
                                                position_type=position_type, bin_type=bin_type, dtype=dtype, **kwargs, **options)
+                assert np.allclose(positions1, positions1_bak)
+                assert np.allclose(positions2, positions2_bak)
+                if weights1: assert np.allclose(weights1, weights1_bak)
+                if weights2: assert np.allclose(weights2, weights2_bak)
+                assert np.allclose(samples1, samples1_bak)
+                assert np.allclose(samples2, samples2_bak)
+                return toret
 
             def assert_allclose(res2, res1):
                 assert np.allclose(res2.wcounts, res1.wcounts, **tol)

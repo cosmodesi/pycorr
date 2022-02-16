@@ -338,12 +338,12 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
             the single array of bin edges can be provided directly.
             Edges are inclusive on the low end, exclusive on the high end,
             i.e. a pair separated by :math:`s` falls in bin `i` if ``edges[i] <= s < edges[i+1]``.
-            In case ``mode`` is "smu" however, first :math:`\mu`-bin is exclusive on the low end
+            In case ``mode`` is "smu" however, the first :math:`\mu`-bin is exclusive on the low end
             (increase the :math:`\mu`-range by a tiny value to include :math:`\mu = \pm 1`).
             Pairs at separation :math:`s = 0` are included in the :math:`\mu = 0` bin.
             In case of auto-correlation (no ``positions2`` provided), auto-pairs (pairs of same objects) are not counted.
             In case of cross-correlation, all pairs are counted.
-            In any case, duplicate objects will be counted (with separation zero).
+            In any case, duplicate objects (with separation zero) will be counted.
 
         positions1 : list, array
             Positions in the first catalog. Typically of shape (3, N), but can be (2, N) when ``mode`` is "theta".
