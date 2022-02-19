@@ -125,7 +125,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             except TypeError as exc:
                 raise TwoPointCounterError('Please reinstall relevant Corrfunc branch (including PIP weights):\n\
                                             > pip uninstall Corrfunc\n\
-                                            > pip install git+https://github.com/adematti/Corrfunc@pipweights\n') from exc
+                                            > pip install git+https://github.com/adematti/Corrfunc@desi\n') from exc
 
 
         if len(dpositions1[0]) and (self.autocorr or len(dpositions2[0])):
@@ -278,5 +278,5 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             for name in ['wcounts', 'ncounts']:
                 if hasattr(new, name):
                     setattr(new, name, getattr(new, name)[:,::-1])
-            new.seps = [sep[:,::-1] for sep in new.seps]
+            new.sep = new.sep[:,::-1]
         return new
