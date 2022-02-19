@@ -96,8 +96,8 @@ def ref_s(edges, data1, data2=None, boxsize=None, los='midpoint', autocorr=False
 
 
 def ref_smu(edges, data1, data2=None, boxsize=None, weight_type=None, los='midpoint', autocorr=False, **kwargs):
-    if los == 'midpoint':
-        los = 'm'
+    if los in ['midpoint', 'firstpoint', 'endpoint']:
+        los = los[:1]
     else:
         los = [1 if i == 'xyz'.index(los) else 0 for i in range(3)]
     counts = np.zeros([len(e)-1 for e in edges], dtype='f8')
@@ -118,7 +118,15 @@ def ref_smu(edges, data1, data2=None, boxsize=None, weight_type=None, los='midpo
                     #dxyz[idim] *= -1
             dist = norm(dxyz)
             if edges[0][0] <= dist < edges[0][-1]:
-                mu = dotproduct_normalized(midpoint(xyz1,xyz2) if los == 'm' else los, dxyz)
+                if los == 'm':
+                    d = midpoint(xyz1,xyz2)
+                elif los == 'f':
+                    d = xyz1
+                elif los == 'e':
+                    d = xyz2
+                else:
+                    d = los
+                mu = dotproduct_normalized(d, dxyz)
                 if dist == 0.: mu = 0.
                 if edges[1][0] <= mu < edges[1][-1]:
                     #print(dxyz, xyz1, xyz2, idxyz)
@@ -201,11 +209,12 @@ def test_twopoint_counter(mode='s'):
     twopoint_weights = TwoPointWeight(np.logspace(-4, 0, 40), np.linspace(4., 1., 40))
 
     list_options = []
+    """
     list_options.append({})
     list_options.append({'weights_one':[1]})
     for position_type in ['rdd', 'pos', 'xyz'] + (['rd'] if mode == 'theta' else []):
         list_options.append({'position_type':position_type})
-
+    """
     mpi = False
     try:
         from pycorr import mpi
@@ -215,18 +224,19 @@ def test_twopoint_counter(mode='s'):
 
     for dtype in (['f8'] if mode == 'theta' else ['f4', 'f8']): # in theta mode, lots of rounding errors!
         itemsize = np.dtype(dtype).itemsize
-        for isa in ['fallback', 'sse42', 'avx', 'avx512f']:
+        for isa in ['fallback', 'sse42', 'avx', 'avx512f'][:1]:
             # binning
             edges = np.array([1, 8, 20, 42, 60])
             if mode == 'smu':
                 edges = (edges, np.linspace(-0.8, 0.8, 61))
             if mode == 'rppi':
                 edges = (edges, np.linspace(0., 90., 91))
+            """
+            list_options.append({'edges':edges, 'dtype':dtype, 'isa':isa})
             list_options.append({'autocorr':True, 'compute_sepsavg':False, 'edges':edges, 'dtype':dtype, 'isa':isa})
             list_options.append({'n_individual_weights':1, 'bin_type':'custom', 'dtype':dtype, 'isa':isa})
             # pip
             list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'dtype':dtype, 'isa':isa})
-            list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'y', 'dtype':dtype, 'isa':isa})
             list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'iip':1, 'dtype':dtype, 'isa':isa})
             list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'bitwise_type': 'i4', 'iip':1, 'dtype':dtype, 'isa':isa})
             list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'weight_attrs':{'nrealizations':42,'noffset':3}, 'dtype':dtype, 'isa':isa})
@@ -241,7 +251,15 @@ def test_twopoint_counter(mode='s'):
                 list_options.append({'autocorr':True, 'boxsize':boxsize, 'dtype':dtype, 'isa':isa})
                 list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'boxsize':boxsize, 'los':'x', 'dtype':dtype, 'isa':isa})
                 list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'boxsize':boxsize, 'los':'y', 'dtype':dtype, 'isa':isa})
-                list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'boxsize':boxsize, 'los':'z', 'dtype':dtype, 'isa':isa})
+            # los
+            list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'x', 'dtype':dtype, 'isa':isa})
+            list_options.append({'los':'midpoint', 'dtype':dtype, 'isa':isa})
+            """
+            if mode in ['smu']:
+                list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'firstpoint', 'dtype':dtype, 'isa':isa})
+                list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'endpoint', 'dtype':dtype, 'isa':isa})
+                if itemsize > 4:
+                    list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'endpoint', 'twopoint_weights':twopoint_weights, 'dtype':dtype, 'isa':isa})
             # mpi
             if mpi:
                 list_options.append({'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
@@ -251,6 +269,7 @@ def test_twopoint_counter(mode='s'):
 
     for engine in list_engine:
         for options in list_options:
+            print(options)
             options = options.copy()
             if 'edges' in options:
                 edges = options.pop('edges')
@@ -264,7 +283,7 @@ def test_twopoint_counter(mode='s'):
 
             autocorr = options.pop('autocorr', False)
             options.setdefault('boxsize', None)
-            options['los'] = options.get('los', 'x') if options['boxsize'] is not None else 'midpoint'
+            los = options['los'] = options.get('los', 'x' if options['boxsize'] is not None else 'midpoint')
             bin_type = options.pop('bin_type', 'auto')
             mpicomm = options.pop('mpicomm', None)
             bitwise_type = options.pop('bitwise_type', None)
@@ -379,16 +398,18 @@ def test_twopoint_counter(mode='s'):
 
             test = run()
             if engine == 'corrfunc':
-                assert test.is_reversable
+                assert test.is_reversable == autocorr or (los not in ['firstpoint', 'endpoint'])
             if test.is_reversable:
                 test_reversed = run(reverse=True)
                 ref_reversed = test.reversed()
                 if itemsize <= 4:
                     assert np.isclose(test_reversed.wcounts, ref_reversed.wcounts, **tol).sum() > 0.95 * ref_reversed.wcounts.size
-                    assert np.isclose(test_reversed.sep, ref_reversed.sep, **tol, equal_nan=True).sum() > 0.95 * np.sum(~np.isnan(ref_reversed.sep))
+                    for isep in range(test_reversed.ndim):
+                        assert np.isclose(test_reversed.seps[isep], ref_reversed.seps[isep], **tol, equal_nan=True).sum() > 0.95 * np.sum(~np.isnan(ref_reversed.seps[isep]))
                 else:
                     assert np.allclose(test_reversed.wcounts, ref_reversed.wcounts, **tol)
-                    assert np.allclose(test_reversed.sep, ref_reversed.sep, **tol, equal_nan=True)
+                    for isep in range(test_reversed.ndim):
+                        assert np.allclose(test_reversed.seps[isep], ref_reversed.seps[isep], **tol, equal_nan=True)
 
             if n_bitwise_weights == 0:
                 if n_individual_weights == 0:
@@ -630,6 +651,9 @@ def test_rebin():
 if __name__ == '__main__':
 
     setup_logging()
+
+    test_twopoint_counter(mode='smu')
+    exit()
 
     test_mu1()
 

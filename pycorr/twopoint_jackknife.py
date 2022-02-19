@@ -569,7 +569,8 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
                         spositions2 = [position[mask2] for position in positions2]
                         sweights2 = [weight[mask2] for weight in weights2]
                 mpiroot = 0 if self.with_mpi else None
-                kwargs = {name: getattr(self, name) for name in ['bin_type', 'weight_attrs', 'twopoint_weights', 'los', 'boxsize', 'compute_sepsavg', 'nthreads']}
+                kwargs = {name: getattr(self, name) for name in ['bin_type', 'weight_attrs', 'twopoint_weights', 'boxsize', 'compute_sepsavg', 'nthreads']}
+                kwargs['los'] = self.los_type
                 kwargs['position_type'] = 'rd' if self.mode == 'theta' else 'xyz'
                 kwargs.update(self.attrs)
                 tmp = TwoPointCounter(self.mode, edges=self.edges, positions1=spositions1, weights1=sweights1, positions2=spositions2, weights2=sweights2, mpicomm=tm.mpicomm, mpiroot=mpiroot, **kwargs)

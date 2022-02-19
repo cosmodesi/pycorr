@@ -611,13 +611,13 @@ class BaseTwoPointCounter(BaseClass):
         self.seps = list(np.meshgrid(*self._get_default_seps(), indexing='ij'))
 
     def _set_los(self, los):
-        self.los = los.lower()
+        self.los_type = los.lower()
         allowed_los = ['midpoint', 'endpoint', 'firstpoint', 'x', 'y', 'z']
-        if self.los not in allowed_los:
+        if self.los_type not in allowed_los:
             raise TwoPointCounterError('los should be one of {}'.format(allowed_los))
         if self.periodic and self.mode != 's':
             allowed_los = ['x', 'y', 'z']
-            if self.los not in allowed_los:
+            if self.los_type not in allowed_los:
                 raise TwoPointCounterError('los should be one of {} in case of periodic boundary conditions (boxsize)'.format(allowed_los))
 
     def _set_boxsize(self, boxsize):
@@ -866,7 +866,7 @@ class BaseTwoPointCounter(BaseClass):
     def __getstate__(self):
         state = {}
         for name in ['name', 'autocorr', 'is_reversable', 'seps', 'ncounts', 'wcounts', 'wnorm', 'size1', 'size2', 'edges', 'mode', 'bin_type',
-                     'boxsize', 'los', 'compute_sepsavg', 'weight_attrs', 'attrs']:
+                     'boxsize', 'los_type', 'compute_sepsavg', 'weight_attrs', 'attrs']:
             if hasattr(self, name):
                 state[name] = getattr(self, name)
         return state
@@ -950,7 +950,7 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
             v = 2. * np.pi * self.edges[0][:,None]**2 * self.edges[1]
             dv = np.diff(np.diff(v, axis=0), axis=1)
         elif self.mode == 'rp':
-            v = np.pi * self.edges[0][:,None]**2 * self.boxsize['xyz'.index(self.los)]
+            v = np.pi * self.edges[0][:,None]**2 * self.boxsize['xyz'.index(self.los_type)]
             dv = np.diff(v, axis=0)
         else:
             raise TwoPointCounterError('No analytic randoms provided for mode {}'.format(self.mode))

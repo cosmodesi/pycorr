@@ -15,11 +15,16 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
 
     def run(self):
         """Compute the two-point counts and set :attr:`wcounts` and :attr:`sep`."""
-        self.is_reversable = True # even smu is reversable, i.e. positions1 <-> positions2
         if self.ndim == 2:
             self.compute_sepsavg[1] = False
 
         (dpositions1, dweights1), (dpositions2, dweights2) = self._mpi_decompose()
+        los_type = self.los_type
+        if self.los_type == 'endpoint':
+            los_type = 'firstpoint'
+            if not self.autocorr:
+                dpositions1, dpositions2 = dpositions2, dpositions1
+                dweights1, dweights2 = dweights2, dweights1
 
         def boxsize():
             if self.periodic:
@@ -30,9 +35,9 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             return None
 
         def check_los():
-            if self.los != 'midpoint':
-                raise TwoPointCounterError('Corrfunc only supports midpoint line-of-sight')
-            return self.los
+            if self.mode != 'smu' and self.los_type != 'midpoint':
+                raise TwoPointCounterError('Corrfunc only supports midpoint line-of-sight for mode {}'.format(self.mode))
+            return self.los_type
 
         def check_mu():
             edges = self.edges[1]
@@ -57,11 +62,11 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             # rotating coordinates to put los along z
             def rotate(positions):
                 toret = list(positions)
-                if self.los == 'x':
+                if self.los_type == 'x':
                     # rotation around -y: x' = -z and z' = x
                     toret[0] = -positions[2]
                     toret[2] = positions[0]
-                elif self.los == 'y':
+                elif self.los_type == 'y':
                     # rotation around x: y' = -z and z' = y
                     toret[1] = -positions[2]
                     toret[2] = positions[1]
@@ -125,7 +130,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             except TypeError as exc:
                 raise TwoPointCounterError('Please reinstall relevant Corrfunc branch (including PIP weights):\n\
                                             > pip uninstall Corrfunc\n\
-                                            > pip install git+https://github.com/adematti/Corrfunc@pipweights\n') from exc
+                                            > pip install git+https://github.com/adematti/Corrfunc@desi\n') from exc
 
 
         if len(dpositions1[0]) and (self.autocorr or len(dpositions2[0])):
@@ -149,7 +154,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
 
             elif self.mode == 'smu':
                 check_mu()
-                if self.los in ['x','y','z']:
+                if self.los_type in ['x','y','z']:
                     positions1, positions2 = rotated_positions()
                     result = call_corrfunc(theory.DDsmu, autocorr, nthreads=self.nthreads,
                                            binfile=self.edges[0], mumax=self.edges[1][-1], nmubins=len(self.edges[1]) - 1,
@@ -164,14 +169,13 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                                            binfile=self.edges[0], mumax=self.edges[1][-1], nmubins=len(self.edges[1]) - 1,
                                            RA1=positions1[0], DEC1=positions1[1], CZ1=positions1[2],
                                            RA2=positions2[0], DEC2=positions2[1], CZ2=positions2[2],
-                                           is_comoving_dist=True,
-                                           output_savg=self.compute_sepavg, **kwargs)
+                                           is_comoving_dist=True, output_savg=self.compute_sepavg, los_type=los_type, **kwargs)
 
                 key_sep = 'savg'
 
             elif self.mode == 'rppi':
                 check_pi()
-                if self.los in ['x','y','z']:
+                if self.los_type in ['x','y','z']:
                     positions1, positions2 = rotated_positions()
                     result = call_corrfunc(theory.DDrppi, autocorr, nthreads=self.nthreads,
                                            binfile=self.edges[0], pimax=self.edges[1][-1], npibins=len(self.edges[1]) - 1,
@@ -193,7 +197,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
 
             elif self.mode == 'rp':
                 key_sep = 'rpavg'
-                if self.los in ['x','y','z']:
+                if self.los_type in ['x','y','z']:
                     positions1, positions2 = rotated_positions()
                     boxsize = boxsize()
                     pimax = boxsize + 1. # los axis is z
@@ -271,6 +275,11 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
         if self.compute_sepavg:
             self.sep[self.ncounts == 0] = np.nan
 
+        if self.los_type == 'endpoint' and not self.autocorr:
+            self.is_reversable = True
+            self.__setstate__(self.reversed().__getstate__())
+        self.is_reversable = self.autocorr or (self.los_type not in ['firstpoint', 'endpoint']) # even smu is reversable for midpoint los, i.e. positions1 <-> positions2
+
     def reversed(self):
         """Return counts for reversed positions1/weights1 and positions2/weights2."""
         new = super(CorrfuncTwoPointCounter, self).reversed()
@@ -278,5 +287,5 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             for name in ['wcounts', 'ncounts']:
                 if hasattr(new, name):
                     setattr(new, name, getattr(new, name)[:,::-1])
-            new.seps = [sep[:,::-1] for sep in new.seps]
+            new.sep = new.sep[:,::-1]
         return new

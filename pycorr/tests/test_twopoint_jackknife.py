@@ -106,11 +106,11 @@ def test_twopoint_counter(mode='s'):
                 edges = (edges, np.linspace(-0.8, 0.8, 61))
             if mode == 'rppi':
                 edges = (edges, np.linspace(0., 90., 91))
+            list_options.append({'edges':edges, 'dtype':dtype, 'isa':isa})
             list_options.append({'autocorr':True, 'compute_sepsavg':False, 'edges':edges, 'dtype':dtype, 'isa':isa})
             list_options.append({'n_individual_weights':1, 'bin_type':'custom', 'dtype':dtype, 'isa':isa})
             # pip
             list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'dtype':dtype, 'isa':isa})
-            list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'y', 'dtype':dtype, 'isa':isa})
             list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'iip':1, 'dtype':dtype, 'isa':isa})
             list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'bitwise_type': 'i4', 'iip':1, 'dtype':dtype, 'isa':isa})
             list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'weight_attrs':{'nrealizations':42,'noffset':3}, 'dtype':dtype, 'isa':isa})
@@ -125,12 +125,17 @@ def test_twopoint_counter(mode='s'):
                 list_options.append({'autocorr':True, 'boxsize':boxsize, 'dtype':dtype, 'isa':isa})
                 list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'boxsize':boxsize, 'los':'x', 'dtype':dtype, 'isa':isa})
                 list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'boxsize':boxsize, 'los':'y', 'dtype':dtype, 'isa':isa})
-                list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'boxsize':boxsize, 'los':'z', 'dtype':dtype, 'isa':isa})
+            # los
+            list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'x', 'dtype':dtype, 'isa':isa})
+            list_options.append({'los':'midpoint', 'dtype':dtype, 'isa':isa})
+            if mode in ['smu']:
+                list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'firstpoint', 'dtype':dtype, 'isa':isa})
+                if itemsize > 4:
+                    list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'endpoint', 'twopoint_weights':twopoint_weights, 'dtype':dtype, 'isa':isa})
             # mpi
             if mpi:
                 list_options.append({'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
                 list_options.append({'n_individual_weights':1, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
-                list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
                 list_options.append({'autocorr':True, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
                 list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
             # labels
@@ -156,7 +161,7 @@ def test_twopoint_counter(mode='s'):
 
             autocorr = options.pop('autocorr', False)
             options.setdefault('boxsize', None)
-            options['los'] = 'x' if options['boxsize'] is not None else 'midpoint'
+            options['los'] = options.get('los', 'x' if options['boxsize'] is not None else 'midpoint')
             bin_type = options.pop('bin_type', 'auto')
             mpicomm = options.pop('mpicomm', None)
             bitwise_type = options.pop('bitwise_type', None)
