@@ -85,10 +85,6 @@ def test_twopoint_counter(mode='s'):
     twopoint_weights = TwoPointWeight(np.logspace(-4, 0, 40), np.linspace(4., 1., 40))
 
     list_options = []
-    list_options.append({})
-    list_options.append({'weights_one':[1]})
-    for position_type in ['rdd', 'pos', 'xyz'] + (['rd'] if mode == 'theta' else []):
-        list_options.append({'position_type':position_type})
 
     mpi = False
     try:
@@ -97,49 +93,58 @@ def test_twopoint_counter(mode='s'):
     except ImportError:
         pass
 
-    for dtype in ['f8']:
-        itemsize = np.dtype(dtype).itemsize
-        for isa in ['fastest']:
-            # binning
-            edges = np.array([1, 8, 20, 42, 60])
-            if mode == 'smu':
-                edges = (edges, np.linspace(-0.8, 0.8, 61))
-            if mode == 'rppi':
-                edges = (edges, np.linspace(0., 90., 91))
-            list_options.append({'edges':edges, 'dtype':dtype, 'isa':isa})
-            list_options.append({'autocorr':True, 'compute_sepsavg':False, 'edges':edges, 'dtype':dtype, 'isa':isa})
-            list_options.append({'n_individual_weights':1, 'bin_type':'custom', 'dtype':dtype, 'isa':isa})
-            # pip
-            list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'dtype':dtype, 'isa':isa})
-            list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'iip':1, 'dtype':dtype, 'isa':isa})
-            list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'bitwise_type': 'i4', 'iip':1, 'dtype':dtype, 'isa':isa})
-            list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'iip':2, 'weight_attrs':{'nrealizations':42,'noffset':3}, 'dtype':dtype, 'isa':isa})
-            list_options.append({'n_individual_weights':1, 'n_bitwise_weights':2, 'iip':2, 'weight_attrs':{'noffset':0,'default_value':0.8}, 'dtype':dtype, 'isa':isa})
-            # twopoint_weights
-            if itemsize > 4:
-                list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'dtype':dtype, 'isa':isa})
-                list_options.append({'twopoint_weights':twopoint_weights, 'los':'y', 'dtype':dtype, 'isa':isa})
-            # boxsize
-            if mode not in ['theta', 'rp']:
-                list_options.append({'boxsize':boxsize, 'dtype':dtype, 'isa':isa})
-                list_options.append({'autocorr':True, 'boxsize':boxsize, 'dtype':dtype, 'isa':isa})
-                list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'boxsize':boxsize, 'los':'x', 'dtype':dtype, 'isa':isa})
-                list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'boxsize':boxsize, 'los':'y', 'dtype':dtype, 'isa':isa})
-            # los
-            list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'x', 'dtype':dtype, 'isa':isa})
-            list_options.append({'los':'midpoint', 'dtype':dtype, 'isa':isa})
-            if mode in ['smu']:
-                list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'firstpoint', 'dtype':dtype, 'isa':isa})
+    for autocorr in [False, True]:
+        list_options.append({'autocorr':autocorr})
+        list_options.append({'autocorr':autocorr, 'weights_one':[1]})
+        for position_type in ['rdd', 'pos', 'xyz'] + (['rd'] if mode == 'theta' else []):
+            list_options.append({'autocorr':autocorr, 'position_type':position_type})
+        for dtype in ['f8']: # in theta mode, lots of rounding errors!
+            itemsize = np.dtype(dtype).itemsize
+            for isa in ['fastest']:
+                # binning
+                edges = np.array([1, 8, 20, 42, 60])
+                if mode == 'smu':
+                    edges = (edges, np.linspace(-0.8, 0.8, 61))
+                if mode == 'rppi':
+                    edges = (edges, np.linspace(0., 90., 91))
+
+                list_options.append({'autocorr':autocorr, 'edges':edges, 'dtype':dtype, 'isa':isa})
+                list_options.append({'autocorr':autocorr, 'compute_sepsavg':False, 'edges':edges, 'dtype':dtype, 'isa':isa})
+                list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'bin_type':'custom', 'dtype':dtype, 'isa':isa})
+                # pip
+                list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'dtype':dtype, 'isa':isa})
+                list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'n_bitwise_weights':1, 'iip':1, 'dtype':dtype, 'isa':isa})
+                if not autocorr:
+                    list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'n_bitwise_weights':1, 'iip':2, 'dtype':dtype, 'isa':isa})
+                list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'n_bitwise_weights':1, 'bitwise_type': 'i4', 'iip':1, 'dtype':dtype, 'isa':isa})
+                list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'weight_attrs':{'nrealizations':129,'noffset':3}, 'dtype':dtype, 'isa':isa})
+                list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'n_bitwise_weights':2, 'weight_attrs':{'noffset':0,'default_value':0.8}, 'dtype':dtype, 'isa':isa})
+
+                # twopoint_weights
                 if itemsize > 4:
-                    list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'endpoint', 'twopoint_weights':twopoint_weights, 'dtype':dtype, 'isa':isa})
-            # mpi
-            if mpi:
-                list_options.append({'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
-                list_options.append({'n_individual_weights':1, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
-                list_options.append({'autocorr':True, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
-                list_options.append({'autocorr':True, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
-            # labels
-            list_options.append({'offset_label':2})
+                    list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'dtype':dtype, 'isa':isa})
+                    list_options.append({'autocorr':autocorr, 'twopoint_weights':twopoint_weights, 'los':'y', 'dtype':dtype, 'isa':isa})
+                # boxsize
+                if mode not in ['theta', 'rp']:
+                    list_options.append({'autocorr':autocorr, 'boxsize':boxsize, 'dtype':dtype, 'isa':isa})
+                    list_options.append({'autocorr':autocorr, 'boxsize':boxsize, 'dtype':dtype, 'isa':isa})
+                    list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'boxsize':boxsize, 'los':'x', 'dtype':dtype, 'isa':isa})
+                    list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'boxsize':boxsize, 'los':'y', 'dtype':dtype, 'isa':isa})
+                # los
+                list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'x', 'dtype':dtype, 'isa':isa})
+                if mode in ['smu']:
+                    list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'firstpoint', 'dtype':dtype, 'isa':isa})
+                    list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'endpoint', 'dtype':dtype, 'isa':isa})
+                    if itemsize > 4:
+                        list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'endpoint', 'twopoint_weights':twopoint_weights, 'dtype':dtype, 'isa':isa})
+                # mpi
+                if mpi:
+                    list_options.append({'autocorr':autocorr, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
+                    list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
+                    list_options.append({'autocorr':autocorr, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
+                    list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
+                # labels
+                list_options.append({'offset_label':2})
 
     for engine in list_engine:
         for options in list_options:
@@ -161,7 +166,7 @@ def test_twopoint_counter(mode='s'):
 
             autocorr = options.pop('autocorr', False)
             options.setdefault('boxsize', None)
-            options['los'] = options.get('los', 'x' if options['boxsize'] is not None else 'midpoint')
+            los = options['los'] = options.get('los', 'x' if options['boxsize'] is not None else 'midpoint')
             bin_type = options.pop('bin_type', 'auto')
             mpicomm = options.pop('mpicomm', None)
             bitwise_type = options.pop('bitwise_type', None)
@@ -295,7 +300,7 @@ def test_twopoint_counter(mode='s'):
             assert_allclose(test_ii, ref_ii)
 
             if engine == 'corrfunc':
-                assert test.is_reversable
+                assert test.is_reversable == autocorr or (los not in ['firstpoint', 'endpoint'])
             if test.is_reversable:
                 test_reversed = run(reverse=True)
                 ref_reversed = test.reversed()
