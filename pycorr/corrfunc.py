@@ -193,9 +193,22 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
 
             elif self.mode == 'rp':
                 key_sep = 'rpavg'
+
+                def _get_box(*positions):
+                    posmin = [min(pos[ii].min() for pos in positions) for ii in range(3)]
+                    posmax = [max(pos[ii].max() for pos in positions) for ii in range(3)]
+                    return np.array(posmax) - np.array(posmin)
+
                 if self.los in ['x','y','z']:
                     positions1, positions2 = rotated_positions()
-                    boxsize = boxsize()
+                    if self.periodic:
+                        boxsize = boxsize()
+                    else:
+                        if autocorr:
+                            boxsize = _get_box(positions1)
+                        else:
+                            boxsize = _get_box(positions1, positions2)
+                        boxsize = boxsize[-1]
                     pimax = boxsize + 1. # los axis is z
                     result = call_corrfunc(theory.DDrppi, autocorr, nthreads=self.nthreads,
                                            binfile=self.edges[0], pimax=pimax, npibins=1,
@@ -214,11 +227,10 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                     # local calculation, since integrated over pi
                     # \pi = \hat{\ell} \cdot (r_{1} - r_{2}) < | r_{1} - r_{2} | < boxsize
                     if autocorr:
-                        boxsize = [p.max() - p.min() for p in dpositions1]
+                        boxsize = _get_box(dpositions1)
                     else:
-                        boxsize = [max(p1.max(), p2.max()) - min(p1.min(), p2.min()) for p1, p2 in zip(dpositions1, dpositions2)]
+                        boxsize = _get_box(dpositions1, dpositions2)
                     pimax = sum(p**2 for p in boxsize)**0.5 + 1.
-                    #print(pimax)
                     result = call_corrfunc(mocks.DDrppi_mocks, autocorr, cosmology=1, nthreads=self.nthreads,
                                            binfile=self.edges[0], pimax=pimax, npibins=1,
                                            RA1=positions1[0], DEC1=positions1[1], CZ1=positions1[2],
