@@ -209,9 +209,9 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                         boxsize = boxsize()
                     else:
                         if autocorr:
-                            boxsize = _get_box(dpositions1)
+                            boxsize = _get_box(positions1)
                         else:
-                            boxsize = _get_box(dpositions1, dpositions2)
+                            boxsize = _get_box(positions1, positions2)
                         boxsize = boxsize[-1]
                     pimax = boxsize + 1. # los axis is z
                     result = call_corrfunc(theory.DDrppi, autocorr, nthreads=self.nthreads,
