@@ -283,6 +283,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                     self.sep.flat[index_zero] *= self.wcounts.flat[index_zero]/(self.wcounts.flat[index_zero] - autocounts)
             self.wcounts.flat[index_zero] -= autocounts
 
+        self.ncounts = self.ncounts.astype('i8')
         self.wcounts[self.ncounts == 0] = 0. # as above may create uncertainty
         if self.compute_sepavg:
             self.sep[self.ncounts == 0] = np.nan

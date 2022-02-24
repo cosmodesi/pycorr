@@ -623,6 +623,35 @@ def test_mu1():
             assert np.allclose(counts.wcounts, 0.)
 
 
+def test_smu():
+    # A few pairs shift bins with Corrfunc catalogs
+    corrfunc_catalog = True
+    if corrfunc_catalog:
+        import Corrfunc
+        from Corrfunc.io import read_fastfood_catalog
+        filename = os.path.join(os.path.dirname(Corrfunc.__file__), '../mocks/tests/data', 'Mr19_randoms_northonly.rdcz.ff')
+        ra, dec, cz, w = read_fastfood_catalog(filename, need_weights=True)
+        speed_of_light = 299800.0
+        from cosmoprimo import Cosmology
+        cosmo = Cosmology(Omega_m=0.25, engine='class')
+        d = cosmo.comoving_radial_distance(cz/speed_of_light)
+        data1 = [ra, dec, d]
+        position_type = 'rdd'
+    else:
+        data1 = generate_catalogs(size=int(1e6), boxsize=(150,)*3, offset=(200.,0,0), n_individual_weights=1, n_bitwise_weights=0, seed=42)[0]
+        position_type = 'xyz'
+    #edges = (np.linspace(2.0, 20.1, 12), np.linspace(-1., 1., 11))
+    edges = ([11.7560, 16.7536, 23.8755], np.linspace(-1., 1., 11))
+    counts_ref = TwoPointCounter(mode='smu', edges=edges, positions1=data1[:3], positions2=data1[:3],
+                                 weights1=None, weights2=None, position_type=position_type, isa='fallback', nthreads=4)
+    counts_auto = TwoPointCounter(mode='smu', edges=edges, positions1=data1[:3], positions2=None,
+                                 weights1=None, weights2=None, position_type=position_type, isa='sse42', nthreads=4)
+    print(counts_ref.ncounts)
+    print(counts_auto.ncounts)
+    print(counts_auto.ncounts.dtype)
+    print(counts_auto.ncounts - counts_ref.ncounts)
+
+
 def test_rebin():
     boxsize = 1000.
     mode = 's'
