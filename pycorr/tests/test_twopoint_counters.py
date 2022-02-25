@@ -235,6 +235,7 @@ def test_twopoint_counter(mode='s'):
                 list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'bin_type':'custom', 'dtype':dtype, 'isa':isa})
                 # pip
                 list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'dtype':dtype, 'isa':isa})
+                list_options.append({'autocorr':autocorr, 'compute_sepsavg':False, 'n_individual_weights':2, 'n_bitwise_weights':2, 'dtype':dtype, 'isa':isa})
                 list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'n_bitwise_weights':1, 'iip':1, 'dtype':dtype, 'isa':isa})
                 if not autocorr:
                     list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'n_bitwise_weights':1, 'iip':2, 'dtype':dtype, 'isa':isa})

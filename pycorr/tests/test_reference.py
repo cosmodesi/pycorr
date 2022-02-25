@@ -10,8 +10,11 @@ def save_catalogs(filename, size=1000, boxsize=(100,)*3, offset=(1000,0,0), n_bi
     parent_size = int(size*1.2)
     for icat in range(2):
         positions = [o + rng.uniform(-0.5, 0.5, parent_size)*b for b,o in zip(boxsize, offset)]
-        bitwise_weights = [utils.pack_bitarrays(*[rng.randint(0, 2, parent_size) for i in range(31)], np.ones(parent_size, dtype='?'), dtype=np.uint32)[0]]
-        bitwise_weights += [utils.pack_bitarrays(*[rng.randint(0, 2, parent_size) for i in range(32)], dtype=np.uint32)[0] for iw in range(n_bitwise_weights-1)]
+        if n_bitwise_weights:
+            bitwise_weights = [utils.pack_bitarrays(*[rng.randint(0, 2, parent_size) for i in range(31)], np.ones(parent_size, dtype='?'), dtype=np.uint32)[0]]
+            bitwise_weights += [utils.pack_bitarrays(*[rng.randint(0, 2, parent_size) for i in range(32)], dtype=np.uint32)[0] for iw in range(n_bitwise_weights-1)]
+        else:
+            bitwise_weights = []
         individual_weights = rng.uniform(0.5, 1., parent_size)
         mask = rng.choice(parent_size, size, replace=False)
         if parent_fn is not None:
@@ -54,7 +57,7 @@ def save_readme(filename, catalog_dirname='catalogs', results_dirname='twopoint'
     tmp = 'Reference test to compare pair counters.\n'\
           'Data and randoms catalogs are in {0}/.\n'\
           'These catalogs are purely random; not clustering is expected -- hence flat correlation function.\n'\
-          'Bitwise weights are only provided for data, not randoms; and these weights are turned into IIP weights for D1R2, D2R1.\n'\
+          'Bitwise weights are only provided for data, not randoms; and these weights are turned into IIP weights for D1R2, R1D2.\n'\
           'The last to MSB of each bitwise weight has been set to 1, to ensure non zero-probability pairs.\n'\
           'The total number of realizations is {3:d}, such that each PIP weight is given by {3:d}/popcount(w1 & w2), with w1 and w2 bitwise weights of particles 1 and 2.\n'\
           'Pair counts and correlation function estimations (Landy-Szalay) are saved in {1}_theta/, {1}_s/, {1}_smu/, {1}_rppi/,\n'\
@@ -107,12 +110,10 @@ def save_result(result, filename, header=''):
 
 def test_result(result, filename):
     isestimator = isinstance(result, BaseTwoPointEstimator)
-    try:
-        ref = np.loadtxt(filename, usecols=-1)
-    except: return
+    ref = np.loadtxt(filename, usecols=-1)
     if isestimator:
         mask = ~np.isnan(ref)
-        assert np.allclose(result.corr.flatten()[mask], ref[mask], atol=1e-9, rtol=1e-9)
+        assert np.allclose(result.corr.flatten()[mask], ref[mask], atol=1e-9, rtol=1e-6)
     else:
         with open(filename, 'r') as file:
             import re
@@ -120,7 +121,8 @@ def test_result(result, filename):
                 wnorm = float(re.match('#norm = (.*)',line).group(1))
                 break
             assert np.allclose(result.wnorm, wnorm, atol=0, rtol=1e-10)
-        assert np.allclose(result.wcounts.flatten(), ref, atol=0, rtol=1e-10)
+        diff = np.abs(result.wcounts.flatten() - ref)
+        assert np.allclose(result.wcounts.flatten(), ref, atol=0, rtol=1e-8)
 
 
 def load_catalog(catalog_fn):
@@ -181,13 +183,13 @@ def save_reference(base_dir):
     for mode, name_edges in mode_edges.items():
         edges = eval(name_edges, {'np':np})
         header = 'edges = {}'.format(name_edges)
-        for weight in ['no_weights', 'individal_weights', 'bitwise_weights', 'individual_bitwise_weights', 'individual_bitwise_angular_upweight']:
+        for weight in ['no_weights', 'individual_weights', 'bitwise_weights', 'individual_bitwise_weights', 'individual_bitwise_angular_upweights']:
             data_weights1, data_weights2, randoms_weights1, randoms_weights2 = None, None, None, None
-            if weight == 'individal_weights':
+            if weight == 'individual_weights':
                 data_weights1, data_weights2, randoms_weights1, randoms_weights2 = data1[-1:], data2[-1:], randoms1[3:], randoms2[3:]
             if  weight == 'bitwise_weights':
                 data_weights1, data_weights2, randoms_weights1, randoms_weights2 = data1[3:-1], data2[3:-1], np.ones_like(randoms1[0]), np.ones_like(randoms2[0])
-            if 'individual_bitwise_weights' in weight:
+            if 'individual_bitwise' in weight:
                 data_weights1, data_weights2, randoms_weights1, randoms_weights2 = data1[3:], data2[3:], randoms1[3:], randoms2[3:]
             kwargs = {'weight_attrs':weight_attrs, 'position_type':'xyz', 'compute_sepsavg':True}
             if 'angular' in weight:
@@ -198,12 +200,14 @@ def save_reference(base_dir):
                                                  randoms_positions2=randoms2[:3], randoms_weights2=randoms_weights2, **kwargs)
             save_result(result, estimator_fn.format(mode, 'cross_{}'.format(weight)), header=header)
             for pc in result.requires(with_reversed=True, join=''):
+                if pc == 'R1R2' and 'bitwise' in weight: continue
                 save_result(getattr(result, pc), counts_fn.format(mode, '{}_{}'.format(pc, weight)), header=header)
 
             result = TwoPointCorrelationFunction(mode, edges, data_positions1=data1[:3], data_weights1=data_weights1,
                                                  randoms_positions1=randoms1[:3], randoms_weights1=randoms_weights1, **kwargs)
             save_result(result, estimator_fn.format(mode, 'auto1_{}'.format(weight)), header=header)
             for pc in result.requires(with_reversed=False, join=''):
+                if pc == 'R1R2' and 'bitwise' in weight: continue
                 save_result(getattr(result, pc), counts_fn.format(mode, '{}_{}'.format(pc.replace('2','1'), weight)), header=header)
 
     mode, name_edges = 'theta', 'np.logspace(-2.5, 0, 31)'
@@ -259,18 +263,18 @@ def test_reference(base_dir):
     mode_edges['s'] = 'np.logspace(-0.5, 1, 31)'
     mode_edges['smu'] = '(np.linspace(1, 41, 41), np.linspace(-1, 1, 21))'
     mode_edges['rppi'] = '(np.linspace(1, 41, 41), np.linspace(0, 20, 21))'
-    weight_attrs = {'nrealizations':64,'noffset':0,'default_value':0.,'nalways':1}
+    weight_attrs = {'nrealizations':64,'noffset':0,'default_value':0.,'nalways':1,'isa':'fallback'}
 
     for mode, name_edges in mode_edges.items():
         edges = eval(name_edges, {'np':np})
         header = 'edges = {}'.format(name_edges)
-        for weight in ['no_weights', 'individal_weights', 'bitwise_weights', 'individual_bitwise_weights', 'individual_bitwise_angular_upweight']:
+        for weight in ['no_weights', 'individual_weights', 'bitwise_weights', 'individual_bitwise_weights', 'individual_bitwise_angular_upweights']:
             data_weights1, data_weights2, randoms_weights1, randoms_weights2 = None, None, None, None
-            if weight == 'individal_weights':
+            if weight == 'individual_weights':
                 data_weights1, data_weights2, randoms_weights1, randoms_weights2 = data1[-1:], data2[-1:], randoms1[3:], randoms2[3:]
             if  weight == 'bitwise_weights':
                 data_weights1, data_weights2, randoms_weights1, randoms_weights2 = data1[3:-1], data2[3:-1], np.ones_like(randoms1[0]), np.ones_like(randoms2[0])
-            if 'individual_bitwise_weights' in weight:
+            if 'individual_bitwise' in weight:
                 data_weights1, data_weights2, randoms_weights1, randoms_weights2 = data1[3:], data2[3:], randoms1[3:], randoms2[3:]
             kwargs = {'weight_attrs':weight_attrs, 'position_type':'xyz', 'compute_sepsavg':True}
             if 'angular' in weight:
@@ -281,6 +285,7 @@ def test_reference(base_dir):
                                                  randoms_positions2=randoms2[:3], randoms_weights2=randoms_weights2, **kwargs)
 
             for pc in result.requires(with_reversed=True, join=''):
+                if pc == 'R1R2' and 'bitwise' in weight: continue
                 test_result(getattr(result, pc), counts_fn.format(mode, '{}_{}'.format(pc, weight)))
             test_result(result, estimator_fn.format(mode, 'cross_{}'.format(weight)))
 
@@ -288,6 +293,7 @@ def test_reference(base_dir):
                                                  randoms_positions1=randoms1[:3], randoms_weights1=randoms_weights1, **kwargs)
 
             for pc in result.requires(with_reversed=False, join=''):
+                if pc == 'R1R2' and 'bitwise' in weight: continue
                 test_result(getattr(result, pc), counts_fn.format(mode, '{}_{}'.format(pc.replace('2','1'), weight)))
             test_result(result, estimator_fn.format(mode, 'auto1_{}'.format(weight)))
 
@@ -318,6 +324,7 @@ def test_reference(base_dir):
 if __name__ == '__main__':
 
     base_dir = os.path.join(os.path.dirname(__file__), 'reference')
+
     setup_logging()
     #save_reference(base_dir)
     test_reference(base_dir)

@@ -1,7 +1,7 @@
 Reference test to compare pair counters.
 Data and randoms catalogs are in catalogs/.
 These catalogs are purely random; not clustering is expected -- hence flat correlation function.
-Bitwise weights are only provided for data, not randoms; and these weights are turned into IIP weights for D1R2, D2R1.
+Bitwise weights are only provided for data, not randoms; and these weights are turned into IIP weights for D1R2, R1D2.
 The last to MSB of each bitwise weight has been set to 1, to ensure non zero-probability pairs.
 The total number of realizations is 64, such that each PIP weight is given by 64/popcount(w1 & w2), with w1 and w2 bitwise weights of particles 1 and 2.
 Pair counts and correlation function estimations (Landy-Szalay) are saved in twopoint_theta/, twopoint_s/, twopoint_smu/, twopoint_rppi/,

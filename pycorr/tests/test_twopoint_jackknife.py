@@ -94,6 +94,7 @@ def test_twopoint_counter(mode='s'):
         pass
 
     for autocorr in [False, True]:
+
         list_options.append({'autocorr':autocorr})
         list_options.append({'autocorr':autocorr, 'weights_one':[1]})
         for position_type in ['rdd', 'pos', 'xyz'] + (['rd'] if mode == 'theta' else []):
@@ -113,6 +114,7 @@ def test_twopoint_counter(mode='s'):
                 list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'bin_type':'custom', 'dtype':dtype, 'isa':isa})
                 # pip
                 list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'dtype':dtype, 'isa':isa})
+                list_options.append({'autocorr':autocorr, 'compute_sepsavg':False, 'n_individual_weights':2, 'n_bitwise_weights':2, 'dtype':dtype, 'isa':isa})
                 list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'n_bitwise_weights':1, 'iip':1, 'dtype':dtype, 'isa':isa})
                 if not autocorr:
                     list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'n_bitwise_weights':1, 'iip':2, 'dtype':dtype, 'isa':isa})
@@ -133,8 +135,8 @@ def test_twopoint_counter(mode='s'):
                 # los
                 list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'x', 'dtype':dtype, 'isa':isa})
                 if mode in ['smu']:
-                    list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'firstpoint', 'dtype':dtype, 'isa':isa})
-                    list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'endpoint', 'dtype':dtype, 'isa':isa})
+                    list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'firstpoint', 'edges':edges, 'dtype':dtype, 'isa':isa})
+                    list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'endpoint', 'edges':edges, 'dtype':dtype, 'isa':isa})
                     if itemsize > 4:
                         list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'endpoint', 'twopoint_weights':twopoint_weights, 'dtype':dtype, 'isa':isa})
                 # mpi

@@ -52,7 +52,7 @@ def test_estimator(mode='s'):
 
     list_engine = ['corrfunc']
     edges = np.linspace(1, 100, 10)
-    size = 100
+    size = 500
     boxsize = (1000,)*3
     list_options = []
     list_options.append({'weights_one':['D1', 'R2']})
@@ -64,18 +64,20 @@ def test_estimator(mode='s'):
     list_options.append({'estimator':'weight'})
     list_options.append({'with_shifted':True})
     list_options.append({'with_shifted':True, 'autocorr':True})
+    if mode == 'smu':
+        list_options.append({'los':'firstpoint', 'autocorr':True})
+        list_options.append({'los':'endpoint', 'autocorr':True})
     list_options.append({'n_individual_weights':0})
     list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'compute_sepsavg':False})
+    list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1})
 
-    has_mpi = True
+    mpi = False
     try:
-        import mpi4py
-        import pmesh
-    except ImportError:
-        has_mpi = False
-    if has_mpi:
         from pycorr import mpi
         print('Has MPI')
+    except ImportError:
+        pass
+    if mpi:
         list_options.append({'mpicomm': mpi.COMM_WORLD})
 
     #list_options.append({'weight_type':'inverse_bitwise','n_bitwise_weights':2})
@@ -101,7 +103,7 @@ def test_estimator(mode='s'):
             with_randoms = options.pop('with_randoms', True)
             with_shifted = options.pop('with_shifted', False)
             options.setdefault('boxsize', None)
-            options['los'] = 'z' if options['boxsize'] is not None else 'midpoint'
+            los = options['los'] = options.get('los', 'x' if options['boxsize'] is not None else 'midpoint')
             options['position_type'] = 'xyz'
             npos = 3
             for label, catalog in zip(['D1','D2','R1','R2'], [data1, data2, randoms1, randoms2]):
@@ -165,7 +167,7 @@ def test_estimator(mode='s'):
             def assert_allclose_estimators(res1, res2):
                 mask = np.isfinite(res2.corr)
                 assert np.allclose(res1.corr[mask], res2.corr[mask])
-                #assert np.allclose(res1.sep[mask], res2.sep[mask])
+                assert np.allclose(res1.sep[mask], res2.sep[mask], equal_nan=True)
 
             estimator_nojackknife = run_nojackknife()
             estimator_jackknife = run_jackknife()
@@ -201,9 +203,10 @@ def test_estimator(mode='s'):
                 D1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:npos], positions2=randoms1[:npos] if autocorr else randoms2[:npos],
                                        weights1=data1[npos:-1], weights2=randoms1[npos:-1] if autocorr else randoms2[npos:-1], **options_counts)
                 assert_allclose(D1R2, estimator_jackknife.D1S2)
-                if not autocorr and estimator in ['landyszalay']:
-                    R1D2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:npos], positions2=data2[:npos],
-                                           weights1=randoms1[npos:-1], weights2=data2[npos:-1], **options_counts)
+                assert estimator_jackknife.with_reversed == ((not autocorr or los in ['firstpoint', 'endpoint']) and estimator in ['landyszalay'])
+                if estimator_jackknife.with_reversed:
+                    R1D2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:npos], positions2=data1[:npos] if autocorr else data2[:npos],
+                                           weights1=randoms1[npos:-1], weights2=data1[npos:-1] if autocorr else data2[npos:-1], **options_counts)
                     assert_allclose(R1D2, estimator_jackknife.S1D2)
                 else:
                     assert_allclose(D1R2, estimator_jackknife.D1S2)

@@ -500,12 +500,13 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
             self.wnorm = 0.
             self._set_zeros()
             return
-        for auto in self.auto.values(): break
+        for counts in self.cross12.values(): break
         for name in ['is_reversable', 'compute_sepsavg']:
-            setattr(self, name, getattr(auto, name))
-        self.edges = auto.edges.copy() # useful when rebinning
+            setattr(self, name, getattr(counts, name))
+        self.is_reversable = self.autocorr or self.is_reversable
+        self.edges = counts.edges.copy() # useful when rebinning
         for name in ['wcounts', 'wnorm', 'ncounts']:
-            if getattr(auto, name, None) is not None:
+            if getattr(counts, name, None) is not None:
                 setattr(self, name, sum(getattr(r, name) for r in self.auto.values()) + sum(getattr(r, name) for r in self.cross12.values()))
 
         self._set_default_seps() # reset self.seps to default
@@ -755,10 +756,12 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         return new
 
     def reversed(self):
-        new = self.copy()
-        for name in self._result_names:
-            setattr(new, name, {k: r.reversed() for k, r in getattr(self, name).items()})
-        new._set_sum()
+        new = super(JackknifeTwoPointCounter, self).reversed() # a deepcopy with swapped size1, size2
+        if not self.autocorr:
+            for name in self._result_names:
+                setattr(new, name, {k: r.reversed() for k, r in getattr(self, name).items()})
+            self.cross12, self.cross21 = self.cross21, self.cross12
+            new._set_sum()
         return new
 
     def __getstate__(self):

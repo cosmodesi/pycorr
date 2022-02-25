@@ -297,7 +297,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
 
     def reversed(self):
         """Return counts for reversed positions1/weights1 and positions2/weights2."""
-        new = super(CorrfuncTwoPointCounter, self).reversed()
+        new = super(CorrfuncTwoPointCounter, self).reversed() # a deepcopy with swapped size1, size2
         if new.mode == 'smu' and not self.autocorr:
             for name in ['wcounts', 'ncounts', 'sep']:
                 if hasattr(new, name):
