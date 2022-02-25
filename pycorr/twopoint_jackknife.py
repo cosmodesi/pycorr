@@ -501,9 +501,9 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
             self._set_zeros()
             return
         for counts in self.cross12.values(): break
-        for name in ['is_reversable', 'compute_sepsavg']:
+        for name in ['is_reversible', 'compute_sepsavg']:
             setattr(self, name, getattr(counts, name))
-        self.is_reversable = self.autocorr or self.is_reversable
+        self.is_reversible = self.autocorr or self.is_reversible
         self.edges = counts.edges.copy() # useful when rebinning
         for name in ['wcounts', 'wnorm', 'ncounts']:
             if getattr(counts, name, None) is not None:
@@ -583,7 +583,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
                 tmp = TwoPointCounter(self.mode, edges=self.edges, positions1=spositions1, weights1=sweights1, positions2=spositions2, weights2=sweights2, mpicomm=tm.mpicomm, mpiroot=mpiroot, **kwargs)
                 if is_root:
                     self.cross12[ii] = tmp
-                if self.autocorr and tmp.is_reversable:
+                if self.autocorr and tmp.is_reversible:
                     tmp = tmp.reversed()
                     if is_root:
                         self.cross21[ii] = tmp

@@ -397,8 +397,8 @@ def test_twopoint_counter(mode='s'):
 
             test = run()
             if engine == 'corrfunc':
-                assert test.is_reversable == autocorr or (los not in ['firstpoint', 'endpoint'])
-            if test.is_reversable:
+                assert test.is_reversible == autocorr or (los not in ['firstpoint', 'endpoint'])
+            if test.is_reversible:
                 test_reversed = run(reverse=True)
                 ref_reversed = test.reversed()
                 if itemsize <= 4:

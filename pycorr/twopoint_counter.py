@@ -426,7 +426,7 @@ class BaseTwoPointCounter(BaseClass):
 
     def _set_mode(self, mode):
         self.mode = mode.lower()
-        self.is_reversable = self.mode in ['theta', 's', 'rp', 'rppi']
+        self.is_reversible = self.mode in ['theta', 's', 'rp', 'rppi']
 
     def _set_zeros(self):
         self._set_default_seps()
@@ -853,8 +853,8 @@ class BaseTwoPointCounter(BaseClass):
 
     def reversed(self):
         """Return counts for reversed positions1/weights1 and positions2/weights2."""
-        if not self.is_reversable:
-            raise TwoPointCounterError('These counts are not reversable')
+        if not self.is_reversible:
+            raise TwoPointCounterError('These counts are not reversible')
         new = self.deepcopy()
         new.size1, new.size2 = new.size2, new.size1
         return new
@@ -865,11 +865,16 @@ class BaseTwoPointCounter(BaseClass):
 
     def __getstate__(self):
         state = {}
-        for name in ['name', 'autocorr', 'is_reversable', 'seps', 'ncounts', 'wcounts', 'wnorm', 'size1', 'size2', 'edges', 'mode', 'bin_type',
+        for name in ['name', 'autocorr', 'is_reversible', 'seps', 'ncounts', 'wcounts', 'wnorm', 'size1', 'size2', 'edges', 'mode', 'bin_type',
                      'boxsize', 'los_type', 'compute_sepsavg', 'weight_attrs', 'attrs']:
             if hasattr(self, name):
                 state[name] = getattr(self, name)
         return state
+
+    def __setstate__(self, state):
+        super(BaseTwoPointCounter, self).__setstate__(state=state)
+        if hasattr(self, 'is_reversable'):
+            self.is_reversible = self.is_reversable # for backward-compatibility; to be removed soon!
 
     def save(self, filename):
         """Save two-point counts to ``filename``."""

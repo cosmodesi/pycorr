@@ -302,8 +302,8 @@ def test_twopoint_counter(mode='s'):
             assert_allclose(test_ii, ref_ii)
 
             if engine == 'corrfunc':
-                assert test.is_reversable == autocorr or (los not in ['firstpoint', 'endpoint'])
-            if test.is_reversable:
+                assert test.is_reversible == autocorr or (los not in ['firstpoint', 'endpoint'])
+            if test.is_reversible:
                 test_reversed = run(reverse=True)
                 ref_reversed = test.reversed()
                 assert np.allclose(test_reversed.wcounts, ref_reversed.wcounts, **tol)

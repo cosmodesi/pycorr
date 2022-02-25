@@ -289,11 +289,11 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             self.sep[self.ncounts == 0] = np.nan
 
         if self.los_type == 'endpoint':
-            self.is_reversable = True
+            self.is_reversible = True
             for name in ['wcounts', 'ncounts']:
                 setattr(self, name, getattr(self, name)[:,::-1])
             self.sep = self.sep[:,::-1]
-        self.is_reversable = self.autocorr or (self.los_type not in ['firstpoint', 'endpoint']) # even smu is reversable for midpoint los, i.e. positions1 <-> positions2
+        self.is_reversible = self.autocorr or (self.los_type not in ['firstpoint', 'endpoint']) # even smu is reversible for midpoint los, i.e. positions1 <-> positions2
 
     def reversed(self):
         """Return counts for reversed positions1/weights1 and positions2/weights2."""

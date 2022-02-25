@@ -285,7 +285,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
             counts[label12] = pre
             continue
         label21 = label2.replace('2', '1') + label1.replace('1', '2')
-        if autocorr and label21 in counts and counts[label21].is_reversable:
+        if autocorr and label21 in counts and counts[label21].is_reversible:
             continue
         if label12 == 'R1R2' and not with_randoms:
                 if log: logger.info('Analytically computing two-point counts {}.'.format(label12))
