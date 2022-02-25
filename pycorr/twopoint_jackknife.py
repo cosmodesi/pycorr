@@ -451,7 +451,10 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
             Else the MPI rank where input positions and weights are gathered.
 
         nprocs_per_real : int, default=1
-            In case ``mpicomm`` is provided, the number of MPI processes to devote to the calculation of each jackknife two-point count.
+            In case ``mpicomm`` is provided, the number of MPI processes to devote to the calculation of two-point counts for each jackknife realization.
+            If ``nprocs_per_real`` is e.g. 1 (default), the parallelization is exclusively on the jackknife realizations.
+            If ``nprocs_per_real`` is e.g. 2, the parallelization is on the jackknife realizations (with ``mpicomm.size//n_procs_per_real`` realizations treated in parallel)
+            and the counts within each jackknife realization use 2 MPI processes.
 
         samples : list, array, default=None
             Whether to restrict jackknife counts to these subsamples. This may be useful to manually distribute the calculation.
