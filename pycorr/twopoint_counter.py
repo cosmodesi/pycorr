@@ -883,6 +883,71 @@ class BaseTwoPointCounter(BaseClass):
         if self.with_mpi:
             self.mpicomm.Barrier()
 
+    def save_txt(self, filename, fmt='%.12e', delimiter=' ', header=None, comments='# '):
+        """
+        Save two-point counts as txt file.
+
+        Warning
+        -------
+        Attributes are not all saved, hence there is :meth:`load_txt` method.
+
+        Parameters
+        ----------
+        filename : str
+            File name.
+
+        fmt : str, default='%.12e'
+            Format for floating types.
+
+        delimiter : str, default=' '
+            String or character separating columns.
+
+        header : str, list, default=None
+            String that will be written at the beginning of the file.
+            If multiple lines, provide a list of one-line strings.
+
+        comments : str, default=' #'
+            String that will be prepended to the header string.
+        """
+        if not self.with_mpi or self.mpicomm.rank == 0:
+            self.log_info('Saving {}.'.format(filename))
+            utils.mkdir(os.path.dirname(filename))
+            formatter = {'int_kind': lambda x: '%d' % x, 'float_kind': lambda x: fmt % x}
+            if header is None: header = []
+            elif isinstance(header, str): header = [header]
+            else: header = list(header)
+            attrs = {}
+            for name in ['mode', 'autocorr', 'size1', 'size2', 'wnorm', 'los_type', 'bin_type']:
+                value = attrs.get(name, getattr(self, name, None))
+                if value is None:
+                    value = 'None'
+                elif any(name.startswith(key) for key in ['mode', 'los_type', 'bin_type']):
+                    value = str(value)
+                else:
+                    value = np.array2string(np.array(value), formatter=formatter).replace('\n', '')
+                header.append('{} = {}'.format(name, value))
+            coords_names = {'smu': ('s', 'mu'), 'rppi': ('rp', 'pi')}.get(self.mode, (self.mode,))
+            assert len(coords_names) == self.ndim
+            labels = []
+            for name in coords_names:
+                labels += ['{}mid'.format(name), '{}avg'.format(name)]
+            labels += ['wcounts']
+            mids = np.meshgrid(*[(edges[:-1] + edges[1:])/2. for edges in self.edges], indexing='ij')
+            columns = []
+            for idim in range(self.ndim):
+                columns += [mids[idim].flat, self.seps[idim].flat]
+            columns += [self.wcounts.flat]
+            columns = [[np.array2string(value, formatter=formatter) for value in column] for column in columns]
+            widths = [max(max(map(len, column)) - len(comments) * (icol == 0), len(label)) for icol, (column, label) in enumerate(zip(columns, labels))]
+            widths[-1] = 0 # no need to leave a space
+            header.append((' '*len(delimiter)).join(['{:<{width}}'.format(label, width=width) for label, width in zip(labels, widths)]))
+            widths[0] += len(comments)
+            with open(filename, 'w') as file:
+                for line in header:
+                    file.write(comments + line + '\n')
+                for irow in range(len(columns[0])):
+                    file.write(delimiter.join(['{:<{width}}'.format(column[irow], width=width) for column, width in zip(columns, widths)]) + '\n')
+
 
 class AnalyticTwoPointCounter(BaseTwoPointCounter):
     """

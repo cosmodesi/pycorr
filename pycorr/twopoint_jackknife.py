@@ -788,12 +788,12 @@ class JackknifeTwoPointEstimator(BaseTwoPointEstimator):
     @property
     def realizations(self):
         """List of jackknife realizations."""
-        return self.D1D2.realizations
+        return self.XX.realizations
 
     @property
     def nrealizations(self):
         """Number of jackknife realizations."""
-        return self.D1D2.nrealizations
+        return self.XX.nrealizations
 
     def realization(self, ii, **kwargs):
         """
@@ -814,7 +814,7 @@ class JackknifeTwoPointEstimator(BaseTwoPointEstimator):
         """
         cls = self.__class__.__bases__[0]
         kw = {}
-        for name in self._count_names:
+        for name in self.count_names:
             counts = getattr(self, name)
             try:
                 kw[name] = counts.realization(ii, **kwargs)
@@ -836,7 +836,7 @@ class JackknifeTwoPointEstimator(BaseTwoPointEstimator):
             raise TwoPointEstimatorError('Provide at least one {} instance.'.format(cls.__name__))
         kw = {}
         new = others[0]
-        for name in new._count_names:
+        for name in new.count_names:
             cls_counts = getattr(new, name).__class__
             try:
                 tmp = cls_counts.concatenate(*[getattr(other, name) for other in others])

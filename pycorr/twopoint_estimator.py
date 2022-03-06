@@ -1,10 +1,17 @@
 """Implements correlation function estimators, natural and Landy-Szalay."""
 
+import os
+
 import numpy as np
+from scipy.interpolate import UnivariateSpline
 from scipy import special
 
 from .twopoint_counter import BaseTwoPointCounter, TwoPointCounter
 from .utils import BaseClass
+from . import utils
+
+
+_default_ells = (0, 2, 4)
 
 
 class TwoPointEstimatorError(Exception):
@@ -99,6 +106,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         Correlation function estimation.
     """
     name = 'base'
+    _require_randoms = False
 
     def __init__(self, D1D2=None, R1R2=None, D1R2=None, R1D2=None, S1S2=None, D1S2=None, S1D2=None):
         """
@@ -133,7 +141,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         """
         self.with_shifted = S1S2 is not None or D1S2 is not None or S1D2 is not None
         self.with_reversed = R1D2 is not None or S1D2 is not None
-        for name in self._count_names:
+        for name in self.count_names:
             counts = locals()[name]
             if locals()[name] is None:
                 raise TwoPointEstimatorError('Counts {} must be provided'.format(name))
@@ -154,30 +162,30 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         """Array of separation values of first dimension, taken from :attr:`R1R2` if provided, else :attr:`D1D2`."""
         if getattr(self, 'R1R2', None) is not None:
             return self.R1R2.sep
-        return self.D1D2.sep
+        return self.XX.sep
 
     @property
     def seps(self):
         """Array of separation values, taken from :attr:`R1R2` if provided, else :attr:`D1D2`."""
         if getattr(self, 'R1R2', None) is not None:
             return self.R1R2.seps
-        return self.D1D2.seps
+        return self.XX.seps
 
     def sepavg(self, *args, **kwargs):
         """Return average of separation for input axis; this is an 1D array of size :attr:`shape[axis]`."""
         if getattr(self, 'R1R2', None) is not None:
             return self.R1R2.sepavg(*args, **kwargs)
-        return self.D1D2.sepavg(*args, **kwargs)
+        return self.XX.sepavg(*args, **kwargs)
 
     @property
     def edges(self):
         """Edges for two-point count calculation, taken from :attr:`D1D2`."""
-        return self.D1D2.edges
+        return self.XX.edges
 
     @property
     def mode(self):
         """Two-point counting mode, taken from :attr:`D1D2`."""
-        return self.D1D2.mode
+        return self.XX.mode
 
     @property
     def shape(self):
@@ -214,9 +222,14 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         return toret
 
     @property
-    def _count_names(self):
+    def count_names(self):
         """Return list of counts used in estimator."""
         return self.requires(with_reversed=self.with_reversed, with_shifted=self.with_shifted, join='')
+
+    @property
+    def XX(self):
+        """Return first two-point counts."""
+        return getattr(self, self.count_names[0])
 
     def __getitem__(self, slices):
         """Call :meth:`slice`."""
@@ -243,19 +256,19 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
 
     def slice(self, *args, **kwargs):
         """Slice estimator, by rebinning all two-point counts. See :meth:`BaseTwoPointCounter.slice`."""
-        for name in self._count_names:
+        for name in self.count_names:
             getattr(self, name).slice(*args, **kwargs)
         self.run()
 
     def rebin(self, *args, **kwargs):
         """Rebin estimator, by rebinning all two-point counts. See :meth:`BaseTwoPointCounter.rebin`."""
-        for name in self._count_names:
+        for name in self.count_names:
             getattr(self, name).rebin(*args, **kwargs)
         self.run()
 
     def __copy__(self):
         new = super(BaseTwoPointEstimator, self).__copy__()
-        for name in self._count_names:
+        for name in self.count_names:
             setattr(new, name, getattr(self, name).__copy__())
         return new
 
@@ -264,7 +277,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         for name in ['name']:
             if hasattr(self, name):
                 state[name] = getattr(self, name)
-        for name in self._count_names:
+        for name in self.count_names:
             state[name] = getattr(self, name).__getstate__()
         return state
 
@@ -278,10 +291,206 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
 
     def save(self, filename):
         """Save estimator to ``filename``."""
-        if not self.D1D2.with_mpi or self.D1D2.mpicomm.rank == 0:
+        if not self.XX.with_mpi or self.XX.mpicomm.rank == 0:
             super(BaseTwoPointEstimator, self).save(filename)
-        if self.D1D2.with_mpi:
-            self.D1D2.mpicomm.Barrier()
+        if self.XX.with_mpi:
+            self.XX.mpicomm.Barrier()
+
+    def get_corr(self, return_cov=None, **kwargs):
+        """
+        Return (1D) correlation function, optionally its jackknife covariance estimate, if available.
+
+        Parameters
+        ----------
+        return_cov : bool, default=None
+            If ``True`` or ``None`` and estimator holds jackknife realizations,
+            return jackknife covariance estimate.
+            If ``True`` and estimator does not hold jackknife realizations,
+            raise :class:`TwoPointEstimatorError`.
+
+        kwargs : dict
+            Optionally, arguments for :func:`project_to_multipoles` (if :attr:`mode` is 'smu'), e.g. ``ells``
+            and `project_to_wp` (if :attr:`mode` is 'rpppi'), e.g. ``pimax``.
+
+        Returns
+        -------
+        sep : array
+            Array of separation values.
+
+        corr : array
+            Estimated correlation function.
+
+        cov : array
+            Optionally, jackknife covariance estimate, see ``return_cov``.
+        """
+        if self.mode == 'smu':
+            return project_to_multipoles(self, return_cov=return_cov, **kwargs)
+        if self.mode == 'rppi':
+            return project_to_wp(self, return_cov=return_cov, **kwargs)
+        if return_cov is False:
+            return self.sep, self.corr
+        try:
+            realizations = [self.realization(ii, **kwargs).corr for ii in self.realizations]
+        except AttributeError as exc:
+            if return_cov is True:
+                raise TwoPointEstimatorError('Input estimator has no jackknife realizations') from exc
+            return self.sep, self.corr
+        cov = (len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0)
+        return self.sep, self.corr, cov
+
+    def __call__(self, sep=None, return_std=None, **kwargs):
+        """
+        Return (1D) correlation function, optionally performing linear interpolation over :math:`sep`.
+
+        Parameters
+        ----------
+        sep : float, array, default=None
+            Separations where to interpolate the correlation function.
+            Values outside :attr:`sepavg` are set to the first/last correlation function value;
+            outside :attr:`edges[0]` to nan.
+            Defaults to :attr:`sepavg` (no interpolation performed).
+
+        return_std : bool, default=None
+            If ``True`` or ``None`` and estimator holds jackknife realizations,
+            return jackknife standard deviation estimate.
+            If ``True`` and estimator does not hold jackknife realizations,
+            raise :class:`TwoPointEstimatorError`.
+
+        kwargs : dict
+            Optionally, arguments for :func:`project_to_multipoles` (if :attr:`mode` is 'smu'), e.g. ``ells``
+            and `project_to_wp` (if :attr:`mode` is 'rpppi'), e.g. ``pimax``.
+
+        Returns
+        -------
+        sep : array
+            If input ``sep`` is ``None``, array of separation values.
+
+        corr : array
+            (Optionally interpolated) correlation function.
+
+        std : array
+            Optionally, (optionally interpolated) jackknife standard deviation estimate, see ``return_std``.
+        """
+        tmp = self.get_corr(return_cov=return_std, **kwargs)
+        if len(tmp) < 3: tmp = tmp + (None,)
+        sepavg, corr, std = tmp
+        isscalar = corr.ndim == 1
+        if std is not None:
+            std = np.diag(std)**0.5
+            if not isscalar:
+                std = np.array(np.array_split(std, len(corr)))
+        if sep is None:
+            if std is None:
+                return sepavg, corr
+            return sepavg, corr, std
+        if isscalar:
+            corr = corr[None, :]
+            if std is not None: std = std[None, :]
+        mask_finite_sep = ~np.isnan(sepavg) & ~np.isnan(corr).any(axis=0)
+        sepavg, corr = sepavg[mask_finite_sep], corr[:, mask_finite_sep]
+        sep = np.asarray(sep)
+        toret_corr = np.nan * np.zeros((len(corr),) + sep.shape, dtype=sep.dtype)
+        if std is not None: toret_std = toret_corr.copy()
+        mask_sep = (sep >= self.edges[0][0]) & (sep <= self.edges[0][-1])
+        sep = sep[mask_sep]
+        if mask_sep.any():
+            interp = lambda array: np.array([UnivariateSpline(sepavg, arr, k=1, s=0, ext='const')(sep) for arr in array], dtype=array.dtype)
+            toret_corr[..., mask_sep] = interp(corr)
+            if std is not None: toret_std[..., mask_sep] = interp(std)
+        if isscalar:
+            toret_corr = toret_corr[0]
+            if std is not None: toret_std = toret_std[0]
+        if std is None:
+            return toret_corr
+        return toret_corr, toret_std
+
+    def save_txt(self, filename, fmt='%.12e', delimiter=' ', header=None, comments='# ', return_std=None, **kwargs):
+        """
+        Save correlation function as txt file.
+
+        Warning
+        -------
+        Attributes are not all saved, hence there is :meth:`load_txt` method.
+
+        Parameters
+        ----------
+        filename : str
+            File name.
+
+        fmt : str, default='%.12e'
+            Format for floating types.
+
+        delimiter : str, default=' '
+            String or character separating columns.
+
+        header : str, list, default=None
+            String that will be written at the beginning of the file.
+            If multiple lines, provide a list of one-line strings.
+
+        comments : str, default=' #'
+            String that will be prepended to the header string.
+
+        return_std : bool, default=None
+            If ``True`` or ``None`` and estimator holds jackknife realizations,
+            save jackknife standard deviation estimate.
+            If ``True`` and estimator does not hold jackknife realizations,
+            raise :class:`TwoPointEstimatorError`.
+
+        kwargs : dict
+            Arguments for :meth:`get_corr`.
+        """
+        if not self.XX.with_mpi or self.XX.mpicomm.rank == 0:
+            self.log_info('Saving {}.'.format(filename))
+            utils.mkdir(os.path.dirname(filename))
+            formatter = {'int_kind': lambda x: '%d' % x, 'float_kind': lambda x: fmt % x}
+            if header is None: header = []
+            elif isinstance(header, str): header = [header]
+            else: header = list(header)
+            attrs = {}
+            for count in self.count_names:
+                for name in ['size1', 'size2', 'wnorm']:
+                    attrs['.'.join([count, name])] = getattr(getattr(self, count), name, None)
+            for name in ['mode', 'autocorr'] + list(attrs.keys()) + ['los_type', 'bin_type']:
+                value = attrs.get(name, getattr(self.XX, name, None))
+                if value is None:
+                    value = 'None'
+                elif any(name.startswith(key) for key in ['mode', 'los_type', 'bin_type']):
+                    value = str(value)
+                else:
+                    value = np.array2string(np.array(value), formatter=formatter).replace('\n', '')
+                header.append('{} = {}'.format(name, value))
+            name = {'smu': 's', 'rppi': 'rp'}.get(self.mode, self.mode)
+            labels = ['{}mid'.format(name), '{}avg'.format(name)]
+            tmp = self(sep=None, return_std=return_std, **kwargs)
+            if len(tmp) < 3: tmp = tmp + (None,)
+            sepavg, corr, std = tmp
+            ells = kwargs.get('ells', _default_ells)
+            isscalar = corr.ndim == 1
+            if self.mode == 'smu':
+                if isscalar: ells = [ells]
+                labels += ['corr{:d}({})'.format(ell, name) for ell in ells]
+                if std is not None:
+                    labels += ['std{:d}({})'.format(ell, name) for ell in ells]
+            else:
+                labels += ['corr({})'.format(name)]
+                if std is not None:
+                    labels += ['std({})'.format(name)]
+            columns = [(self.edges[0][:-1] + self.edges[0][1:])/2., sepavg]
+            for column in corr.reshape((-1,)*isscalar + corr.shape):
+                columns += [column.flat]
+            if std is not None:
+                for column in std.reshape((-1,)*isscalar + std.shape):
+                    columns += [column.flat]
+            columns = [[np.array2string(value, formatter=formatter) for value in column] for column in columns]
+            widths = [max(max(map(len, column)) - len(comments) * (icol == 0), len(label)) for icol, (column, label) in enumerate(zip(columns, labels))]
+            widths[-1] = 0 # no need to leave a space
+            header.append((' '*len(delimiter)).join(['{:<{width}}'.format(label, width=width) for label, width in zip(labels, widths)]))
+            widths[0] += len(comments)
+            with open(filename, 'w') as file:
+                for line in header:
+                    file.write(comments + line + '\n')
+                for irow in range(len(columns[0])):
+                    file.write(delimiter.join(['{:<{width}}'.format(column[irow], width=width) for column, width in zip(columns, widths)]) + '\n')
 
 
 class NaturalTwoPointEstimator(BaseTwoPointEstimator):
@@ -356,6 +565,7 @@ class DavisPeeblesTwoPointEstimator(BaseTwoPointEstimator):
 class LandySzalayTwoPointEstimator(BaseTwoPointEstimator):
 
     name = 'landyszalay'
+    _require_randoms = True
 
     def run(self):
         """
@@ -383,6 +593,7 @@ class LandySzalayTwoPointEstimator(BaseTwoPointEstimator):
 class WeightTwoPointEstimator(NaturalTwoPointEstimator):
 
     name = 'weight'
+    _require_randoms = True
 
     def run(self):
         """
@@ -414,7 +625,39 @@ class WeightTwoPointEstimator(NaturalTwoPointEstimator):
         return self.corr
 
 
-def project_to_multipoles(estimator, ells=(0,2,4), **kwargs):
+class ResidualTwoPointEstimator(BaseTwoPointEstimator):
+
+    name = 'residual'
+    _require_randoms = True
+
+    def run(self):
+        """
+        Set correlation function estimate :attr:`corr` based on the residual estimator
+        :math:`(D1S2 - S1S2)/R1R2`.
+        """
+        nonzero = self.R1R2.wcounts != 0
+        # init
+        corr = np.empty_like(self.R1R2.wcounts, dtype='f8')
+        corr[...] = np.nan
+
+        DS = self.D1S2.normalized_wcounts()[nonzero]
+        SS = self.S1S2.normalized_wcounts()[nonzero]
+        RR = self.R1R2.normalized_wcounts()[nonzero]
+        tmp = (DS - SS)/RR
+        corr[nonzero] = tmp[...]
+        self.corr = corr
+
+    @classmethod
+    def _tuple_requires(cls, with_reversed=False, with_shifted=False, join=None):
+        toret = []
+        toret.append(('D1','D2'))
+        key = 'S' if with_shifted else 'R'
+        toret.append(('D1'.format(key),'{}2'.format(key)))
+        toret.append(('R1','R2'))
+        return toret
+
+
+def project_to_multipoles(estimator, ells=_default_ells, return_cov=None, **kwargs):
     r"""
     Project :math:`(s, \mu)` correlation function estimation onto Legendre polynomials.
 
@@ -427,8 +670,14 @@ def project_to_multipoles(estimator, ells=(0,2,4), **kwargs):
     ells : tuple, int, default=(0,2,4)
         Order of Legendre polynomial.
 
+    return_cov : bool, default=None
+        If ``True`` or ``None`` and input ``estimator`` holds jackknife realizations,
+        return jackknife covariance estimate (for all successive ``ells``).
+        If ``True`` and input ``estimator`` does not hold jackknife realizations,
+        raise :class:`TwoPointEstimatorError`.
+
     kwargs : dict
-        Optional arguments for :math:`JackknifeTwoPointEstimator.realization`, when relevant.
+        Optional arguments for :meth:`JackknifeTwoPointEstimator.realization`, when relevant.
 
     Returns
     -------
@@ -439,11 +688,12 @@ def project_to_multipoles(estimator, ells=(0,2,4), **kwargs):
         List of correlation function multipoles.
 
     cov : array
-        If input ``estimator`` holds jackknife realizations, jackknife covariance estimate (for all successive ``ells``).
+        Optionally, jackknife covariance estimate (for all successive ``ells``), see ``return_cov``.
     """
-    if np.ndim(ells) == 0:
+    isscalar = np.ndim(ells) == 0
+    if isscalar:
         ells = (ells,)
-    ells = tuple(ells)
+    ells = list(ells)
     muedges = estimator.edges[1]
     sep = estimator.sepavg(axis=0)
     poles = []
@@ -452,15 +702,22 @@ def project_to_multipoles(estimator, ells=(0,2,4), **kwargs):
         poly = special.legendre(ell).integ()(muedges)
         legendre = (2*ell + 1) * (poly[1:] - poly[:-1])
         poles.append(np.sum(estimator.corr*legendre, axis=-1)/(muedges[-1] - muedges[0]))
+    if isscalar:
+        poles = poles[0]
+    poles = np.array(poles)
+    if return_cov is False:
+        return sep, poles
     try:
         realizations = [np.concatenate(project_to_multipoles(estimator.realization(ii, **kwargs), ells=ells)[1]).T for ii in estimator.realizations]
-    except AttributeError:
+    except AttributeError as exc:
+        if return_cov is True:
+            raise TwoPointEstimatorError('Input estimator has no jackknife realizations') from exc
         return sep, poles
     cov = (len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0)
     return sep, poles, cov
 
 
-def project_to_wp(estimator, pimax=None, **kwargs):
+def project_to_wp(estimator, pimax=None, return_cov=None, **kwargs):
     r"""
     Integrate :math:`(r_{p}, \pi)` correlation function over :math:`\pi` to obtain :math:`w_{p}(r_{p})`.
 
@@ -473,8 +730,14 @@ def project_to_wp(estimator, pimax=None, **kwargs):
     pimax : float, default=None
         Upper bound for summation of :math:`\pi`.
 
+    return_cov : bool, default=None
+        If ``True`` or ``None`` and input ``estimator`` holds jackknife realizations,
+        return jackknife covariance estimate.
+        If ``True`` and input ``estimator`` does not hold jackknife realizations,
+        raise :class:`TwoPointEstimatorError`.
+
     kwargs : dict
-        Optional arguments for :math:`JackknifeTwoPointEstimator.realization`, when relevant.
+        Optional arguments for :meth:`JackknifeTwoPointEstimator.realization`, when relevant.
 
     Returns
     -------
@@ -485,7 +748,7 @@ def project_to_wp(estimator, pimax=None, **kwargs):
         Estimated :math:`w_{p}(r_{p})`.
 
     cov : array
-        If input ``estimator`` holds jackknife realizations, jackknife covariance estimate.
+        Optionally, jackknife covariance estimate, see ``return_cov``.
     """
     mask = Ellipsis
     if pimax is not None:
@@ -493,9 +756,13 @@ def project_to_wp(estimator, pimax=None, **kwargs):
         estimator.select(None, (0, pimax))
     sep = estimator.sepavg(axis=0)
     wp = 2.*np.sum(estimator.corr*np.diff(estimator.edges[1]), axis=-1)
+    if return_cov is False:
+        return sep, wp
     try:
         realizations = [project_to_wp(estimator.realization(ii, **kwargs))[1] for ii in estimator.realizations] # no need to provide pimax, as selection already performed
-    except AttributeError:
+    except AttributeError as exc:
+        if return_cov is True:
+            raise TwoPointEstimatorError('Input estimator has no jackknife realizations') from exc
         return sep, wp
     cov = (len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0)
     return sep, wp, cov

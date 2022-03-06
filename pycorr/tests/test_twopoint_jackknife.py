@@ -313,8 +313,12 @@ def test_twopoint_counter(mode='s'):
                     assert np.allclose(test_reversed.realization(ii).sep, ref_reversed.realization(ii).sep, **tol, equal_nan=True)
 
             with tempfile.TemporaryDirectory() as tmp_dir:
+                #tmp_dir = '_tests'
                 fn = os.path.join(tmp_dir, 'tmp.npy')
+                fn_txt = os.path.join(tmp_dir, 'tmp.txt')
                 test.save(fn)
+                test.save_txt(fn_txt)
+                ref.save_txt(fn_txt)
                 test2 = JackknifeTwoPointCounter.load(fn)
                 assert_allclose(test2, ref)
                 test3 = test2.copy()

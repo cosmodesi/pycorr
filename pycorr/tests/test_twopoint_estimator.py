@@ -52,8 +52,8 @@ def test_estimator(mode='s'):
 
     list_engine = ['corrfunc']
     edges = np.linspace(1, 100, 10)
-    size = 500
-    boxsize = (1000,)*3
+    size = 1000
+    boxsize = (500,)*3
     list_options = []
     list_options.append({'weights_one':['D1', 'R2']})
     list_options.append({'estimator':'natural'})
@@ -223,6 +223,7 @@ def test_estimator(mode='s'):
                 sep, xiell = project_to_multipoles(estimator_nojackknife, ells=(0,2,4))
                 sep, xiell, cov = project_to_multipoles(estimator_jackknife, ells=(0,2,4))
                 assert cov.shape == (sum([len(xi) for xi in xiell]),)*2
+
             if estimator_jackknife.D1D2.mode == 'rppi':
 
                 def get_sepavg(estimator, sepmax):
@@ -248,9 +249,16 @@ def test_estimator(mode='s'):
                 assert cov.shape == (len(sep),)*2 == (len(wp),)*2
 
             with tempfile.TemporaryDirectory() as tmp_dir:
-                fn = os.path.join(tmp_dir,'tmp.npy')
+                #tmp_dir = '_tests'
+                fn = os.path.join(tmp_dir, 'tmp.npy')
+                fn_txt = os.path.join(tmp_dir, 'tmp.txt')
                 for test in [estimator_nojackknife, estimator_jackknife]:
+                    tmp = test(sep=test.sepavg(), return_std=False)
+                    if mode not in ['smu', 'rppi']:
+                        assert np.allclose(tmp, test.corr, equal_nan=True)
+                    assert np.isnan(test(sep=-1., return_std=False)).all()
                     test.save(fn)
+                    test.save_txt(fn_txt)
                     test2 = TwoPointEstimator.load(fn)
                     assert type(TwoPointCorrelationFunction.from_state(test2.__getstate__())) is type(test2)
                     test2 = TwoPointCorrelationFunction.load(fn)

@@ -266,6 +266,8 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     with_jackknife = not is_none(data_samples1)
     Estimator = get_twopoint_estimator(estimator, with_DR=with_randoms, with_jackknife=with_jackknife)
     if log: logger.info('Using estimator {}.'.format(Estimator))
+    if Estimator._require_randoms and not with_randoms:
+        raise ValueError('Estimator {} requires randoms, which are not provided'.format(Estimator))
     if with_jackknife: Counter = JackknifeTwoPointCounter
     else: Counter = TwoPointCounter
 

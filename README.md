@@ -38,7 +38,7 @@ Strict requirements are:
 
 To use Corrfunc as two-point-counting engine (only engine linked so far):
 
-  - git+https://github.com/adematti/Corrfunc@pipweights
+  - git+https://github.com/adematti/Corrfunc@desi
 
 To run with MPI:
 

@@ -68,7 +68,7 @@ git_root = 'https://github.com/cosmodesi/pycorr/blob/main/'
 extlinks = {'root': (git_root + '%s','')}
 
 intersphinx_mapping = {
-    'numpy': ('https://docs.scipy.org/doc/numpy/', None)
+    'numpy': ('https://numpy.org/doc/stable/', None)
 }
 
 # thanks to: https://github.com/sphinx-doc/sphinx/issues/4054#issuecomment-329097229
