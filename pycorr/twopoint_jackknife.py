@@ -752,6 +752,31 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         new = self.concatenate(self, other, **kwargs)
         self.__dict__.update(new.__dict__)
 
+    @classmethod
+    def concatenate_x(cls, *others):
+        """
+        Concatenate input two-point counts along :attr:`sep`;
+        see :meth:`BaseTwoPointCounter.concatenate_x`.
+        """
+        new = others[0].copy()
+        for name in cls._result_names:
+            tmp = getattr(new, name)
+            for k in tmp:
+                tmp[k] = tmp[k].concatenate_x(*[getattr(other, name)[k] for other in others])
+        new._set_sum()
+        return new
+
+    @classmethod
+    def sum(cls, *others):
+        """Sum input two-point counts, see :meth:`BaseTwoPointCounter.sum`."""
+        new = others[0].copy()
+        for name in cls._result_names:
+            tmp = getattr(new, name)
+            for k in tmp:
+                tmp[k] = tmp[k].sum(*[getattr(other, name)[k] for other in others])
+        new._set_sum()
+        return new
+
     def __copy__(self):
         new = super(JackknifeTwoPointCounter, self).__copy__()
         for name in self._result_names:

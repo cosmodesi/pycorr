@@ -10,7 +10,7 @@ from .utils import BaseClass
 
 
 def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=None, randoms_positions1=None, randoms_positions2=None, shifted_positions1=None, shifted_positions2=None,
-                                data_weights1=None, data_weights2=None, randoms_weights1=None, randoms_weights2=None, shifted_weights1=None, shifted_weights2=None, R1R2=None,
+                                data_weights1=None, data_weights2=None, randoms_weights1=None, randoms_weights2=None, shifted_weights1=None, shifted_weights2=None,
                                 data_samples1=None, data_samples2=None, randoms_samples1=None, randoms_samples2=None, shifted_samples1=None, shifted_samples2=None,
                                 D1D2_weight_type='auto', D1R2_weight_type='auto', R1D2_weight_type='auto', R1R2_weight_type='auto', S1S2_weight_type='auto', D1S2_weight_type='auto', S1D2_weight_type='auto',
                                 D1D2_twopoint_weights=None, D1R2_twopoint_weights=None, R1D2_twopoint_weights=None, R1R2_twopoint_weights=None, S1S2_twopoint_weights=None, D1S2_twopoint_weights=None, S1D2_twopoint_weights=None,
@@ -105,9 +105,6 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     shifted_samples2 : array, default=None
         Same as ``data_samples1``, for the second shifted catalog.
 
-    R1R2 : BaseTwoPointCounter, default=None
-        Precomputed R1R2 counts; e.g. useful when running on many mocks with same random catalogs.
-
     D1D2_weight_type : string, default='auto'
         The type of weighting to apply to provided weights. One of:
 
@@ -175,8 +172,8 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         See ``D1D2_twopoint_weights``.
 
     estimator : string, default='auto'
-        Estimator name, one of ["auto", "natural", "landyszalay", "davispeebles", "weight"].
-        If "auto", "landyszalay" will be chosen if random catalog(s) is/are provided.
+        Estimator name, one of ["auto", "natural", "landyszalay", "davispeebles", "weight", "residual"].
+        If "auto", "landyszalay" will be chosen if random catalog(s) is/are provided, else "natural".
 
     bin_type : string, default='auto'
         Binning type for first dimension, e.g. :math:`r_{p}` when ``mode`` is "rppi".
@@ -243,6 +240,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
 
     kwargs : dict
         Counter engine-specific options.
+        One can also provide precomputed two-point counts, e.g. R1R2.
 
     Returns
     -------
@@ -276,7 +274,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     samples = {'D1':data_samples1, 'D2':data_samples2, 'R1':randoms_samples1, 'R2':randoms_samples2, 'S1':shifted_samples1, 'S2':shifted_samples2}
     twopoint_weights = {'D1D2':D1D2_twopoint_weights, 'D1R2':D1R2_twopoint_weights, 'R1D2':R1D2_twopoint_weights, 'R1R2':R1R2_twopoint_weights, 'S1S2':S1S2_twopoint_weights, 'D1S2':D1S2_twopoint_weights, 'S1D2':S1D2_twopoint_weights}
     weight_type = {'D1D2':D1D2_weight_type, 'D1R2':D1R2_weight_type, 'R1D2':R1D2_weight_type, 'R1R2':R1R2_weight_type, 'S1S2':S1S2_weight_type, 'D1S2':D1S2_weight_type, 'S1D2':S1D2_weight_type}
-    precomputed = {'R1R2':R1R2}
+    precomputed = kwargs
 
     counts = {}
     for label1, label2 in Estimator.requires(with_reversed=True, with_shifted=with_shifted):

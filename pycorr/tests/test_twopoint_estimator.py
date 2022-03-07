@@ -56,20 +56,20 @@ def test_estimator(mode='s'):
     boxsize = (500,)*3
     list_options = []
     list_options.append({'weights_one':['D1', 'R2']})
-    list_options.append({'estimator':'natural'})
     if mode not in ['theta', 'rp']:
         list_options.append({'estimator':'natural', 'boxsize':boxsize, 'with_randoms':False})
         list_options.append({'autocorr':True, 'estimator':'natural', 'boxsize':boxsize, 'with_randoms':False})
-    list_options.append({'estimator':'davispeebles'})
-    list_options.append({'estimator':'weight'})
-    list_options.append({'with_shifted':True})
-    list_options.append({'with_shifted':True, 'autocorr':True})
-    if mode == 'smu':
-        list_options.append({'los':'firstpoint', 'autocorr':True})
-        list_options.append({'los':'endpoint', 'autocorr':True})
-    list_options.append({'n_individual_weights':0})
-    list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1, 'compute_sepsavg':False})
-    list_options.append({'n_individual_weights':1, 'n_bitwise_weights':1})
+    for estimator in ['natural', 'landyszalay', 'davispeebles', 'weight', 'residual']:
+        list_options.append({'estimator':estimator})
+        if estimator not in ['weight']:
+            list_options.append({'estimator':estimator, 'with_shifted':True})
+            list_options.append({'estimator':estimator, 'with_shifted':True, 'autocorr':True})
+        if mode == 'smu':
+            list_options.append({'estimator':estimator, 'los':'firstpoint', 'autocorr':True})
+            list_options.append({'estimator':estimator, 'los':'endpoint', 'autocorr':True})
+        list_options.append({'estimator':estimator, 'n_individual_weights':0})
+        list_options.append({'estimator':estimator, 'n_individual_weights':1, 'n_bitwise_weights':1, 'compute_sepsavg':False})
+        list_options.append({'estimator':estimator, 'n_individual_weights':1, 'n_bitwise_weights':1})
 
     mpi = False
     try:
@@ -187,19 +187,20 @@ def test_estimator(mode='s'):
             options_counts = options.copy()
             estimator = options_counts.pop('estimator', 'landyszalay')
 
-            D1D2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:npos], positions2=None if autocorr else data2[:npos],
-                                   weights1=data1[npos:-1], weights2=None if autocorr else data2[npos:-1], **options_counts)
+            if estimator in ['landyszalay', 'davispeebles', 'natural', 'weight']:
+                D1D2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:npos], positions2=None if autocorr else data2[:npos],
+                                       weights1=data1[npos:-1], weights2=None if autocorr else data2[npos:-1], **options_counts)
 
-            assert_allclose(D1D2, estimator_jackknife.D1D2)
+                assert_allclose(D1D2, estimator_jackknife.D1D2)
             if with_shifted:
-                if estimator in ['landyszalay', 'natural']:
+                if estimator in ['landyszalay', 'natural', 'residual']:
                     R1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:npos], positions2=None if autocorr else randoms2[:npos],
                                            weights1=randoms1[npos:-1], weights2=None if autocorr else randoms2[npos:-1], **options_counts)
                     assert_allclose(R1R2, estimator_jackknife.R1R2)
                 # for following computation
                 randoms1 = shifted1
                 randoms2 = shifted2
-            if estimator in ['landyszalay', 'davispeebles']:
+            if estimator in ['landyszalay', 'davispeebles', 'residual']:
                 D1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:npos], positions2=randoms1[:npos] if autocorr else randoms2[:npos],
                                        weights1=data1[npos:-1], weights2=randoms1[npos:-1] if autocorr else randoms2[npos:-1], **options_counts)
                 assert_allclose(D1R2, estimator_jackknife.D1S2)
@@ -210,7 +211,7 @@ def test_estimator(mode='s'):
                     assert_allclose(R1D2, estimator_jackknife.S1D2)
                 else:
                     assert_allclose(D1R2, estimator_jackknife.D1S2)
-            if estimator in ['landyszalay', 'natural', 'weight'] and with_randoms:
+            if estimator in ['landyszalay', 'natural', 'weight', 'residual'] and with_randoms:
                 R1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:npos], positions2=None if autocorr else randoms2[:npos],
                                        weights1=randoms1[npos:-1], weights2=None if autocorr else randoms2[npos:-1], **options_counts)
                 assert_allclose(R1R2, estimator_jackknife.S1S2)
@@ -219,16 +220,16 @@ def test_estimator(mode='s'):
                                        size1=estimator_jackknife.D1D2.size1, size2=None if estimator_jackknife.D1D2.autocorr else estimator_jackknife.D1D2.size2, los=options_counts['los'])
                 assert_allclose(R1R2, estimator_jackknife.R1R2)
 
-            if estimator_jackknife.D1D2.mode == 'smu':
+            if estimator_jackknife.mode == 'smu':
                 sep, xiell = project_to_multipoles(estimator_nojackknife, ells=(0,2,4))
                 sep, xiell, cov = project_to_multipoles(estimator_jackknife, ells=(0,2,4))
                 assert cov.shape == (sum([len(xi) for xi in xiell]),)*2
 
-            if estimator_jackknife.D1D2.mode == 'rppi':
+            if estimator_jackknife.mode == 'rppi':
 
                 def get_sepavg(estimator, sepmax):
                     mid = [(edges[:-1] + edges[1:])/2. for edges in estimator.edges]
-                    if not estimator.D1D2.compute_sepavg:
+                    if not estimator.XX.compute_sepavg:
                         return mid[0]
                     mask = mid[1] <= sepmax
                     sep = estimator.seps[0]
@@ -236,7 +237,7 @@ def test_estimator(mode='s'):
                     if getattr(estimator, 'R1R2', None) is not None:
                         wcounts = estimator.R1R2.wcounts
                     else:
-                        wcounts = estimator.D1D2.wcounts
+                        wcounts = estimator.XX.wcounts
                     with np.errstate(divide='ignore', invalid='ignore'):
                         return np.sum(sep[:,mask]*wcounts[:,mask], axis=-1)/np.sum(wcounts[:,mask], axis=-1)
 
@@ -272,6 +273,10 @@ def test_estimator(mode='s'):
                     assert_allclose_estimators(test2, test3)
                     test3.select((0, 50.))
                     assert np.all((test3.sepavg(axis=0) <= 50.) | np.isnan(test3.sepavg(axis=0)))
+                    test2 = test + test
+                    assert np.allclose(test2.corr, test.corr, equal_nan=True)
+                    test2 = test.concatenate_x(test[:test.shape[0]//2], test[test.shape[0]//2:])
+                    assert np.allclose(test2.corr, test.corr, equal_nan=True)
                     if 'davispeebles' not in test.name:
                         test2 = run_jackknife(R1R2=test.R1R2)
                         assert_allclose_estimators(test2, test)

@@ -266,6 +266,45 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
             getattr(self, name).rebin(*args, **kwargs)
         self.run()
 
+    @classmethod
+    def concatenate_x(cls, *others):
+        """
+        Concatenate input estimators along :attr:`sep` by concatenating their two-point counts;
+        see :meth:`BaseTwoPointCounter.concatenate_x`.
+        """
+        new = others[0].copy()
+        for name in new.count_names:
+            setattr(new, name, getattr(new, name).concatenate_x(*[getattr(other, name) for other in others]))
+        new.run()
+        return new
+
+    @classmethod
+    def sum(cls, *others):
+        """
+        Sum input estimators (their two-point counts, actually).
+        See e.g. https://arxiv.org/pdf/1905.01133.pdf for a use case.
+        """
+        new = others[0].copy()
+        for name in new.count_names:
+            setattr(new, name, getattr(new, name).sum(*[getattr(other, name) for other in others]))
+        new.run()
+        return new
+
+    def __add__(self, other):
+        return self.sum(self, other)
+
+    def __radd__(self, other):
+        if other == 0: return self.deepcopy()
+        return self.__add__(other)
+
+    def __iadd__(self, other):
+        if other == 0: return self.deepcopy()
+        return self.__add__(other)
+
+    def deepcopy(self):
+        import copy
+        return copy.deepcopy(self)
+
     def __copy__(self):
         new = super(BaseTwoPointEstimator, self).__copy__()
         for name in self.count_names:
@@ -650,10 +689,11 @@ class ResidualTwoPointEstimator(BaseTwoPointEstimator):
     @classmethod
     def _tuple_requires(cls, with_reversed=False, with_shifted=False, join=None):
         toret = []
-        toret.append(('D1','D2'))
         key = 'S' if with_shifted else 'R'
         toret.append(('D1'.format(key),'{}2'.format(key)))
-        toret.append(('R1','R2'))
+        toret.append(('{}1'.format(key),'{}2'.format(key)))
+        if with_shifted:
+            toret.append(('R1','R2'))
         return toret
 
 

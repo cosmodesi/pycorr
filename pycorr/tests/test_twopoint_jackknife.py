@@ -94,11 +94,11 @@ def test_twopoint_counter(mode='s'):
         pass
 
     for autocorr in [False, True]:
-
         list_options.append({'autocorr':autocorr})
         list_options.append({'autocorr':autocorr, 'weights_one':[1]})
         for position_type in ['rdd', 'pos', 'xyz'] + (['rd'] if mode == 'theta' else []):
             list_options.append({'autocorr':autocorr, 'position_type':position_type})
+
         for dtype in ['f8']: # in theta mode, lots of rounding errors!
             itemsize = np.dtype(dtype).itemsize
             for isa in ['fastest']:
@@ -343,6 +343,12 @@ def test_twopoint_counter(mode='s'):
 
                 check_seps(test2)
                 check_seps(test3)
+
+                test2 = test + test
+                assert np.allclose(test2.wcounts, 2.*test.wcounts, equal_nan=True)
+                assert np.allclose(test2.normalized_wcounts(), test.normalized_wcounts(), equal_nan=True)
+                test2 = test.concatenate_x(test[:test.shape[0]//2], test[test.shape[0]//2:])
+                assert np.allclose(test2.wcounts, test.wcounts, equal_nan=True)
 
             if mpicomm is not None:
                 test_mpi = run(mpicomm=mpicomm, pass_none=mpicomm.rank != 0, mpiroot=0, nprocs_per_real=2)

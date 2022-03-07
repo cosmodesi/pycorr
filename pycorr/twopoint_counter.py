@@ -671,6 +671,7 @@ class BaseTwoPointCounter(BaseClass):
             noffset = self.weight_attrs['noffset']
             nrealizations = self.weight_attrs['nrealizations']
             nalways = self.weight_attrs['nalways'] - self.weight_attrs['nnever']
+            default_value = self.weight_attrs['default_value']
 
             def binned_weights(weights, pow=1):
                 indweights = weights[self.n_bitwise_weights:]
@@ -688,7 +689,7 @@ class BaseTwoPointCounter(BaseClass):
                 w2, c2 = w1, c1
             else:
                 w2, c2 = binned_weights(self.weights2)
-            joint = utils.joint_occurences(nrealizations, max_occurences=noffset+max(c1.max(), c2.max()), noffset=noffset + nalways)
+            joint = utils.joint_occurences(nrealizations, max_occurences=noffset+max(c1.max(), c2.max()), noffset=noffset + nalways, default_value=default_value)
             sumw_cross = 0
             for c1_, w1_ in zip(c1, w1):
                 for c2_, w2_ in zip(c2, w2):
@@ -731,7 +732,8 @@ class BaseTwoPointCounter(BaseClass):
 
     def normalized_wcounts(self):
         """Return normalized two-point counts, i.e. :attr:`wcounts` divided by :meth:`normalization`."""
-        return self.wcounts/self.wnorm
+        with np.errstate(divide='ignore', invalid='ignore'):
+            return _nan_to_zero(self.wcounts/self.wnorm)
 
     def sepavg(self, axis=0, method=None):
         """Return average of separation for input axis; this is an 1D array of size :attr:`shape[axis]`."""
@@ -858,6 +860,70 @@ class BaseTwoPointCounter(BaseClass):
         new = self.deepcopy()
         new.size1, new.size2 = new.size2, new.size1
         return new
+
+    @classmethod
+    def concatenate_x(cls, *others):
+        """
+        Concatenate input two-point counts along :attr:`sep`;
+        useful when running two-point counts at different particle densities,
+        e.g. high density on small scales, and lower density on larger scales,
+        to keep computing time tractable.
+
+        Warning
+        -------
+        :attr:`wcounts` of larger scales are rescaled such their :attr:`wnorm`
+        matches that of smaller scales.
+        """
+        others = sorted(others, key=lambda other: np.mean(other.edges[0])) # rank input counts by mean scale
+        new = others[0].deepcopy()
+        names = ['wcounts']
+        if hasattr(new, 'ncounts'): names = ['ncounts'] + names
+        for iother, other in enumerate(others[1:]):
+            mid = (other.edges[0][:-1] + other.edges[0][1:])/2.
+            mask_low, mask_high = np.flatnonzero(mid < new.edges[0][0]), np.flatnonzero(mid > new.edges[0][-1])
+            new.edges[0] = np.concatenate([other.edges[0][mask_low], new.edges[0], other.edges[0][mask_high + 1]], axis=0)
+            for name in names:
+                if name == 'wcounts': tmp = other.normalized_wcounts() * new.wnorm
+                else: tmp = getattr(other, name)
+                setattr(new, name, np.concatenate([tmp[mask_low], getattr(new, name), tmp[mask_high]], axis=0))
+            for idim in range(new.ndim):
+                new.seps[idim] = np.concatenate([other.seps[idim][mask_low], new.seps[idim], other.seps[idim][mask_high]], axis=0)
+        return new
+
+
+    @classmethod
+    def sum(cls, *others):
+        """
+        Sum input two-point counts; useful when splitting input sample of particles;
+        e.g. https://arxiv.org/pdf/1905.01133.pdf.
+
+        Warning
+        -------
+        If > 1 input two-point counts, :attr:`size1`, :attr:`size2` attributes will be lost.
+        """
+        new = others[0].deepcopy()
+        if len(others) > 1:
+            new.size1 = new.size2 = 0 # we do not know the total size
+        for name in ['ncounts', 'wcounts', 'wnorm']:
+            if hasattr(new, name):
+                setattr(new, name, sum(getattr(other, name) for other in others))
+        new._set_default_seps() # reset self.seps to default
+        for idim, compute_sepavg in enumerate(new.compute_sepsavg):
+            if compute_sepavg:
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    new.seps[idim] = sum(other.seps[idim]*other.wcounts for other in others)/new.wcounts
+        return new
+
+    def __add__(self, other):
+        return self.sum(self, other)
+
+    def __radd__(self, other):
+        if other == 0: return self.deepcopy()
+        return self.__add__(other)
+
+    def __iadd__(self, other):
+        if other == 0: return self.deepcopy()
+        return self.__add__(other)
 
     def deepcopy(self):
         import copy
