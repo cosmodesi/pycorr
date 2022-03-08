@@ -264,8 +264,6 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     with_jackknife = not is_none(data_samples1)
     Estimator = get_twopoint_estimator(estimator, with_DR=with_randoms, with_jackknife=with_jackknife)
     if log: logger.info('Using estimator {}.'.format(Estimator))
-    if Estimator._require_randoms and not with_randoms:
-        raise ValueError('Estimator {} requires randoms, which are not provided'.format(Estimator))
     if with_jackknife: Counter = JackknifeTwoPointCounter
     else: Counter = TwoPointCounter
 
@@ -298,8 +296,12 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
             if log: logger.info('Computing two-point counts {}.'.format(label12))
             # label12 is D1R2, but we only have R1, so switch label2 to R1; same for D1S2
             # No need for e.g. R1R2, as R2 being None, TwoPointCounter will understand it has to run the autocorrelation; same for S1S2
-            if autocorr and label2[:-1] != label1[:-1]:
-                label2 = label2.replace('2', '1')
+            if label2[:-1] != label1[:-1]:
+                if autocorr:
+                    label2 = label2.replace('2', '1')
+                for label in [label1, label2]:
+                    if is_none(positions[label]):
+                        raise ValueError('Estimator requires {} to be provided'.format(label))
             jackknife_kwargs = {}
             if with_jackknife:
                 jackknife_kwargs['samples1'] = samples[label1]

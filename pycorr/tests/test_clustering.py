@@ -20,9 +20,9 @@ z = 1.
 pklin = cosmo.get_fourier().pk_interpolator().to_1d(z=z)
 f = cosmo.get_fourier().sigma8_z(z=z, of='theta_cb')/cosmo.get_fourier().sigma8_z(z=z, of='delta_cb')
 bias = 1.5
-boxsize = 1000.
+boxsize = 500.
 boxcenter = np.array([600., 0., 0.])
-nbar = 1e-4
+nbar = 1e-3
 
 
 def pk_kaiser_model(k, ell=0):

@@ -254,7 +254,7 @@ def test_estimator(mode='s'):
                 fn = os.path.join(tmp_dir, 'tmp.npy')
                 fn_txt = os.path.join(tmp_dir, 'tmp.txt')
                 for test in [estimator_nojackknife, estimator_jackknife]:
-                    tmp = test(sep=test.sepavg(), return_std=False)
+                    _, tmp = test(sep=test.sepavg(), return_sep=True, return_std=False)
                     if mode not in ['smu', 'rppi']:
                         assert np.allclose(tmp, test.corr, equal_nan=True)
                     assert np.isnan(test(sep=-1., return_std=False)).all()

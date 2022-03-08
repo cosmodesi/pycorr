@@ -990,7 +990,7 @@ class BaseTwoPointCounter(BaseClass):
                 elif any(name.startswith(key) for key in ['mode', 'los_type', 'bin_type']):
                     value = str(value)
                 else:
-                    value = np.array2string(np.array(value), formatter=formatter).replace('\n', '')
+                    value = np.array2string(np.array(value), separator=delimiter, formatter=formatter).replace('\n', '')
                 header.append('{} = {}'.format(name, value))
             coords_names = {'smu': ('s', 'mu'), 'rppi': ('rp', 'pi')}.get(self.mode, (self.mode,))
             assert len(coords_names) == self.ndim

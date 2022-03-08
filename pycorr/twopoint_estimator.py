@@ -106,7 +106,6 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         Correlation function estimation.
     """
     name = 'base'
-    _require_randoms = False
 
     def __init__(self, D1D2=None, R1R2=None, D1R2=None, R1D2=None, S1S2=None, D1S2=None, S1D2=None):
         """
@@ -179,12 +178,12 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
 
     @property
     def edges(self):
-        """Edges for two-point count calculation, taken from :attr:`D1D2`."""
+        """Edges for two-point count calculation, taken from :attr:`XX`."""
         return self.XX.edges
 
     @property
     def mode(self):
-        """Two-point counting mode, taken from :attr:`D1D2`."""
+        """Two-point counting mode, taken from :attr:`XX`."""
         return self.XX.mode
 
     @property
@@ -335,12 +334,15 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         if self.XX.with_mpi:
             self.XX.mpicomm.Barrier()
 
-    def get_corr(self, return_cov=None, **kwargs):
+    def get_corr(self, return_sep=False, return_cov=None, **kwargs):
         """
         Return (1D) correlation function, optionally its jackknife covariance estimate, if available.
 
         Parameters
         ----------
+        return_sep : bool, default=False
+            Whether (``True``) to return separation.
+
         return_cov : bool, default=None
             If ``True`` or ``None`` and estimator holds jackknife realizations,
             return jackknife covariance estimate.
@@ -354,7 +356,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         Returns
         -------
         sep : array
-            Array of separation values.
+            Optionally, separation values.
 
         corr : array
             Estimated correlation function.
@@ -362,22 +364,30 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         cov : array
             Optionally, jackknife covariance estimate, see ``return_cov``.
         """
+        if 'ell' in kwargs: kwargs['ells'] = kwargs.pop('ell')
         if self.mode == 'smu':
-            return project_to_multipoles(self, return_cov=return_cov, **kwargs)
+            return project_to_multipoles(self, return_sep=return_sep, return_cov=return_cov, **kwargs)
         if self.mode == 'rppi':
-            return project_to_wp(self, return_cov=return_cov, **kwargs)
+            return project_to_wp(self, return_sep=return_sep, return_cov=return_cov, **kwargs)
+        sep, corr = self.sep.copy(), self.corr.copy()
         if return_cov is False:
-            return self.sep, self.corr
+            if return_sep:
+                return sep, corr
+            return corr
         try:
             realizations = [self.realization(ii, **kwargs).corr for ii in self.realizations]
         except AttributeError as exc:
             if return_cov is True:
                 raise TwoPointEstimatorError('Input estimator has no jackknife realizations') from exc
-            return self.sep, self.corr
+            if return_sep:
+                return sep, corr
+            return corr
         cov = (len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0)
-        return self.sep, self.corr, cov
+        if return_sep:
+            return sep, corr, cov
+        return corr, cov
 
-    def __call__(self, sep=None, return_std=None, **kwargs):
+    def __call__(self, sep=None, return_sep=False, return_std=None, **kwargs):
         """
         Return (1D) correlation function, optionally performing linear interpolation over :math:`sep`.
 
@@ -388,6 +398,10 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
             Values outside :attr:`sepavg` are set to the first/last correlation function value;
             outside :attr:`edges[0]` to nan.
             Defaults to :attr:`sepavg` (no interpolation performed).
+
+        return_sep : bool, default=False
+            Whether (``True``) to return separation (see ``sep``).
+            If ``None``, return separation if ``sep`` is ``None``.
 
         return_std : bool, default=None
             If ``True`` or ``None`` and estimator holds jackknife realizations,
@@ -402,7 +416,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         Returns
         -------
         sep : array
-            If input ``sep`` is ``None``, array of separation values.
+            Optionally, separation values.
 
         corr : array
             (Optionally interpolated) correlation function.
@@ -410,7 +424,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         std : array
             Optionally, (optionally interpolated) jackknife standard deviation estimate, see ``return_std``.
         """
-        tmp = self.get_corr(return_cov=return_std, **kwargs)
+        tmp = self.get_corr(return_sep=True, return_cov=return_std, **kwargs)
         if len(tmp) < 3: tmp = tmp + (None,)
         sepavg, corr, std = tmp
         isscalar = corr.ndim == 1
@@ -418,10 +432,16 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
             std = np.diag(std)**0.5
             if not isscalar:
                 std = np.array(np.array_split(std, len(corr)))
+        if return_sep is None:
+            return_sep = sep is None
         if sep is None:
             if std is None:
-                return sepavg, corr
-            return sepavg, corr, std
+                if return_sep:
+                    return sepavg, corr
+                return corr
+            if return_sep:
+                return sepavg, corr, std
+            return corr, std
         if isscalar:
             corr = corr[None, :]
             if std is not None: std = std[None, :]
@@ -440,7 +460,11 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
             toret_corr = toret_corr[0]
             if std is not None: toret_std = toret_std[0]
         if std is None:
+            if return_sep:
+                return sep, toret_corr
             return toret_corr
+        if return_sep:
+            return sep, toret_corr, toret_std
         return toret_corr, toret_std
 
     def save_txt(self, filename, fmt='%.12e', delimiter=' ', header=None, comments='# ', return_std=None, **kwargs):
@@ -496,11 +520,11 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
                 elif any(name.startswith(key) for key in ['mode', 'los_type', 'bin_type']):
                     value = str(value)
                 else:
-                    value = np.array2string(np.array(value), formatter=formatter).replace('\n', '')
+                    value = np.array2string(np.array(value), separator=delimiter, formatter=formatter).replace('\n', '')
                 header.append('{} = {}'.format(name, value))
             name = {'smu': 's', 'rppi': 'rp'}.get(self.mode, self.mode)
             labels = ['{}mid'.format(name), '{}avg'.format(name)]
-            tmp = self(sep=None, return_std=return_std, **kwargs)
+            tmp = self(sep=None, return_sep=True, return_std=return_std, **kwargs)
             if len(tmp) < 3: tmp = tmp + (None,)
             sepavg, corr, std = tmp
             ells = kwargs.get('ells', _default_ells)
@@ -530,6 +554,8 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
                     file.write(comments + line + '\n')
                 for irow in range(len(columns[0])):
                     file.write(delimiter.join(['{:<{width}}'.format(column[irow], width=width) for column, width in zip(columns, widths)]) + '\n')
+        if self.XX.with_mpi:
+            self.XX.mpicomm.Barrier()
 
 
 class NaturalTwoPointEstimator(BaseTwoPointEstimator):
@@ -604,7 +630,6 @@ class DavisPeeblesTwoPointEstimator(BaseTwoPointEstimator):
 class LandySzalayTwoPointEstimator(BaseTwoPointEstimator):
 
     name = 'landyszalay'
-    _require_randoms = True
 
     def run(self):
         """
@@ -632,7 +657,6 @@ class LandySzalayTwoPointEstimator(BaseTwoPointEstimator):
 class WeightTwoPointEstimator(NaturalTwoPointEstimator):
 
     name = 'weight'
-    _require_randoms = True
 
     def run(self):
         """
@@ -667,7 +691,6 @@ class WeightTwoPointEstimator(NaturalTwoPointEstimator):
 class ResidualTwoPointEstimator(BaseTwoPointEstimator):
 
     name = 'residual'
-    _require_randoms = True
 
     def run(self):
         """
@@ -697,7 +720,7 @@ class ResidualTwoPointEstimator(BaseTwoPointEstimator):
         return toret
 
 
-def project_to_multipoles(estimator, ells=_default_ells, return_cov=None, **kwargs):
+def project_to_multipoles(estimator, ells=_default_ells, return_sep=True, return_cov=None, **kwargs):
     r"""
     Project :math:`(s, \mu)` correlation function estimation onto Legendre polynomials.
 
@@ -709,6 +732,9 @@ def project_to_multipoles(estimator, ells=_default_ells, return_cov=None, **kwar
 
     ells : tuple, int, default=(0,2,4)
         Order of Legendre polynomial.
+
+    return_sep : bool, default=True
+        Whether (``True``) to return separation.
 
     return_cov : bool, default=None
         If ``True`` or ``None`` and input ``estimator`` holds jackknife realizations,
@@ -722,7 +748,7 @@ def project_to_multipoles(estimator, ells=_default_ells, return_cov=None, **kwar
     Returns
     -------
     sep : array
-        Array of separation values.
+        Optionally, array of separation values.
 
     poles : list
         List of correlation function multipoles.
@@ -746,7 +772,9 @@ def project_to_multipoles(estimator, ells=_default_ells, return_cov=None, **kwar
         poles = poles[0]
     poles = np.array(poles)
     if return_cov is False:
-        return sep, poles
+        if return_sep:
+            return sep, poles
+        return poles
     try:
         realizations = [np.concatenate(project_to_multipoles(estimator.realization(ii, **kwargs), ells=ells)[1]).T for ii in estimator.realizations]
     except AttributeError as exc:
@@ -754,10 +782,12 @@ def project_to_multipoles(estimator, ells=_default_ells, return_cov=None, **kwar
             raise TwoPointEstimatorError('Input estimator has no jackknife realizations') from exc
         return sep, poles
     cov = (len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0)
-    return sep, poles, cov
+    if return_sep:
+        return sep, poles, cov
+    return poles, cov
 
 
-def project_to_wp(estimator, pimax=None, return_cov=None, **kwargs):
+def project_to_wp(estimator, pimax=None, return_sep=True, return_cov=None, **kwargs):
     r"""
     Integrate :math:`(r_{p}, \pi)` correlation function over :math:`\pi` to obtain :math:`w_{p}(r_{p})`.
 
@@ -769,6 +799,9 @@ def project_to_wp(estimator, pimax=None, return_cov=None, **kwargs):
 
     pimax : float, default=None
         Upper bound for summation of :math:`\pi`.
+
+    return_sep : bool, default=True
+        Whether (``True``) to return separation.
 
     return_cov : bool, default=None
         If ``True`` or ``None`` and input ``estimator`` holds jackknife realizations,
@@ -782,7 +815,7 @@ def project_to_wp(estimator, pimax=None, return_cov=None, **kwargs):
     Returns
     -------
     sep : array
-        Array of separation values.
+        Optionally, array of separation values.
 
     wp : array
         Estimated :math:`w_{p}(r_{p})`.
@@ -797,7 +830,9 @@ def project_to_wp(estimator, pimax=None, return_cov=None, **kwargs):
     sep = estimator.sepavg(axis=0)
     wp = 2.*np.sum(estimator.corr*np.diff(estimator.edges[1]), axis=-1)
     if return_cov is False:
-        return sep, wp
+        if return_sep:
+            return sep, wp
+        return wp
     try:
         realizations = [project_to_wp(estimator.realization(ii, **kwargs))[1] for ii in estimator.realizations] # no need to provide pimax, as selection already performed
     except AttributeError as exc:
@@ -805,4 +840,6 @@ def project_to_wp(estimator, pimax=None, return_cov=None, **kwargs):
             raise TwoPointEstimatorError('Input estimator has no jackknife realizations') from exc
         return sep, wp
     cov = (len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0)
-    return sep, wp, cov
+    if return_sep:
+        return sep, wp, cov
+    return wp, cov
