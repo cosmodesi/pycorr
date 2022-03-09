@@ -332,7 +332,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         if not self.XX.with_mpi or self.XX.mpicomm.rank == 0:
             super(BaseTwoPointEstimator, self).save(filename)
         if self.XX.with_mpi:
-            self.XX.mpicomm.Barrier()
+            self.mpicomm.Barrier()
 
     def get_corr(self, return_sep=False, return_cov=None, **kwargs):
         """
@@ -555,7 +555,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
                 for irow in range(len(columns[0])):
                     file.write(delimiter.join(['{:<{width}}'.format(column[irow], width=width) for column, width in zip(columns, widths)]) + '\n')
         if self.XX.with_mpi:
-            self.XX.mpicomm.Barrier()
+            self.mpicomm.Barrier()
 
 
 class NaturalTwoPointEstimator(BaseTwoPointEstimator):
