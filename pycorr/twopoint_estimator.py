@@ -331,8 +331,8 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         """Save estimator to ``filename``."""
         if not self.with_mpi or self.mpicomm.rank == 0:
             super(BaseTwoPointEstimator, self).save(filename)
-        if self.with_mpi:
-            self.mpicomm.Barrier()
+        #if self.with_mpi:
+        #    self.mpicomm.Barrier()
 
     def get_corr(self, return_sep=False, return_cov=None, **kwargs):
         """
@@ -555,8 +555,8 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
                 for irow in range(len(columns[0])):
                     file.write(delimiter.join(['{:<{width}}'.format(column[irow], width=width) for column, width in zip(columns, widths)]) + '\n')
 
-        if self.with_mpi:
-            self.mpicomm.Barrier()
+        #if self.with_mpi:
+        #    self.mpicomm.Barrier()
 
 
 def _make_property(name):

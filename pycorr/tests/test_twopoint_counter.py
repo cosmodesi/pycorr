@@ -491,6 +491,7 @@ def test_twopoint_counter(mode='s'):
                     fn_txt = test_mpi.mpicomm.bcast(os.path.join(tmp_dir, 'tmp.txt'), root=0)
                     test_mpi.save(fn)
                     test_mpi.save_txt(fn_txt)
+                    test_mpi.mpicomm.Barrier()
                     test_mpi = TwoPointCounter.load(fn)
                     fn = os.path.join(tmp_dir, 'tmp.npy')
                     test_mpi.save(fn)

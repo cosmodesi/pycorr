@@ -959,8 +959,8 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         """Save two-point counts to ``filename``."""
         if not self.with_mpi or self.mpicomm.rank == 0:
             super(BaseTwoPointCounter, self).save(filename)
-        if self.with_mpi:
-            self.mpicomm.Barrier()
+        #if self.with_mpi:
+        #    self.mpicomm.Barrier()
 
     def save_txt(self, filename, fmt='%.12e', delimiter=' ', header=None, comments='# '):
         """
@@ -1027,8 +1027,8 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                 for irow in range(len(columns[0])):
                     file.write(delimiter.join(['{:<{width}}'.format(column[irow], width=width) for column, width in zip(columns, widths)]) + '\n')
 
-        if self.with_mpi:
-            self.mpicomm.Barrier()
+        #if self.with_mpi:
+        #    self.mpicomm.Barrier()
 
 
 class AnalyticTwoPointCounter(BaseTwoPointCounter):
