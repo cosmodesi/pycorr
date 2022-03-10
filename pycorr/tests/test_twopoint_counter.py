@@ -476,6 +476,7 @@ def test_twopoint_counter(mode='s'):
                 check_seps(test3)
 
             if mpicomm is not None:
+
                 test_mpi = run(mpicomm=mpicomm, pass_none=mpicomm.rank != 0, mpiroot=0)
                 if itemsize <= 4: mask = ~mask_zero
                 else: mask = Ellipsis
@@ -484,6 +485,16 @@ def test_twopoint_counter(mode='s'):
                 data1 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data1]
                 data2 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data2]
                 test_mpi = run(mpicomm=mpicomm)
+
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    fn = test_mpi.mpicomm.bcast(os.path.join(tmp_dir, 'tmp.npy'), root=0)
+                    fn_txt = test_mpi.mpicomm.bcast(os.path.join(tmp_dir, 'tmp.txt'), root=0)
+                    test_mpi.save(fn)
+                    test_mpi.save_txt(fn_txt)
+                    test_mpi = TwoPointCounter.load(fn)
+                    fn = os.path.join(tmp_dir, 'tmp.npy')
+                    test_mpi.save(fn)
+
                 assert np.allclose(test_mpi.wcounts[mask], test.wcounts[mask], **tol)
                 assert np.allclose(test_mpi.wnorm, test.wnorm, **tol)
 

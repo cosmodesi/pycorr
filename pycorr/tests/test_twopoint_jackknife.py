@@ -94,6 +94,7 @@ def test_twopoint_counter(mode='s'):
         pass
 
     for autocorr in [False, True]:
+
         list_options.append({'autocorr':autocorr})
         list_options.append({'autocorr':autocorr, 'weights_one':[1]})
         for position_type in ['rdd', 'pos', 'xyz'] + (['rd'] if mode == 'theta' else []):
@@ -121,7 +122,6 @@ def test_twopoint_counter(mode='s'):
                 list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'n_bitwise_weights':1, 'bitwise_type': 'i4', 'iip':1, 'dtype':dtype, 'isa':isa})
                 list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'weight_attrs':{'nrealizations':129,'noffset':3}, 'dtype':dtype, 'isa':isa})
                 list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'n_bitwise_weights':2, 'weight_attrs':{'noffset':0,'default_value':0.8}, 'dtype':dtype, 'isa':isa})
-
                 # twopoint_weights
                 if itemsize > 4:
                     list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'dtype':dtype, 'isa':isa})
@@ -351,11 +351,29 @@ def test_twopoint_counter(mode='s'):
                 assert np.allclose(test2.wcounts, test.wcounts, equal_nan=True)
 
             if mpicomm is not None:
+
                 test_mpi = run(mpicomm=mpicomm, pass_none=mpicomm.rank != 0, mpiroot=0, nprocs_per_real=2)
                 assert_allclose(test_mpi, test)
                 data1 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data1]
                 data2 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data2]
                 test_mpi = run(mpicomm=mpicomm)
+
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    tmp_dir = '_tests'
+                    utils.mkdir(tmp_dir)
+                    mpicomm = test_mpi.mpicomm
+                    fn = test_mpi.mpicomm.bcast(os.path.join(tmp_dir, 'tmp.npy'), root=0)
+                    fn_txt = test_mpi.mpicomm.bcast(os.path.join(tmp_dir, 'tmp.txt'), root=0)
+                    test_mpi.save(fn)
+                    test_mpi.save_txt(fn_txt)
+                    #test_mpi.mpicomm.Barrier()
+                    test_mpi = JackknifeTwoPointCounter.load(fn)
+                    fn = os.path.join(tmp_dir, 'tmp.npy')
+                    test_mpi.save(fn)
+                    import shutil
+                    if mpicomm.rank == 0:
+                        shutil.rmtree(tmp_dir)
+
                 assert_allclose(test_mpi, test)
 
 

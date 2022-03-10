@@ -329,9 +329,9 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
 
     def save(self, filename):
         """Save estimator to ``filename``."""
-        if not self.XX.with_mpi or self.XX.mpicomm.rank == 0:
+        if not self.with_mpi or self.mpicomm.rank == 0:
             super(BaseTwoPointEstimator, self).save(filename)
-        if self.XX.with_mpi:
+        if self.with_mpi:
             self.mpicomm.Barrier()
 
     def get_corr(self, return_sep=False, return_cov=None, **kwargs):
@@ -502,7 +502,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         kwargs : dict
             Arguments for :meth:`get_corr`.
         """
-        if not self.XX.with_mpi or self.XX.mpicomm.rank == 0:
+        if not self.with_mpi or self.mpicomm.rank == 0:
             self.log_info('Saving {}.'.format(filename))
             utils.mkdir(os.path.dirname(filename))
             formatter = {'int_kind': lambda x: '%d' % x, 'float_kind': lambda x: fmt % x}
@@ -554,8 +554,22 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
                     file.write(comments + line + '\n')
                 for irow in range(len(columns[0])):
                     file.write(delimiter.join(['{:<{width}}'.format(column[irow], width=width) for column, width in zip(columns, widths)]) + '\n')
-        if self.XX.with_mpi:
+
+        if self.with_mpi:
             self.mpicomm.Barrier()
+
+
+def _make_property(name):
+
+    @property
+    def func(self):
+        return getattr(self.XX, name)
+
+    return func
+
+
+for name in ['with_mpi', 'mpicomm']:
+    setattr(BaseTwoPointEstimator, name, _make_property(name))
 
 
 class NaturalTwoPointEstimator(BaseTwoPointEstimator):

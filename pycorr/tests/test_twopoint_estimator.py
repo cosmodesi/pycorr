@@ -282,6 +282,7 @@ def test_estimator(mode='s'):
                         assert_allclose_estimators(test2, test)
 
             if mpicomm is not None:
+
                 test_mpi = run_jackknife(mpicomm=mpicomm, pass_none=mpicomm.rank != 0, mpiroot=0)
                 assert_allclose_estimators(test_mpi, estimator_jackknife)
 
@@ -290,6 +291,16 @@ def test_estimator(mode='s'):
                 randoms1 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in randoms1]
                 randoms2 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in randoms2]
                 test_mpi = run_nojackknife(mpicomm=mpicomm)
+
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    fn = test_mpi.XX.mpicomm.bcast(os.path.join(tmp_dir, 'tmp.npy'), root=0)
+                    fn_txt = test_mpi.XX.mpicomm.bcast(os.path.join(tmp_dir, 'tmp.txt'), root=0)
+                    test_mpi.save(fn)
+                    test_mpi.save_txt(fn_txt)
+                    test_mpi = TwoPointEstimator.load(fn)
+                    fn = os.path.join(tmp_dir, 'tmp.npy')
+                    test_mpi.save(fn)
+
                 assert_allclose_estimators(test_mpi, estimator_jackknife)
 
 

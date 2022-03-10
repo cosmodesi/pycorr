@@ -26,7 +26,7 @@ def get_twopoint_counter(engine='corrfunc'):
     Parameters
     ----------
     engine : string, default='corrfunc'
-        Name of two-point counter engine, one of ["corrfunc", "analytic"].
+        Name of two-point counter engine, one of ["corrfunc", "analytic", "jackknife"].
 
     Returns
     -------
@@ -35,16 +35,27 @@ def get_twopoint_counter(engine='corrfunc'):
     """
     if isinstance(engine, str):
 
-        if engine.lower() == 'analytic':
-            return AnalyticTwoPointCounter
-
         if engine.lower() == 'corrfunc':
-            from .corrfunc import CorrfuncTwoPointCounter
-            return CorrfuncTwoPointCounter
+            from . import corrfunc
 
-        raise TwoPointCounterError('Unknown engine {}.'.format(engine))
+        try:
+            engine = BaseTwoPointCounter._registry[engine.lower()]
+        except KeyError:
+            raise TwoPointCounterError('Unknown two-point counter {}.'.format(engine))
 
     return engine
+
+
+class RegisteredTwoPointCounter(type(BaseClass)):
+
+    """Metaclass registering :class:`BaseTwoPointCounter`-derived classes."""
+
+    _registry = {}
+
+    def __new__(meta, name, bases, class_dict):
+        cls = super().__new__(meta, name, bases, class_dict)
+        meta._registry[cls.name] = cls
+        return cls
 
 
 class MetaTwoPointCounter(type(BaseClass)):
@@ -76,7 +87,7 @@ class TwoPointCounter(BaseClass, metaclass=MetaTwoPointCounter):
     """
     @classmethod
     def from_state(cls, state):
-        """Return new two point counter based on state dictionary."""
+        """Return new two-point counter based on state dictionary."""
         state = state.copy()
         cls = get_twopoint_counter(state.pop('name'))
         new = cls.__new__(cls)
@@ -243,7 +254,7 @@ def _format_weights(weights, weight_type='auto', size=None, dtype=None, mpicomm=
     return weights, n_bitwise_weights
 
 
-class BaseTwoPointCounter(BaseClass):
+class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
     """
     Base class for two-point counters.
     Extend this class to implement a new two-point counter engine.
@@ -256,6 +267,8 @@ class BaseTwoPointCounter(BaseClass):
     wnorm : float
         Two-point count normalization.
     """
+    name = 'base'
+
     def __init__(self, mode, edges, positions1, positions2=None, weights1=None, weights2=None,
                  bin_type='auto', position_type='auto', weight_type='auto', weight_attrs=None,
                  twopoint_weights=None, los='midpoint', boxsize=None, compute_sepsavg=True, dtype=None,
@@ -1013,6 +1026,7 @@ class BaseTwoPointCounter(BaseClass):
                     file.write(comments + line + '\n')
                 for irow in range(len(columns[0])):
                     file.write(delimiter.join(['{:<{width}}'.format(column[irow], width=width) for column, width in zip(columns, widths)]) + '\n')
+
         if self.with_mpi:
             self.mpicomm.Barrier()
 
