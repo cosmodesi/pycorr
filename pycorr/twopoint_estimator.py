@@ -447,6 +447,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
             if std is not None: std = std[None, :]
         mask_finite_sep = ~np.isnan(sepavg) & ~np.isnan(corr).any(axis=0)
         sepavg, corr = sepavg[mask_finite_sep], corr[:, mask_finite_sep]
+        if std is not None: std = std[:, mask_finite_sep]
         sep = np.asarray(sep)
         toret_corr = np.nan * np.zeros((len(corr),) + sep.shape, dtype=sep.dtype)
         if std is not None: toret_std = toret_corr.copy()

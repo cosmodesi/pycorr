@@ -271,11 +271,28 @@ def test_estimator(mode='s'):
                 #tmp_dir = '_tests'
                 fn = os.path.join(tmp_dir, 'tmp.npy')
                 fn_txt = os.path.join(tmp_dir, 'tmp.txt')
-                for test in [estimator_nojackknife, estimator_jackknife]:
+                for test, isjkn in zip([estimator_nojackknife, estimator_jackknife], [False, True]):
                     _, tmp = test(sep=test.sepavg(), return_sep=True, return_std=False)
                     if mode not in ['smu', 'rppi']:
                         assert np.allclose(tmp, test.corr, equal_nan=True)
                     assert np.isnan(test(sep=-1., return_std=False)).all()
+                    if test.mode == 'smu':
+                        t1, t2, t3 = test(sep=5., ell=2), test(ell=2, sep=[5.]*3), test(sep=[5.]*4)
+                        if not isjkn: t1, t2, t3 = [t1], [t2], [t3]
+                        for tt in t1: assert tt.shape == ()
+                        for tt in t2: assert tt.shape == (3, )
+                        for tt in t3: assert tt.shape == (3, 4)
+                    else:
+                        t1 = test(sep=10.)
+                        t2 = test(sep=[9.]*4)
+                        if not isjkn: t1, t2 = [t1], [t2]
+                        for tt in t1: assert tt.shape == ()
+                        for tt in t2: assert tt.shape == (4, )
+                    isep = test.shape[0]//2
+                    sep = test.edges[0][isep:isep+2]
+                    t1, t2 = test(sep=sep), test(sep=sep[::-1])
+                    if not isjkn: t1, t2 = [t1], [t2]
+                    for tt1, tt2 in zip(t1, t2): assert np.allclose(tt1, tt2[..., ::-1], atol=0)
                     test.save(fn)
                     test.save_txt(fn_txt)
                     test2 = TwoPointEstimator.load(fn)
