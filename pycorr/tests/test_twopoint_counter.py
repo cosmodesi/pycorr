@@ -371,17 +371,26 @@ def test_twopoint_counter(mode='s'):
                 if label in weights_one:
                     catalog.append(np.ones_like(catalog[0]))
 
-            def run(pass_none=False, reverse=False, **kwargs):
+            def run(pass_none=False, pass_zero=False, reverse=False, **kwargs):
                 tmpdata1, tmpdata2 = data1, data2
                 if reverse and not autocorr:
                     tmpdata1, tmpdata2 = data2, data1
                 positions1 = tmpdata1[:npos]
                 positions2 = tmpdata2[:npos]
+                weights1 = tmpdata1[npos:]
+                weights2 = tmpdata2[npos:]
+
+                def get_zero(arrays):
+                    return [array[:0] for array in arrays]
+
+                if pass_zero:
+                    positions1 = get_zero(positions1)
+                    positions2 = get_zero(positions2)
+                    weights1 = get_zero(weights1)
+                    weights2 = get_zero(weights2)
                 if position_type == 'pos':
                     positions1 = np.array(positions1).T
                     positions2 = np.array(positions2).T
-                weights1 = tmpdata1[npos:]
-                weights2 = tmpdata2[npos:]
                 positions1_bak = np.array(positions1, copy=True)
                 positions2_bak = np.array(positions2, copy=True)
                 if weights1: weights1_bak = np.array(weights1, copy=True)
@@ -477,9 +486,12 @@ def test_twopoint_counter(mode='s'):
 
             if mpicomm is not None:
 
-                test_mpi = run(mpicomm=mpicomm, pass_none=mpicomm.rank != 0, mpiroot=0)
                 if itemsize <= 4: mask = ~mask_zero
                 else: mask = Ellipsis
+                test_mpi = run(mpicomm=mpicomm, pass_zero=mpicomm.rank != 0, mpiroot=None)
+                assert np.allclose(test_mpi.wcounts[mask], test.wcounts[mask], **tol)
+                assert np.allclose(test_mpi.wnorm, test.wnorm, **tol)
+                test_mpi = run(mpicomm=mpicomm, pass_none=mpicomm.rank != 0, mpiroot=0)
                 assert np.allclose(test_mpi.wcounts[mask], test.wcounts[mask], **tol)
                 assert np.allclose(test_mpi.wnorm, test.wnorm, **tol)
                 data1 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data1]

@@ -9,8 +9,8 @@ Implements methods to perform jackknife estimates of the correlation function co
 import os
 import numpy as np
 
-from .utils import BaseClass, get_mpi, TaskManager
-from .twopoint_counter import BaseTwoPointCounter, TwoPointCounter, TwoPointCounterError, _format_positions, _make_array, _nan_to_zero
+from .utils import BaseClass, get_mpi, TaskManager, _get_box, _make_array, _nan_to_zero
+from .twopoint_counter import BaseTwoPointCounter, TwoPointCounter, TwoPointCounterError, _format_positions
 from .twopoint_estimator import BaseTwoPointEstimator, TwoPointEstimatorError
 from . import twopoint_estimator, utils
 
@@ -69,9 +69,9 @@ class BaseSubsampler(BaseClass):
         self.mode = mode.lower()
         self.position_type = position_type.lower()
         self.dtype = dtype
-        self.positions = self._format_positions(positions, mpicomm=self.mpicomm, mpiroot=mpiroot)
+        self.positions = self._format_positions(positions, copy=False, mpicomm=self.mpicomm, mpiroot=mpiroot)
         self.weights = weights
-        if weights is not None: self.weights = np.asarray(weights, dtype=self.dtype)
+        if weights is not None: self.weights = np.array(weights, dtype=self.dtype, copy=False)
         self.nsamples = nsamples
         self.attrs = kwargs
         self.run()
@@ -82,11 +82,11 @@ class BaseSubsampler(BaseClass):
         if not hasattr(self, 'mpicomm'): self.mpicomm = None
         return self.mpicomm is not None and self.mpicomm.size > 1
 
-    def _format_positions(self, positions, position_type=None, dtype=None, mpicomm=None, mpiroot=None):
+    def _format_positions(self, positions, position_type=None, dtype=None, copy=False, mpicomm=None, mpiroot=None):
         # Format input positions
         position_type = self.position_type if position_type is None else position_type.lower()
         dtype = self.dtype if dtype is None else dtype
-        positions = _format_positions(positions, position_type=position_type, mode=self.mode, dtype=dtype, mpicomm=mpicomm, mpiroot=mpiroot)
+        positions = _format_positions(positions, position_type=position_type, mode=self.mode, dtype=dtype, copy=False, mpicomm=mpicomm, mpiroot=mpiroot)
         if self.mode == 'angular':
             positions = utils.sky_to_cartesian(positions + [1.], degree=True, dtype=positions[0].dtype) # project onto unit sphere
         return positions
@@ -150,8 +150,8 @@ class BoxSubsampler(BaseSubsampler):
         if boxsize is None or boxcenter is None:
             if positions is None:
                 raise ValueError('positions must be provided if boxsize or boxcenter is not provided')
-            positions = self._format_positions(positions, mpicomm=self.mpicomm, mpiroot=mpiroot)
-            posmin, posmax = np.array([p.min(axis=0) for p in positions]), np.array([p.max(axis=0) for p in positions])
+            positions = self._format_positions(positions, copy=False, mpicomm=self.mpicomm, mpiroot=mpiroot)
+            posmin, posmax = _get_box(positions)
             if self.with_mpi:
                 posmin = np.min(mpicomm.allgather(posmin), axis=0)
                 posmax = np.max(mpicomm.allgather(posmax), axis=0)
@@ -201,7 +201,7 @@ class BoxSubsampler(BaseSubsampler):
         labels : array
             Labels corresponding to input ``positions``.
         """
-        positions = self._format_positions(positions, position_type=position_type)
+        positions = self._format_positions(positions, position_type=position_type, copy=False, mpicomm=None, mpiroot=None)
         ii = []
         for edge, p in zip(self.edges, positions):
             tmp = np.searchsorted(edge, p, side='right', sorter=None) - 1
@@ -298,7 +298,7 @@ class KMeansSubsampler(BaseSubsampler):
         labels : array
             Labels corresponding to input ``positions``.
         """
-        positions = self._format_positions(positions, position_type=position_type)
+        positions = self._format_positions(positions, position_type=position_type, copy=False, mpicomm=None, mpiroot=None)
         if self.nside is not None:
             import healpy as hp
             pix = hp.vec2pix(self.nside, *positions, nest=self.nest)
@@ -474,8 +474,8 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         self._set_edges(edges, bin_type=bin_type)
         self._set_los(los)
         self._set_compute_sepsavg(compute_sepsavg)
-        self._set_positions(positions1, positions2, position_type=position_type, dtype=dtype, mpiroot=mpiroot)
-        self._set_weights(weights1, weights2, weight_type=weight_type, twopoint_weights=twopoint_weights, weight_attrs=weight_attrs, mpiroot=mpiroot)
+        self._set_positions(positions1, positions2, position_type=position_type, dtype=dtype, copy=False, mpiroot=mpiroot)
+        self._set_weights(weights1, weights2, weight_type=weight_type, twopoint_weights=twopoint_weights, weight_attrs=weight_attrs, copy=False, mpiroot=mpiroot)
         self._set_samples(samples1, samples2, mpiroot=mpiroot)
         self._set_zeros()
         self.auto, self.cross12, self.cross21 = {}, {}, {}

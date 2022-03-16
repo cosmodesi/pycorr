@@ -147,16 +147,34 @@ def test_estimator(mode='s'):
                                                    shifted_weights1=shifted_weights1 if with_shifted else None, shifted_weights2=None if autocorr else shifted_weights2,
                                                    **options, **kwargs)
 
-            def run_jackknife(pass_none=False, **kwargs):
-                return TwoPointCorrelationFunction(mode=mode, edges=edges, engine=engine, data_positions1=None if pass_none else data1[:npos], data_positions2=None if pass_none or autocorr else data2[:npos],
-                                                   data_weights1=None if pass_none else data1[npos:-1], data_weights2=None if pass_none or autocorr else data2[npos:-1],
-                                                   randoms_positions1=randoms1[:npos] if with_randoms and not pass_none else None, randoms_positions2=None if pass_none or autocorr else randoms2[:npos],
-                                                   randoms_weights1=randoms1[npos:-1] if with_randoms and not pass_none else None, randoms_weights2=None if pass_none or autocorr else randoms2[npos:-1],
-                                                   shifted_positions1=shifted1[:npos] if with_shifted and not pass_none else None, shifted_positions2=None if pass_none or autocorr else shifted2[:npos],
-                                                   shifted_weights1=shifted1[npos:-1] if with_shifted and not pass_none else None, shifted_weights2=None if pass_none or autocorr else shifted2[npos:-1],
-                                                   data_samples1=None if pass_none else data1[-1], data_samples2=None if pass_none else data2[-1],
-                                                   randoms_samples1=None if pass_none else randoms1[-1], randoms_samples2=None if pass_none else randoms2[-1],
-                                                   shifted_samples1=None if pass_none else shifted1[-1], shifted_samples2=None if pass_none else shifted2[-1],
+            def run_jackknife(pass_none=False, pass_zero=False, **kwargs):
+                data_positions1, data_weights1, data_samples1 = data1[:npos], data1[npos:-1], data1[-1]
+                data_positions2, data_weights2, data_samples2 = data2[:npos], data2[npos:-1], data2[-1]
+                randoms_positions1, randoms_weights1, randoms_samples1 = randoms1[:npos], randoms1[npos:-1], randoms1[-1]
+                randoms_positions2, randoms_weights2, randoms_samples2 = randoms2[:npos], randoms2[npos:-1], randoms2[-1]
+                shifted_positions1, shifted_weights1, shifted_samples1 = shifted1[:npos], shifted1[npos:-1], shifted1[-1]
+                shifted_positions2, shifted_weights2, shifted_samples2 = shifted2[:npos], shifted2[npos:-1], shifted2[-1]
+
+                def get_zero(arrays):
+                    return [array[:0] for array in arrays]
+
+                if pass_zero:
+                    data_positions1, data_weights1, data_samples1 = get_zero(data_positions1), get_zero(data_weights1), data_samples1[:0]
+                    data_positions2, data_weights2, data_samples2 = get_zero(data_positions2), get_zero(data_weights2), data_samples2[:0]
+                    randoms_positions1, randoms_weights1, randoms_samples1 = get_zero(randoms_positions1), get_zero(randoms_weights1), randoms_samples1[:0]
+                    randoms_positions2, randoms_weights2, randoms_samples2 = get_zero(randoms_positions2), get_zero(randoms_weights2), randoms_samples2[:0]
+                    shifted_positions1, shifted_weights1, shifted_samples1 = get_zero(shifted_positions1), get_zero(shifted_weights1), shifted_samples1[:0]
+                    shifted_positions2, shifted_weights2, shifted_samples2 = get_zero(shifted_positions2), get_zero(shifted_weights2), shifted_samples2[:0]
+
+                return TwoPointCorrelationFunction(mode=mode, edges=edges, engine=engine, data_positions1=None if pass_none else data_positions1, data_positions2=None if pass_none or autocorr else data_positions2,
+                                                   data_weights1=None if pass_none else data_weights1, data_weights2=None if pass_none or autocorr else data_weights2,
+                                                   randoms_positions1=randoms_positions1 if with_randoms and not pass_none else None, randoms_positions2=None if pass_none or autocorr else randoms_positions2,
+                                                   randoms_weights1=randoms_weights1 if with_randoms and not pass_none else None, randoms_weights2=None if pass_none or autocorr else randoms_weights2,
+                                                   shifted_positions1=shifted_positions1 if with_shifted and not pass_none else None, shifted_positions2=None if pass_none or autocorr else shifted_positions2,
+                                                   shifted_weights1=shifted_weights1 if with_shifted and not pass_none else None, shifted_weights2=None if pass_none or autocorr else shifted_weights2,
+                                                   data_samples1=None if pass_none else data_samples1, data_samples2=None if pass_none else data_samples2,
+                                                   randoms_samples1=None if pass_none else randoms_samples1, randoms_samples2=None if pass_none else randoms_samples2,
+                                                   shifted_samples1=None if pass_none else shifted_samples1, shifted_samples2=None if pass_none else shifted_samples2,
                                                    **options, **kwargs)
 
             def assert_allclose(res1, res2):
@@ -284,6 +302,9 @@ def test_estimator(mode='s'):
             if mpicomm is not None:
 
                 test_mpi = run_jackknife(mpicomm=mpicomm, pass_none=mpicomm.rank != 0, mpiroot=0)
+                assert_allclose_estimators(test_mpi, estimator_jackknife)
+
+                test_mpi = run_jackknife(mpicomm=mpicomm, pass_zero=mpicomm.rank != 0, mpiroot=None)
                 assert_allclose_estimators(test_mpi, estimator_jackknife)
 
                 data1 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data1]

@@ -109,7 +109,7 @@ def save_result(result, filename, header=''):
             file.write(line)
 
 
-def test_result(result, filename):
+def assert_allclose(result, filename):
     isestimator = isinstance(result, BaseTwoPointEstimator)
     ref = np.loadtxt(filename, usecols=-1)
     if isestimator:
@@ -287,16 +287,16 @@ def test_reference(base_dir):
 
             for pc in result.requires(with_reversed=True, join=''):
                 if pc == 'R1R2' and 'bitwise' in weight: continue
-                test_result(getattr(result, pc), counts_fn.format(mode, '{}_{}'.format(pc, weight)))
-            test_result(result, estimator_fn.format(mode, 'cross_{}'.format(weight)))
+                assert_allclose(getattr(result, pc), counts_fn.format(mode, '{}_{}'.format(pc, weight)))
+            assert_allclose(result, estimator_fn.format(mode, 'cross_{}'.format(weight)))
 
             result = TwoPointCorrelationFunction(mode, edges, data_positions1=data1[:3], data_weights1=data_weights1,
                                                  randoms_positions1=randoms1[:3], randoms_weights1=randoms_weights1, **kwargs)
 
             for pc in result.requires(with_reversed=False, join=''):
                 if pc == 'R1R2' and 'bitwise' in weight: continue
-                test_result(getattr(result, pc), counts_fn.format(mode, '{}_{}'.format(pc.replace('2','1'), weight)))
-            test_result(result, estimator_fn.format(mode, 'auto1_{}'.format(weight)))
+                assert_allclose(getattr(result, pc), counts_fn.format(mode, '{}_{}'.format(pc.replace('2','1'), weight)))
+            assert_allclose(result, estimator_fn.format(mode, 'auto1_{}'.format(weight)))
 
     mode, name_edges = 'theta', 'np.logspace(-2.5, 0, 31)'
     edges = eval(name_edges, {'np':np})
@@ -311,7 +311,7 @@ def test_reference(base_dir):
                                          randoms_positions1=parent1[:3], randoms_weights1=parent_weights1,
                                          randoms_positions2=parent2[:3], randoms_weights2=parent_weights2,
                                          estimator='weight', **kwargs)
-    test_result(result, estimated_angular_weight_fn.format('for_D1D2_bitwise_weights'))
+    assert_allclose(result, estimated_angular_weight_fn.format('for_D1D2_bitwise_weights'))
 
     # D1_parentR2/D1_iipR2
     result = TwoPointCorrelationFunction(mode, edges, data_positions1=data1[:3], data_weights1=data_weights1,
@@ -319,7 +319,7 @@ def test_reference(base_dir):
                                          randoms_positions1=parent1[:3], randoms_weights1=parent_weights1,
                                          randoms_positions2=randoms2[:3], randoms_weights2=randoms_weights2,
                                          estimator='weight', **kwargs)
-    test_result(result, estimated_angular_weight_fn.format('for_D1R2_bitwise_weights'))
+    assert_allclose(result, estimated_angular_weight_fn.format('for_D1R2_bitwise_weights'))
 
 
 if __name__ == '__main__':

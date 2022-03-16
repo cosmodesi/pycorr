@@ -44,6 +44,23 @@ def test_subsampler():
     labels = subsampler.label(catalog[:3])
     assert np.max(labels) < nsamples
 
+    if mpi:
+        mpicomm = mpi.COMM_WORLD
+        positions_mpi = positions
+        if mpicomm.rank != 0:
+            positions_mpi = [p[:0] for p in positions]
+
+        def test_mpi(**kwargs):
+            subsampler_mpi = BoxSubsampler(positions=positions, nsamples=nsamples, **kwargs)
+            if mpicomm.rank == 0:
+                labels_mpi = subsampler_mpi.label(catalog[:3])
+                assert np.allclose(labels_mpi, labels)
+
+        test_mpi(mpicomm=mpicomm, mpiroot=None)
+        test_mpi(mpicomm=mpicomm, mpiroot=0)
+        positions_mpi = [mpi.scatter_array(p, root=0, mpicomm=mpicomm) for p in positions]
+        test_mpi(mpicomm=mpicomm, mpiroot=None)
+
     for nside in [None, 512]:
 
         nsamples = 100
@@ -54,15 +71,19 @@ def test_subsampler():
 
         if mpi:
             mpicomm = mpi.COMM_WORLD
-            subsampler_mpi = KMeansSubsampler(mode='angular', positions=positions, nsamples=nsamples, nside=nside, random_state=42, position_type='xyz', mpicomm=mpicomm, mpiroot=0)
-            labels_mpi = subsampler.label(catalog[:3])
-            assert np.allclose(labels_mpi, labels)
-            if mpicomm.rank == 0:
-                labels_mpi = subsampler.label(catalog[:3])
-            else:
-                labels_mpi = None
-            labels_mpi = mpi.broadcast_array(labels_mpi, mpicomm=mpicomm, root=0)
-            assert np.allclose(labels_mpi, labels)
+            positions_mpi = positions
+            if mpicomm.rank != 0:
+                positions_mpi = [p[:0] for p in positions]
+
+            def test_mpi(**kwargs):
+                subsampler_mpi = KMeansSubsampler(mode='angular', positions=positions_mpi, nsamples=nsamples, nside=nside, random_state=42, position_type='xyz', **kwargs)
+                labels_mpi = subsampler_mpi.label(catalog[:3])
+                assert np.allclose(labels_mpi, labels)
+
+            test_mpi(mpicomm=mpicomm, mpiroot=None)
+            test_mpi(mpicomm=mpicomm, mpiroot=0)
+            positions_mpi = [mpi.scatter_array(p, root=0, mpicomm=mpicomm) for p in positions]
+            test_mpi(mpicomm=mpicomm, mpiroot=None)
 
 
 def test_twopoint_counter(mode='s'):
@@ -249,19 +270,31 @@ def test_twopoint_counter(mode='s'):
                                        weights1=weights1, weights2=None if autocorr else weights2, position_type=position_type, bin_type=bin_type,
                                        dtype=dtype, **kwargs, **options)
 
-            def run(pass_none=False, reverse=False, **kwargs):
+            def run(pass_none=False, pass_zero=False, reverse=False, **kwargs):
                 tmpdata1, tmpdata2 = data1, data2
                 if reverse and not autocorr:
                     tmpdata1, tmpdata2 = data2, data1
                 positions1 = tmpdata1[:npos]
                 positions2 = tmpdata2[:npos]
-                if position_type == 'pos':
-                    positions1 = np.array(positions1).T
-                    positions2 = np.array(positions2).T
                 weights1 = tmpdata1[npos:-1]
                 weights2 = tmpdata2[npos:-1]
                 samples1 = tmpdata1[-1]
-                samples2 =tmpdata2[-1]
+                samples2 = tmpdata2[-1]
+
+                def get_zero(arrays):
+                    return [array[:0] for array in arrays]
+
+                if pass_zero:
+                    positions1 = get_zero(positions1)
+                    positions2 = get_zero(positions2)
+                    weights1 = get_zero(weights1)
+                    weights2 = get_zero(weights2)
+                    samples1 = samples1[:0]
+                    samples2 = samples2[:0]
+
+                if position_type == 'pos':
+                    positions1 = np.array(positions1).T
+                    positions2 = np.array(positions2).T
                 positions1_bak = np.array(positions1, copy=True)
                 positions2_bak = np.array(positions2, copy=True)
                 if weights1: weights1_bak = np.array(weights1, copy=True)
@@ -354,6 +387,8 @@ def test_twopoint_counter(mode='s'):
 
                 test_mpi = run(mpicomm=mpicomm, pass_none=mpicomm.rank != 0, mpiroot=0, nprocs_per_real=2)
                 assert_allclose(test_mpi, test)
+                test_mpi = run(mpicomm=mpicomm, pass_zero=mpicomm.rank != 0, mpiroot=None, nprocs_per_real=2)
+                assert_allclose(test_mpi, test)
                 data1 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data1]
                 data2 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data2]
                 test_mpi = run(mpicomm=mpicomm)
@@ -362,15 +397,16 @@ def test_twopoint_counter(mode='s'):
                     tmp_dir = '_tests'
                     utils.mkdir(tmp_dir)
                     mpicomm = test_mpi.mpicomm
-                    fn = test_mpi.mpicomm.bcast(os.path.join(tmp_dir, 'tmp.npy'), root=0)
-                    fn_txt = test_mpi.mpicomm.bcast(os.path.join(tmp_dir, 'tmp.txt'), root=0)
+                    fn = mpicomm.bcast(os.path.join(tmp_dir, 'tmp.npy'), root=0)
+                    fn_txt = mpicomm.bcast(os.path.join(tmp_dir, 'tmp.txt'), root=0)
                     test_mpi.save(fn)
                     test_mpi.save_txt(fn_txt)
-                    test_mpi.mpicomm.Barrier()
+                    mpicomm.Barrier()
                     test_mpi = JackknifeTwoPointCounter.load(fn)
                     fn = os.path.join(tmp_dir, 'tmp.npy')
                     test_mpi.save(fn)
                     import shutil
+                    mpicomm.Barrier()
                     if mpicomm.rank == 0:
                         shutil.rmtree(tmp_dir)
 

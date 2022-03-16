@@ -5,6 +5,7 @@ from Corrfunc import theory, mocks
 
 from .twopoint_counter import BaseTwoPointCounter, TwoPointCounterError
 from . import utils
+from .utils import _get_box
 
 
 class CorrfuncTwoPointCounter(BaseTwoPointCounter):
@@ -198,10 +199,9 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             elif self.mode == 'rp':
                 key_sep = 'rpavg'
 
-                def _get_box(*positions):
-                    posmin = [min(pos[ii].min() for pos in positions) for ii in range(3)]
-                    posmax = [max(pos[ii].max() for pos in positions) for ii in range(3)]
-                    return np.array(posmax) - np.array(posmin)
+                def _get_boxsize(*positions):
+                    posmin, posmax = _get_box(*positions)
+                    return posmax - posmin
 
                 if self.los_type in ['x','y','z']:
                     positions1, positions2 = rotated_positions()
@@ -209,9 +209,9 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                         boxsize = boxsize()
                     else:
                         if autocorr:
-                            boxsize = _get_box(positions1)
+                            boxsize = _get_boxsize(positions1)
                         else:
-                            boxsize = _get_box(positions1, positions2)
+                            boxsize = _get_boxsize(positions1, positions2)
                         boxsize = boxsize[-1]
                     pimax = boxsize + 1. # los axis is z
                     result = call_corrfunc(theory.DDrppi, autocorr, nthreads=self.nthreads,
@@ -231,9 +231,9 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                     # local calculation, since integrated over pi
                     # \pi = \hat{\ell} \cdot (r_{1} - r_{2}) < | r_{1} - r_{2} | < boxsize
                     if autocorr:
-                        boxsize = _get_box(dpositions1)
+                        boxsize = _get_boxsize(dpositions1)
                     else:
-                        boxsize = _get_box(dpositions1, dpositions2)
+                        boxsize = _get_boxsize(dpositions1, dpositions2)
                     pimax = sum(p**2 for p in boxsize)**0.5 + 1.
                     result = call_corrfunc(mocks.DDrppi_mocks, autocorr, cosmology=1, nthreads=self.nthreads,
                                            binfile=self.edges[0], pimax=pimax, npibins=1,

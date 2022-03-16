@@ -3,7 +3,7 @@ import numpy as np
 from mpi4py import MPI
 from pmesh.domain import GridND
 
-from .utils import BaseClass
+from .utils import BaseClass, _get_box
 from . import utils
 
 
@@ -808,17 +808,8 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
         posmin = np.zeros_like(boxsize)
         posmax = np.asarray(boxsize)
     else:
-        def get_boxsize(positions):
-            posmin, posmax = positions.min(axis=0), positions.max(axis=0)
-            posmin = np.min(mpicomm.allgather(posmin), axis=0)
-            posmax = np.max(mpicomm.allgather(posmax), axis=0)
-            return posmin, posmax
-
-        posmin, posmax = get_boxsize(cpositions1)
-        if not auto:
-            posmin2, posmax2 = get_boxsize(cpositions2)
-            posmin = np.min([posmin, posmin2], axis=0)
-            posmax = np.max([posmax, posmax2], axis=0)
+        posmin, posmax = _get_box(*([cpositions1.T] if auto else [cpositions1.T, cpositions2.T]))
+        posmin, posmax = np.min(mpicomm.allgather(posmin), axis=0), np.max(mpicomm.allgather(posmax), axis=0)
         diff = max(np.abs(posmax - posmin).max(), 1.)
         posmin -= 1e-6 * diff # margin to make sure all positions will be included
         posmax += 1e-6 * diff

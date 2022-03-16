@@ -1,6 +1,7 @@
 """Implements high-level interface to estimate 2-point correlation function."""
 
 import logging
+
 import numpy as np
 
 from .twopoint_estimator import get_twopoint_estimator, TwoPointEstimator

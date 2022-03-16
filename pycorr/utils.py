@@ -149,6 +149,31 @@ def distance(positions):
     return np.sqrt(sum(pos**2 for pos in positions))
 
 
+def _make_array(value, shape, dtype='f8'):
+    # Return numpy array filled with value
+    toret = np.empty(shape, dtype=dtype)
+    toret[...] = value
+    return toret
+
+
+def _nan_to_zero(array):
+    # Replace nans with 0s
+    array = array.copy()
+    mask = np.isnan(array)
+    array[mask] = 0.
+    return array
+
+
+def _get_box(*positions):
+    """Return minimal box containing input positions."""
+    pos_min, pos_max = _make_array(np.inf, 3, dtype='f8'), _make_array(-np.inf, 3, dtype='f8')
+    for position in positions:
+        if len(position[0]):
+            pos_min = np.min([pos_min, [p.min() for p in position]], axis=0)
+            pos_max = np.max([pos_max, [p.max() for p in position]], axis=0)
+    return pos_min, pos_max
+
+
 def cartesian_to_sky(positions, wrap=True, degree=True):
     r"""
     Transform cartesian coordinates into distance, RA, Dec.
@@ -307,7 +332,7 @@ def unpack_bitarrays(*arrays):
     return np.unpackbits(arrayofbytes, axis=0, count=None, bitorder='little')
 
 
-def reformat_bitarrays(*arrays, dtype=np.uint64):
+def reformat_bitarrays(*arrays, dtype=np.uint64, copy=True):
     """
     Reformat input integer arrays into list of arrays of type ``dtype``.
     If, e.g. 6 arrays of type ``np.uint8`` are input, and ``dtype`` is ``np.uint32``,
@@ -320,6 +345,9 @@ def reformat_bitarrays(*arrays, dtype=np.uint64):
 
     dtype : string, dtype
         Type of output integer arrays.
+
+    copy : bool, default=True
+        If ``False``, avoids copy of input arrays if ``dtype`` is uint8.
 
     Returns
     -------
@@ -340,10 +368,13 @@ def reformat_bitarrays(*arrays, dtype=np.uint64):
             newarray = toret[-1]
             nremainingbytes -= 1
             newarray.append(arrayofbyte[...,None])
-    for iarray,array in enumerate(toret):
+    for iarray, array in enumerate(toret):
         npad = dtype.itemsize - len(array)
         if npad: array += [np.zeros_like(array[0])]*npad
-        toret[iarray] = np.squeeze(np.concatenate(array,axis=-1).view(dtype), axis=-1)
+        if len(array) > 1 or copy:
+            toret[iarray] = np.squeeze(np.concatenate(array, axis=-1).view(dtype), axis=-1)
+        else:
+            toret[iarray] = array[0][...,0]
     return toret
 
 
