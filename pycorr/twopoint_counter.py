@@ -744,7 +744,24 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             return _nan_to_zero(self.wcounts/self.wnorm)
 
     def sepavg(self, axis=0, method=None):
-        """Return average of separation for input axis; this is an 1D array of size :attr:`shape[axis]`."""
+        r"""
+        Return average of separation for input axis.
+
+        Parameters
+        ----------
+        axis : int, default=0
+            Axis; if :attr:`mode` is "smu", 0 is :math:`s`, 1 is :math:`mu`;
+            if :attr:`mode` is "rppi", 0 is :math:`r_{p}`, 1 is :math:`\pi`.
+
+        method : str, default=None
+            If ``None``, return average separation from :attr:`seps`.
+            If 'mid', return bin mid-points.
+
+        Returns
+        -------
+        sepavg : array
+            1D array of size :attr:`shape[axis]`.
+        """
         axis = axis % self.ndim
         if method is None:
             if self.compute_sepsavg[axis]:
@@ -755,6 +772,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                 toret = self.seps[axis][tuple(Ellipsis if ii == axis else 0 for ii in range(self.ndim))]
         elif isinstance(method, str):
             allowed_methods = ['mid']
+            method = method.lower()
             if method not in allowed_methods:
                 raise TwoPointCounterError('method should be one of {}'.format(allowed_methods))
             elif method == 'mid':

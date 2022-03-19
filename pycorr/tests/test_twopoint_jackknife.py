@@ -351,7 +351,20 @@ def test_twopoint_counter(mode='s'):
                 fn_txt = os.path.join(tmp_dir, 'tmp.txt')
                 test.save(fn)
                 test.save_txt(fn_txt)
-                ref.save_txt(fn_txt)
+                wnorm = None
+                txt = '# wnorm = '
+                with open(fn_txt, 'r') as file:
+                    for line in file:
+                        if txt in line: wnorm = float(line.replace(txt, ''))
+                assert np.allclose(wnorm, test.wnorm)
+                tmp = np.loadtxt(fn_txt, unpack=True)
+                mids = np.meshgrid(*[test.sepavg(axis=axis, method='mid') for axis in range(test.ndim)], indexing='ij')
+                seps = []
+                for axis in range(test.ndim): seps += [mids[axis], test.seps[axis]]
+                assert np.allclose([tt.reshape(test.shape) for tt in tmp], seps + [test.wcounts], equal_nan=True)
+                for ii in test.realizations:
+                    test.realization(ii).save_txt(fn_txt)
+                    break
                 test2 = JackknifeTwoPointCounter.load(fn)
                 assert_allclose(test2, ref)
                 test3 = test2.copy()

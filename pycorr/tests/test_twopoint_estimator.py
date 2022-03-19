@@ -1,13 +1,15 @@
 import os
 import tempfile
+import pytest
 
 import numpy as np
 
-from pycorr import TwoPointCorrelationFunction, TwoPointEstimator, TwoPointCounter,\
-                   JackknifeTwoPointEstimator, project_to_multipoles, project_to_wp, setup_logging
+from pycorr import TwoPointCorrelationFunction, TwoPointEstimator, TwoPointEstimator, TwoPointCounter,\
+                   JackknifeTwoPointEstimator, project_to_poles, project_to_wp, setup_logging
+from pycorr.twopoint_estimator import TwoPointEstimatorError
 
 
-def generate_catalogs(size=100, boxsize=(1000,)*3, offset=(0,0,0), n_individual_weights=1, n_bitwise_weights=0, seed=42):
+def generate_catalogs(size=100, boxsize=(1000,)*3, offset=(0, 0, 0), n_individual_weights=1, n_bitwise_weights=0, seed=42):
     rng = np.random.RandomState(seed=seed)
     toret = []
     for i in range(2):
@@ -32,7 +34,7 @@ def test_multipoles():
         edges = [np.linspace(0., 1., 10), muedges]
         ss, mumu = np.meshgrid(*[(e[:-1] + e[1:])/2. for e in edges], indexing='ij')
         estimator.sep, estimator.edges, estimator.corr = ss, edges, np.ones_like(ss)
-        s, xi = project_to_multipoles(estimator, ells=(0,2,4))
+        s, xi = project_to_poles(estimator, ells=(0,2,4))
         assert np.allclose(xi[0], 1., atol=1e-9)
         for xiell in xi[1:]: assert np.allclose(xiell, 0., atol=1e-9)
 
@@ -41,7 +43,7 @@ def test_multipoles():
     ells = (0, 2, 4)
     for ellin in ells[1:]:
         estimator.sep, estimator.edges, estimator.corr = ss, edges, special.legendre(ellin)(mumu)
-        s, xi = project_to_multipoles(estimator, ells=ells)
+        s, xi = project_to_poles(estimator, ells=ells)
         for ell, xiell in zip(ells, xi):
             assert np.allclose(xiell, 1. if ell == ellin else 0., atol=1e-3)
 
@@ -239,8 +241,8 @@ def test_estimator(mode='s'):
                 assert_allclose(R1R2, estimator_jackknife.R1R2)
 
             if estimator_jackknife.mode == 'smu':
-                sep, xiell = project_to_multipoles(estimator_nojackknife, ells=(0,2,4))
-                sep, xiell, cov = project_to_multipoles(estimator_jackknife, ells=(0,2,4))
+                sep, xiell = project_to_poles(estimator_nojackknife, ells=(0,2,4))
+                sep, xiell, cov = project_to_poles(estimator_jackknife, ells=(0,2,4))
                 assert cov.shape == (sum([len(xi) for xi in xiell]),)*2
 
             if estimator_jackknife.mode == 'rppi':
@@ -268,33 +270,114 @@ def test_estimator(mode='s'):
                 assert cov.shape == (len(sep),)*2 == (len(wp),)*2
 
             with tempfile.TemporaryDirectory() as tmp_dir:
-                #tmp_dir = '_tests'
+                tmp_dir = '_tests'
                 fn = os.path.join(tmp_dir, 'tmp.npy')
                 fn_txt = os.path.join(tmp_dir, 'tmp.txt')
                 for test, isjkn in zip([estimator_nojackknife, estimator_jackknife], [False, True]):
-                    _, tmp = test(sep=test.sepavg(), return_sep=True, return_std=False)
-                    if mode not in ['smu', 'rppi']:
-                        assert np.allclose(tmp, test.corr, equal_nan=True)
-                    assert np.isnan(test(sep=-1., return_std=False)).all()
-                    if test.mode == 'smu':
-                        t1, t2, t3 = test(sep=5., ell=2), test(ell=2, sep=[5.]*3), test(sep=[5.]*4)
-                        if not isjkn: t1, t2, t3 = [t1], [t2], [t3]
-                        for tt in t1: assert tt.shape == ()
-                        for tt in t2: assert tt.shape == (3, )
-                        for tt in t3: assert tt.shape == (3, 4)
+                    tmp = test(*[test.sepavg(idim) for idim in range(test.ndim)], return_sep=True, return_std=False)
+                    if mode in ['smu', 'rppi']:
+                        assert len(tmp) == 3
                     else:
-                        t1 = test(sep=10.)
-                        t2 = test(sep=[9.]*4)
-                        if not isjkn: t1, t2 = [t1], [t2]
-                        for tt in t1: assert tt.shape == ()
-                        for tt in t2: assert tt.shape == (4, )
+                        _, tmp = tmp
+                        assert np.allclose(tmp, test.corr, equal_nan=True)
+                    assert np.isnan(test(-1., return_std=False)).all()
                     isep = test.shape[0]//2
                     sep = test.edges[0][isep:isep+2]
-                    t1, t2 = test(sep=sep), test(sep=sep[::-1])
-                    if not isjkn: t1, t2 = [t1], [t2]
-                    for tt1, tt2 in zip(t1, t2): assert np.allclose(tt1, tt2[..., ::-1], atol=0)
+                    arrays = test(sep), test(sep[::-1])
+                    if not isjkn: arrays = [[array] for array in arrays]
+                    for array1, array2 in zip(*arrays): assert np.allclose(array1, array2[::-1], atol=0)
+                    zero = test.corr.flat[0]
+                    test.corr.flat[0] = np.nan # to test ignore_nan
+                    if test.mode == 'smu':
+                        # smu
+                        arrays = test(sep, [0., 0.4]), test(sep[::-1], [0.4, 0.])
+                        if not isjkn: arrays = [[array] for array in arrays]
+                        for array1, array2 in zip(*arrays): assert np.allclose(array1, array2[::-1,::-1], atol=0)
+                        test.save_txt(fn_txt)
+                        tmp = np.loadtxt(fn_txt, unpack=True)
+                        mids = np.meshgrid(*[test.sepavg(axis=axis, method='mid') for axis in range(test.ndim)], indexing='ij')
+                        assert np.allclose([tt.reshape(test.shape) for tt in tmp[:4]], [mids[0], test.seps[0], mids[1], test.seps[1]], equal_nan=True)
+                        assert np.allclose([tt.reshape(test.shape) for tt in tmp[4:]], test(return_sep=False), equal_nan=True)
+                        # poles
+                        assert np.isnan(test(ell=2)).any()
+                        assert not np.isnan(test(ell=2, ignore_nan=True)).any()
+                        assert np.allclose(test(sep, ells=(0, 2, 4)), test(sep, mode='poles'), atol=0)
+                        arrays = test(5., ell=2), test([5.]*3, ell=2), test([5.]*4, ells=(0, 2, 4)), test([5.]*4, [0.1, 0.2]) # corr, and std if jackknife
+                        if not isjkn: arrays = [[array] for array in arrays]
+                        for array in arrays[0]: assert array.shape == ()
+                        for array in arrays[1]: assert array.shape == (3, )
+                        for array in arrays[2]: assert array.shape == (3, 4)
+                        for array in arrays[3]: assert array.shape == (4, 2)
+                        arrays = test(sep, ell=2), test(sep[::-1], ell=2), test(sep, ell=[0, 2]), test(sep[::-1], ell=[2, 0]), test(sep, [0., 0.4]), test(sep[::-1], [0.4, 0.])
+                        if not isjkn: arrays = [[array] for array in arrays]
+                        for array1, array2 in zip(*arrays[:2]): assert np.allclose(array1, array2[::-1], atol=0)
+                        for array1, array2 in zip(*arrays[2:4]): assert np.allclose(array1, array2[::-1,::-1], atol=0)
+                        test.save_txt(fn_txt, ells=(0, 2))
+                        tmp = np.loadtxt(fn_txt, unpack=True)
+                        assert np.allclose(tmp[0], test.sepavg(method='mid'))
+                        tmp2 = test(return_sep=True, ells=(0, 2))
+                        assert np.allclose(tmp[1:], np.concatenate([tmp2[0][None,:]] + tmp2[1:], axis=0), equal_nan=True)
+                        # wedges
+                        assert np.isnan(test(wedges=(-1., 0.5))).any()
+                        assert not np.isnan(test(wedges=(-1., 0.5), ignore_nan=True)).any()
+                        assert np.allclose(test(sep, wedges=(-1., -2./3, -1./3., 0., 1./3, 2./3, 1.)), test(sep, mode='wedges'), atol=0)
+                        arrays = test(5., wedges=(-1., -0.8)), test([5.]*3, wedges=(-1., -0.8)), test([sep[0]]*4, wedges=(0.1, 0.3, 0.8)), test([sep[0]]*4, wedges=((0.1, 0.3), (0.3, 0.8)))
+                        if not isjkn: arrays = [[array] for array in arrays]
+                        for array in arrays[0]: assert array.shape == ()
+                        for array in arrays[1]: assert array.shape == (3, )
+                        for array in arrays[2]: assert array.shape == (2, 4)
+                        for array in arrays[3]: assert array.shape == (2, 4)
+                        for array1, array2 in zip(*arrays[2:4]): assert np.allclose(array1, array2, atol=0)
+                        arrays = test(sep, wedges=(-1., -0.8)), test(sep[::-1], wedges=(-1., -0.8)), test(sep, wedges=(0.1, 0.3, 0.8)), test(sep[::-1], wedges=((0.3, 0.8), (0.1, 0.3)))
+                        if not isjkn: arrays = [[array] for array in arrays]
+                        for array1, array2 in zip(*arrays[:2]): assert np.allclose(array1, array2[::-1], atol=0)
+                        for array1, array2 in zip(*arrays[2:4]): assert np.allclose(array1, array2[::-1,::-1], atol=0)
+                        test.save_txt(fn_txt, wedges=(0.1, 0.3, 0.8))
+                        tmp = np.loadtxt(fn_txt, unpack=True)
+                        assert np.allclose(tmp[0], test.sepavg(method='mid'))
+                        tmp2 = test(return_sep=True, wedges=(0.1, 0.3, 0.8))
+                        assert np.allclose(tmp[1:], np.concatenate([tmp2[0][None,:]] + tmp2[1:], axis=0), equal_nan=True)
+                    elif test.mode == 'rppi':
+                        # rppi
+                        arrays = test(sep, [0., 0.4]), test(sep[::-1], [0.4, 0.])
+                        if not isjkn: arrays = [[array] for array in arrays]
+                        for array1, array2 in zip(*arrays): assert np.allclose(array1, array2[::-1,::-1], atol=0)
+                        test.save_txt(fn_txt)
+                        tmp = np.loadtxt(fn_txt, unpack=True)
+                        mids = np.meshgrid(*[test.sepavg(axis=axis, method='mid') for axis in range(test.ndim)], indexing='ij')
+                        assert np.allclose([tt.reshape(test.shape) for tt in tmp[:4]], [mids[0], test.seps[0], mids[1], test.seps[1]], equal_nan=True)
+                        assert np.allclose([tt.reshape(test.shape) for tt in tmp[4:]], test(return_sep=False), equal_nan=True)
+                        # wp
+                        assert np.isnan(test(pimax=None)).any()
+                        assert not np.isnan(test(pimax=None, ignore_nan=True)).any()
+                        arrays = test(10., pimax=60), test([9.]*4, pimax=60), test([9.]*4, [10., 12.])
+                        if not isjkn: arrays = [[array] for array in arrays]
+                        for array in arrays[0]: assert array.shape == ()
+                        for array in arrays[1]: assert array.shape == (4, )
+                        for array in arrays[2]: assert array.shape == (4, 2)
+                        arrays = test(sep, pimax=60), test(sep[::-1], pimax=60)
+                        if not isjkn: arrays = [[array] for array in arrays]
+                        for array1, array2 in zip(*arrays): assert np.allclose(array1, array2[::-1], atol=0)
+                        assert np.allclose(test(sep, pimax=40), test(sep, mode='wp'), atol=0)
+                        test.save_txt(fn_txt, pimax=40.)
+                        tmp = np.loadtxt(fn_txt, unpack=True)
+                        assert np.allclose(tmp[0], test.sepavg(method='mid'))
+                        assert np.allclose(tmp[1:], test(pimax=40., return_sep=True), equal_nan=True)
+                    else:
+                        with pytest.raises(TwoPointEstimatorError):
+                            test(5., ell=2)
+                        with pytest.raises(TwoPointEstimatorError):
+                            test(10., pimax=60)
+                        arrays = test(10.), test([9.]*4)
+                        if not isjkn: arrays = [[array] for array in arrays]
+                        for array in arrays[0]: assert array.shape == ()
+                        for array in arrays[1]: assert array.shape == (4, )
+                        test.save_txt(fn_txt)
+                        tmp = np.loadtxt(fn_txt, unpack=True)
+                        assert np.allclose(tmp[0], test.sepavg(method='mid'))
+                        assert np.allclose(tmp[1:], test(return_sep=True), equal_nan=True)
+                    test.corr.flat[0] = zero
                     test.save(fn)
-                    test.save_txt(fn_txt)
                     test2 = TwoPointEstimator.load(fn)
                     assert type(TwoPointCorrelationFunction.from_state(test2.__getstate__())) is type(test2)
                     test2 = TwoPointCorrelationFunction.load(fn)
