@@ -217,7 +217,9 @@ def test_twopoint_counter(mode='s'):
 
     for autocorr in [False, True]:
         list_options.append({'autocorr':autocorr})
+        # one-column of weights
         list_options.append({'autocorr':autocorr, 'weights_one':[1]})
+        # position type
         for position_type in ['rdd', 'pos', 'xyz'] + (['rd'] if mode == 'theta' else []):
             list_options.append({'autocorr':autocorr, 'position_type':position_type})
         for dtype in (['f8'] if mode == 'theta' else ['f4', 'f8']): # in theta mode, lots of rounding errors!
@@ -243,7 +245,7 @@ def test_twopoint_counter(mode='s'):
                 list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'weight_attrs':{'nrealizations':129,'noffset':3}, 'dtype':dtype, 'isa':isa})
                 list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'n_bitwise_weights':2, 'weight_attrs':{'noffset':0,'default_value':0.8}, 'dtype':dtype, 'isa':isa})
 
-                # twopoint_weights
+                # twopoint weights
                 if itemsize > 4:
                     list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'dtype':dtype, 'isa':isa})
                     list_options.append({'autocorr':autocorr, 'twopoint_weights':twopoint_weights, 'los':'y', 'dtype':dtype, 'isa':isa})
@@ -341,7 +343,7 @@ def test_twopoint_counter(mode='s'):
             itemsize = np.dtype('f8' if dtype is None else dtype).itemsize
             tol = {'atol':1e-5, 'rtol':2e-1 if twopoint_weights is not None else 1e-2} if itemsize <= 4 else {'atol':1e-8, 'rtol':1e-6}
 
-            wcounts_ref, sep_ref = ref_func(edges, data1_ref, data2=None if autocorr else data2_ref, n_bitwise_weights=n_bitwise_weights, twopoint_weights=twopoint_weights, autocorr=autocorr, **options_ref, **weight_attrs)
+            wcounts_ref, sep_ref = ref_func(edges, data1_ref, data2=data2_ref if not autocorr else None, n_bitwise_weights=n_bitwise_weights, twopoint_weights=twopoint_weights, autocorr=autocorr, **options_ref, **weight_attrs)
 
             if bitwise_type is not None and n_bitwise_weights > 0:
 
@@ -435,6 +437,10 @@ def test_twopoint_counter(mode='s'):
                         norm_ref = np.sum(w1)*np.sum(w2)
             else:
                 norm_ref = test.wnorm # too lazy to recode
+
+            test_zero = run(pass_zero=True)
+            assert np.allclose(test_zero.wcounts, 0.)
+            assert np.allclose(test_zero.wnorm, 0.)
 
             assert np.allclose(test.wnorm, norm_ref, **tol)
             mask_zero = np.zeros_like(test.wcounts, dtype='?')

@@ -1,6 +1,8 @@
 """Implements base two-point counter, to be extended when implementing a new engine."""
 
 import os
+import time
+
 import numpy as np
 
 from .utils import BaseClass, get_mpi, _make_array, _nan_to_zero
@@ -416,7 +418,11 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         self.wnorm = self.normalization()
         self._set_zeros()
         if self.size1 * self.size2:
+            t0 = time.time()
             self.run()
+            t1 = time.time()
+            if not self.with_mpi or self.mpicomm.rank == 0:
+                self.log_debug('Two-point counts computed in elapsed time {:.2f} s.'.format(t1 - t0))
         del self.positions1, self.positions2, self.weights1, self.weights2
 
     def run(self):
@@ -558,14 +564,16 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                         self.weights1 = [get_inverse_probability_weight(self.weights1[:n_bitwise_weights1], nrealizations=nrealizations,
                                                                         noffset=noffset, default_value=default_value, dtype=self.dtype)*indweights]
                         self.n_bitwise_weights = 0
-                        self.log_info('Setting IIP weights for first catalog.')
+                        if not self.with_mpi or self.mpicomm.rank == 0:
+                            self.log_info('Setting IIP weights for first catalog.')
                     elif n_bitwise_weights1 == 0:
                         indweights = self.weights2[n_bitwise_weights2] if len(self.weights2) > n_bitwise_weights2 else 1.
                         nrealizations = get_nrealizations(n_bitwise_weights2)
                         self.weights2 = [get_inverse_probability_weight(self.weights2[:n_bitwise_weights2], nrealizations=nrealizations,
                                                                         noffset=noffset, default_value=default_value, dtype=self.dtype)*indweights]
                         self.n_bitwise_weights = 0
-                        self.log_info('Setting IIP weights for second catalog.')
+                        if not self.with_mpi or self.mpicomm.rank == 0:
+                            self.log_info('Setting IIP weights for second catalog.')
                     else:
                         raise TwoPointCounterError('Incompatible length of bitwise weights: {:d} and {:d} bytes'.format(n_bitwise_weights1, n_bitwise_weights2))
 
@@ -633,15 +641,16 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         if self.periodic:
             self.boxsize = _make_array(boxsize, 3, dtype='f8')
 
-    def _autocounts(self):
+    def _sum_auto_weights(self):
         """Return auto-counts, that are pairs of same objects."""
         if not self.autocorr:
             return 0.
         weights = 1.
-        if self.cos_twopoint_weights is not None and self.cos_twopoint_weights.sep[-1] >= 1.:
-            weights *= np.interp(1., self.cos_twopoint_weights.sep, self.cos_twopoint_weights.weight)
+        if self.cos_twopoint_weights is not None:
+            weights *= np.interp(1., self.cos_twopoint_weights.sep, self.cos_twopoint_weights.weight, left=1., right=1.)
         if not self.weights1:
             return self.size1*weights
+        # up to now weights is scalar
         if self.n_bitwise_weights:
             weights *= get_inverse_probability_weight(self.weights1[:self.n_bitwise_weights], self.weights1[:self.n_bitwise_weights], nrealizations=self.weight_attrs['nrealizations'],
                                                       noffset=self.weight_attrs['noffset'], default_value=self.weight_attrs['default_value'], dtype=self.dtype)
@@ -697,7 +706,8 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                 w2, c2 = w1, c1
             else:
                 w2, c2 = binned_weights(self.weights2)
-            joint = utils.joint_occurences(nrealizations, max_occurences=noffset+max(c1.max(), c2.max()), noffset=noffset + nalways, default_value=default_value)
+            max_occurences = noffset + max(c.max() if c.size else 0 for c in (c1, c2))
+            joint = utils.joint_occurences(nrealizations, max_occurences=max_occurences, noffset=noffset + nalways, default_value=default_value)
             sumw_cross = 0
             for c1_, w1_ in zip(c1, w1):
                 for c2_, w2_ in zip(c2, w2):

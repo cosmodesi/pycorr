@@ -80,12 +80,12 @@ def test_clustering(seed=42):
     ax.set_xlabel(r'$\theta$ [deg]')
     ax.set_ylabel(r'$\theta w(\theta)$')
     ax = lax[1]
-    ells = (0,2,4)
+    ells = (0, 2, 4)
     sep, xi = run('multi', edges=np.linspace(10, 80, 41), ells=ells)
     for ill, ell in enumerate(ells):
-        ax.plot(sep, sep**2*xi[ill], label='$\ell = {:d}$'.format(ell), color='C{:d}'.format(ill))
         xi_theory = xi_kaiser_model(sep, ell=ell)
         ax.plot(sep, sep**2*xi_theory, label='theory' if ill == 0 else None, color='C{:d}'.format(ill), linestyle=':')
+        ax.plot(sep, sep**2*xi[ill], label='$\ell = {:d}$'.format(ell), color='C{:d}'.format(ill))
     ax.set_xlabel('$s$ [$\mathrm{Mpc}/h$]')
     ax.set_ylabel(r'$s^{2}\xi_{\ell}(s)$ [$(\mathrm{Mpc}/h)^{2}$]')
     ax.legend()

@@ -56,6 +56,10 @@ def test_estimator(mode='s'):
     edges = np.linspace(1, 100, 10)
     size = 1000
     boxsize = (500,)*3
+    from collections import namedtuple
+    TwoPointWeight = namedtuple('TwoPointWeight', ['sep', 'weight'])
+    twopoint_weights = TwoPointWeight(np.logspace(-4, 0, 40), np.linspace(4., 1., 40))
+
     list_options = []
     list_options.append({'weights_one':['D1', 'R2']})
     if mode not in ['theta', 'rp']:
@@ -66,12 +70,16 @@ def test_estimator(mode='s'):
         if estimator not in ['weight']:
             list_options.append({'estimator':estimator, 'with_shifted':True})
             list_options.append({'estimator':estimator, 'with_shifted':True, 'autocorr':True})
-        if mode == 'smu':
-            list_options.append({'estimator':estimator, 'los':'firstpoint', 'autocorr':True})
-            list_options.append({'estimator':estimator, 'los':'endpoint', 'autocorr':True})
+        # pip
         list_options.append({'estimator':estimator, 'n_individual_weights':0})
         list_options.append({'estimator':estimator, 'n_individual_weights':1, 'n_bitwise_weights':1, 'compute_sepsavg':False})
         list_options.append({'estimator':estimator, 'n_individual_weights':1, 'n_bitwise_weights':1})
+        # twopoint weights
+        list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights})
+        # los
+        if mode == 'smu':
+            list_options.append({'estimator':estimator, 'los':'firstpoint', 'twopoint_weights':twopoint_weights, 'autocorr':True})
+            list_options.append({'estimator':estimator, 'los':'endpoint', 'autocorr':False})
 
     mpi = False
     try:
@@ -95,8 +103,9 @@ def test_estimator(mode='s'):
         for options in list_options:
             options = options.copy()
             weights_one = options.pop('weights_one', [])
-            n_individual_weights = options.get('n_individual_weights',1)
-            n_bitwise_weights = options.get('n_bitwise_weights',0)
+            n_individual_weights = options.get('n_individual_weights', 1)
+            n_bitwise_weights = options.get('n_bitwise_weights', 0)
+            twopoint_weights = options.pop('twopoint_weights', None)
             data1, data2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights, seed=42)
             randoms1, randoms2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights, seed=43)
             shifted1, shifted2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights, seed=44)
@@ -140,6 +149,8 @@ def test_estimator(mode='s'):
                     shifted_positions1, shifted_weights1 = [position[~mask] for position in shifted_positions1], [weight[~mask] for weight in shifted_weights1]
                     mask = shifted_samples2 == ii
                     shifted_positions2, shifted_weights2 = [position[~mask] for position in shifted_positions2], [weight[~mask] for weight in shifted_weights2]
+                if twopoint_weights is not None:
+                    kwargs['D1D2_twopoint_weights'] = kwargs['D1R2_twopoint_weights'] = twopoint_weights
 
                 return TwoPointCorrelationFunction(mode=mode, edges=edges, engine=engine, data_positions1=data_positions1, data_positions2=None if autocorr else data_positions2,
                                                    data_weights1=data_weights1, data_weights2=None if autocorr else data_weights2,
@@ -167,6 +178,9 @@ def test_estimator(mode='s'):
                     randoms_positions2, randoms_weights2, randoms_samples2 = get_zero(randoms_positions2), get_zero(randoms_weights2), randoms_samples2[:0]
                     shifted_positions1, shifted_weights1, shifted_samples1 = get_zero(shifted_positions1), get_zero(shifted_weights1), shifted_samples1[:0]
                     shifted_positions2, shifted_weights2, shifted_samples2 = get_zero(shifted_positions2), get_zero(shifted_weights2), shifted_samples2[:0]
+
+                if twopoint_weights is not None:
+                    kwargs['D1D2_twopoint_weights'] = kwargs['D1R2_twopoint_weights'] = twopoint_weights
 
                 return TwoPointCorrelationFunction(mode=mode, edges=edges, engine=engine, data_positions1=None if pass_none else data_positions1, data_positions2=None if pass_none or autocorr else data_positions2,
                                                    data_weights1=None if pass_none else data_weights1, data_weights2=None if pass_none or autocorr else data_weights2,
@@ -209,7 +223,7 @@ def test_estimator(mode='s'):
 
             if estimator in ['landyszalay', 'davispeebles', 'natural', 'weight']:
                 D1D2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:npos], positions2=None if autocorr else data2[:npos],
-                                       weights1=data1[npos:-1], weights2=None if autocorr else data2[npos:-1], **options_counts)
+                                       weights1=data1[npos:-1], weights2=None if autocorr else data2[npos:-1], twopoint_weights=twopoint_weights, **options_counts)
 
                 assert_allclose(D1D2, estimator_jackknife.D1D2)
             if with_shifted:
@@ -222,12 +236,12 @@ def test_estimator(mode='s'):
                 randoms2 = shifted2
             if estimator in ['landyszalay', 'davispeebles', 'residual']:
                 D1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:npos], positions2=randoms1[:npos] if autocorr else randoms2[:npos],
-                                       weights1=data1[npos:-1], weights2=randoms1[npos:-1] if autocorr else randoms2[npos:-1], **options_counts)
+                                       weights1=data1[npos:-1], weights2=randoms1[npos:-1] if autocorr else randoms2[npos:-1], twopoint_weights=twopoint_weights, **options_counts)
                 assert_allclose(D1R2, estimator_jackknife.D1S2)
                 assert estimator_jackknife.with_reversed == ((not autocorr or los in ['firstpoint', 'endpoint']) and estimator in ['landyszalay'])
                 if estimator_jackknife.with_reversed:
                     R1D2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:npos], positions2=data1[:npos] if autocorr else data2[:npos],
-                                           weights1=randoms1[npos:-1], weights2=data1[npos:-1] if autocorr else data2[npos:-1], **options_counts)
+                                           weights1=randoms1[npos:-1], weights2=data1[npos:-1] if autocorr else data2[npos:-1], twopoint_weights=twopoint_weights if autocorr else None, **options_counts)
                     assert_allclose(R1D2, estimator_jackknife.S1D2)
                 else:
                     assert_allclose(D1R2, estimator_jackknife.D1S2)
@@ -288,6 +302,8 @@ def test_estimator(mode='s'):
                     for array1, array2 in zip(*arrays): assert np.allclose(array1, array2[::-1], atol=0)
                     zero = test.corr.flat[0]
                     test.corr.flat[0] = np.nan # to test ignore_nan
+                    test[::test.shape[0]].get_corr()
+                    if isjkn: assert test[::test.shape[0]].get_corr(return_sep=False)[1].ndim == 2
                     if test.mode == 'smu':
                         # smu
                         arrays = test(sep, [0., 0.4]), test(sep[::-1], [0.4, 0.])
@@ -299,6 +315,7 @@ def test_estimator(mode='s'):
                         assert np.allclose([tt.reshape(test.shape) for tt in tmp[:4]], [mids[0], test.seps[0], mids[1], test.seps[1]], equal_nan=True)
                         assert np.allclose([tt.reshape(test.shape) for tt in tmp[4:]], test(return_sep=False), equal_nan=True)
                         # poles
+                        if isjkn: assert test[::test.shape[0]].get_corr(ells=(0, 2), return_sep=False)[1].ndim == 2
                         assert np.isnan(test(ell=2)).any()
                         assert not np.isnan(test(ell=2, ignore_nan=True)).any()
                         assert np.allclose(test(sep, ells=(0, 2, 4)), test(sep, mode='poles'), atol=0)
@@ -318,9 +335,10 @@ def test_estimator(mode='s'):
                         tmp2 = test(return_sep=True, ells=(0, 2))
                         assert np.allclose(tmp[1:], np.concatenate([tmp2[0][None,:]] + tmp2[1:], axis=0), equal_nan=True)
                         # wedges
+                        if isjkn: assert test[::test.shape[0]].get_corr(wedges=(-1., -2./3, -1./3.), return_sep=False)[1].ndim == 2
                         assert np.isnan(test(wedges=(-1., 0.5))).any()
                         assert not np.isnan(test(wedges=(-1., 0.5), ignore_nan=True)).any()
-                        assert np.allclose(test(sep, wedges=(-1., -2./3, -1./3., 0., 1./3, 2./3, 1.)), test(sep, mode='wedges'), atol=0)
+                        assert np.allclose(test(sep, wedges=(-1., -2./3, -1./3, 0., 1./3, 2./3, 1.)), test(sep, mode='wedges'), atol=0)
                         arrays = test(5., wedges=(-1., -0.8)), test([5.]*3, wedges=(-1., -0.8)), test([sep[0]]*4, wedges=(0.1, 0.3, 0.8)), test([sep[0]]*4, wedges=((0.1, 0.3), (0.3, 0.8)))
                         if not isjkn: arrays = [[array] for array in arrays]
                         for array in arrays[0]: assert array.shape == ()
@@ -348,6 +366,7 @@ def test_estimator(mode='s'):
                         assert np.allclose([tt.reshape(test.shape) for tt in tmp[:4]], [mids[0], test.seps[0], mids[1], test.seps[1]], equal_nan=True)
                         assert np.allclose([tt.reshape(test.shape) for tt in tmp[4:]], test(return_sep=False), equal_nan=True)
                         # wp
+                        if isjkn: assert test[::test.shape[0]].get_corr(pimax=20, return_sep=False)[1].ndim == 2
                         assert np.isnan(test(pimax=None)).any()
                         assert not np.isnan(test(pimax=None, ignore_nan=True)).any()
                         arrays = test(10., pimax=60), test([9.]*4, pimax=60), test([9.]*4, [10., 12.])

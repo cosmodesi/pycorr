@@ -12,7 +12,7 @@ from . import utils
 
 
 _default_ells = (0, 2, 4)
-_default_wedges = (-1., -2./3, -1./3., 0., 1./3, 2./3, 1.)
+_default_wedges = (-1., -2./3, -1./3, 0., 1./3, 2./3, 1.)
 
 
 def _format_ells(ells):
@@ -886,8 +886,11 @@ def project_to_poles(estimator, ells=_default_ells, return_sep=True, return_cov=
     if return_cov is False:
         return toret if len(toret) > 1 else toret[0]
     try:
-        realizations = [np.concatenate(project_to_poles(estimator.realization(ii, **kwargs), ells=ells, ignore_nan=ignore_nan)[1]).T for ii in estimator.realizations]
-        toret.append((len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0))
+        realizations = [project_to_poles(estimator.realization(ii, **kwargs),
+                                          ells=ells, return_sep=False, return_cov=False, ignore_nan=ignore_nan).ravel()
+                        for ii in estimator.realizations]
+        cov = (len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0)
+        toret.append(np.atleast_2d(cov))
     except AttributeError as exc:
         if return_cov is True:
             raise TwoPointEstimatorError('Input estimator has no jackknife realizations') from exc
@@ -964,8 +967,11 @@ def project_to_wedges(estimator, wedges=_default_wedges, return_sep=True, return
     if return_cov is False:
         return toret if len(toret) > 1 else toret[0]
     try:
-        realizations = [np.concatenate(project_to_wedges(estimator.realization(ii, **kwargs), wedges=wedges, ignore_nan=ignore_nan)[1]).T for ii in estimator.realizations]
-        toret.append((len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0))
+        realizations = [project_to_wedges(estimator.realization(ii, **kwargs),
+                                          wedges=wedges, return_sep=False, return_cov=False, ignore_nan=ignore_nan).ravel()
+                        for ii in estimator.realizations]
+        cov = (len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0)
+        toret.append(np.atleast_2d(cov))
     except AttributeError as exc:
         if return_cov is True:
             raise TwoPointEstimatorError('Input estimator has no jackknife realizations') from exc
@@ -1032,8 +1038,9 @@ def project_to_wp(estimator, pimax=None, return_sep=True, return_cov=None, ignor
     if return_cov is False:
         return toret if len(toret) > 1 else toret[0]
     try:
-        realizations = [project_to_wp(estimator.realization(ii, **kwargs), ignore_nan=ignore_nan)[1] for ii in estimator.realizations] # no need to provide pimax, as selection already performed
-        toret.append((len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0))
+        realizations = [project_to_wp(estimator.realization(ii, **kwargs), return_sep=False, return_cov=False, ignore_nan=ignore_nan) for ii in estimator.realizations] # no need to provide pimax, as selection already performed
+        cov = (len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0)
+        toret.append(np.atleast_2d(cov))
     except AttributeError as exc:
         if return_cov is True:
             raise TwoPointEstimatorError('Input estimator has no jackknife realizations') from exc

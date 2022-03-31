@@ -261,12 +261,10 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     with_randoms = not is_none(randoms_positions1)
     with_shifted = not is_none(shifted_positions1)
     if with_shifted and not with_randoms:
-        raise ValueError('Shifted catalog is provided, but no randoms.')
+        raise ValueError('Shifted catalog is provided, but no randoms')
     with_jackknife = not is_none(data_samples1)
     Estimator = get_twopoint_estimator(estimator, with_DR=with_randoms, with_jackknife=with_jackknife)
     if log: logger.info('Using estimator {}.'.format(Estimator))
-    if with_jackknife: Counter = JackknifeTwoPointCounter
-    else: Counter = TwoPointCounter
 
     positions = {'D1':data_positions1, 'D2':data_positions2, 'R1':randoms_positions1, 'R2':randoms_positions2, 'S1': shifted_positions1, 'S2':shifted_positions2}
     weights = {'D1':data_weights1, 'D2':data_weights2, 'R1':randoms_weights1, 'R2':randoms_weights2, 'S1':shifted_weights1, 'S2':shifted_weights2}
@@ -287,12 +285,12 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         if autocorr and label21 in counts and counts[label21].is_reversible:
             continue
         if label12 == 'R1R2' and not with_randoms:
-                if log: logger.info('Analytically computing two-point counts {}.'.format(label12))
-                size1 = counts['D1D2'].size1
-                size2 = None
-                if not autocorr:
-                    size2 = counts['D1D2'].size2
-                counts[label12] = AnalyticTwoPointCounter(mode, edges, boxsize, size1=size1, size2=size2)
+            if log: logger.info('Analytically computing two-point counts {}.'.format(label12))
+            size1 = counts['D1D2'].size1
+            size2 = None
+            if not autocorr:
+                size2 = counts['D1D2'].size2
+            counts[label12] = AnalyticTwoPointCounter(mode, edges, boxsize, size1=size1, size2=size2)
         else:
             if log: logger.info('Computing two-point counts {}.'.format(label12))
             # label12 is D1R2, but we only have R1, so switch label2 to R1; same for D1S2
@@ -304,13 +302,22 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
                     if is_none(positions[label]):
                         raise ValueError('Estimator requires {} to be provided'.format(label))
             jackknife_kwargs = {}
+            with_jackknife = not is_none(samples[label1])
             if with_jackknife:
+                Counter = JackknifeTwoPointCounter
                 jackknife_kwargs['samples1'] = samples[label1]
                 jackknife_kwargs['samples2'] = samples[label2]
+            else:
+                Counter = TwoPointCounter
+            twopoint_weights_kwargs = {'twopoint_weights': twopoint_weights[label12], 'weight_type': weight_type[label12]}
+            # in case of autocorrelation, los = firstpoint or endpoint, R1D2 = R1D1 should get the same angular weight as D1R2 = D2R1
+            if autocorr and label2[:-1] != label1[:-1]:
+                for name in ['twopoint_weights', 'weight_type']:
+                    if twopoint_weights_kwargs[name] is None: twopoint_weights_kwargs[name] = locals()[name][label21]
+
             counts[label12] = Counter(mode, edges, positions[label1], positions2=positions[label2],
                                       weights1=weights[label1], weights2=weights[label2],
-                                      twopoint_weights=twopoint_weights[label12], weight_type=weight_type[label12],
-                                      boxsize=boxsize, mpicomm=mpicomm, mpiroot=mpiroot, **jackknife_kwargs, **kwargs)
+                                      boxsize=boxsize, mpicomm=mpicomm, mpiroot=mpiroot, **jackknife_kwargs, **twopoint_weights_kwargs, **kwargs)
     return Estimator(**counts)
 
 

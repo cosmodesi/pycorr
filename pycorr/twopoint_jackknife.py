@@ -844,11 +844,12 @@ class JackknifeTwoPointEstimator(BaseTwoPointEstimator):
             try:
                 kw[name] = counts.realization(ii, **kwargs)
             except AttributeError:
-                kw[name] = counts # in case counts are not jackknife, e.g. analytic randoms
+                kw[name] = counts # in case counts are not jackknife, e.g. analytic randoms (but that'd be wrong!)
         return cls(**kw)
 
     def cov(self, **kwargs):
-        return (self.nrealizations - 1) * np.cov([self.realization(ii, **kwargs).corr.ravel() for ii in self.realizations], rowvar=False, ddof=0)
+        cov = (self.nrealizations - 1) * np.cov([self.realization(ii, **kwargs).corr.ravel() for ii in self.realizations], rowvar=False, ddof=0)
+        return np.atleast_2d(cov)
 
     @classmethod
     def concatenate(cls, *others):
@@ -893,4 +894,4 @@ for name, cls in list(BaseTwoPointEstimator._registry.items()):
 
     if name not in ['base', 'jackknife']:
         name_cls = 'Jackknife{}'.format(cls.__name__)
-        globals()[name_cls] = type(BaseTwoPointEstimator)(name_cls, (cls, JackknifeTwoPointEstimator), {'name':'jackknife-{}'.format(name)})
+        globals()[name_cls] = type(BaseTwoPointEstimator)(name_cls, (cls, JackknifeTwoPointEstimator), {'name':'jackknife-{}'.format(name), '__module__': __name__})

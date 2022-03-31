@@ -117,7 +117,9 @@ def test_twopoint_counter(mode='s'):
     for autocorr in [False, True]:
 
         list_options.append({'autocorr':autocorr})
+        # one-column of weights
         list_options.append({'autocorr':autocorr, 'weights_one':[1]})
+        # position type
         for position_type in ['rdd', 'pos', 'xyz'] + (['rd'] if mode == 'theta' else []):
             list_options.append({'autocorr':autocorr, 'position_type':position_type})
 
@@ -143,7 +145,7 @@ def test_twopoint_counter(mode='s'):
                 list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'n_bitwise_weights':1, 'bitwise_type': 'i4', 'iip':1, 'dtype':dtype, 'isa':isa})
                 list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'weight_attrs':{'nrealizations':129,'noffset':3}, 'dtype':dtype, 'isa':isa})
                 list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'n_bitwise_weights':2, 'weight_attrs':{'noffset':0,'default_value':0.8}, 'dtype':dtype, 'isa':isa})
-                # twopoint_weights
+                # twopoint weights
                 if itemsize > 4:
                     list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'dtype':dtype, 'isa':isa})
                     list_options.append({'autocorr':autocorr, 'twopoint_weights':twopoint_weights, 'los':'y', 'dtype':dtype, 'isa':isa})
@@ -333,6 +335,10 @@ def test_twopoint_counter(mode='s'):
             ref_ii = run_ref(ii=ii)
             test_ii = test.realization(ii, correction=None)
             assert_allclose(test_ii, ref_ii)
+
+            test_zero = run(pass_zero=True)
+            assert np.allclose(test_zero.wcounts, 0.)
+            assert np.allclose(test_zero.wnorm, 0.)
 
             if engine == 'corrfunc':
                 assert test.is_reversible == autocorr or (los not in ['firstpoint', 'endpoint'])
