@@ -74,14 +74,14 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                 return toret
 
             positions1 = rotate(dpositions1)
-            positions2 = [None]*3
+            positions2 = [None] * 3
             if not autocorr:
                 positions2 = rotate(dpositions2)
             return positions1, positions2
 
         def sky_positions():
             positions1 = utils.cartesian_to_sky(dpositions1, degree=True)
-            positions2 = [None]*3
+            positions2 = [None] * 3
             if not autocorr:
                 positions2 = utils.cartesian_to_sky(dpositions2, degree=True)
             return positions1, positions2
@@ -94,7 +94,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
         if self.n_bitwise_weights:
             output_weightavg = True
             weight_type = 'inverse_bitwise'
-            dtype = {4:np.int32, 8:np.int64}[self.dtype.itemsize]
+            dtype = {4: np.int32, 8: np.int64}[self.dtype.itemsize]
 
             def reformat_bitweights(weights):
                 return utils.reformat_bitarrays(*weights[:self.n_bitwise_weights], dtype=dtype) + weights[self.n_bitwise_weights:]
@@ -102,7 +102,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             weights1 = reformat_bitweights(dweights1)
             if not autocorr:
                 weights2 = reformat_bitweights(dweights2)
-            weight_attrs = (self.weight_attrs['noffset'], self.weight_attrs['default_value']/self.weight_attrs['nrealizations'])
+            weight_attrs = (self.weight_attrs['noffset'], self.weight_attrs['default_value'] / self.weight_attrs['nrealizations'])
 
         elif weights1:
             output_weightavg = True
@@ -119,11 +119,11 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                   'bin_type': self.bin_type, 'weight_type': weight_type,
                   'pair_weights': pair_weights, 'sep_pair_weights': sep_pair_weights,
                   'attrs_pair_weights': weight_attrs, 'verbose': False,
-                  'isa': self.attrs.get('isa', 'fastest')} # to be set to 'fastest' when bitwise weights included in all kernels
+                  'isa': self.attrs.get('isa', 'fastest')}  # to be set to 'fastest' when bitwise weights included in all kernels
 
         positions2 = dpositions2
         if autocorr:
-            positions2 = [None]*3
+            positions2 = [None] * 3
 
         def call_corrfunc(method, *args, **kwargs):
             try:
@@ -133,7 +133,6 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                                             > pip uninstall Corrfunc\n\
                                             > pip install git+https://github.com/adematti/Corrfunc@desi\n') from exc
 
-
         if len(dpositions1[0]) and (self.autocorr or len(dpositions2[0])):
 
             if self.mode == 'theta':
@@ -141,7 +140,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                     raise TwoPointCounterError('Corrfunc does not provide periodic boundary conditions for the angular correlation function')
                 result = call_corrfunc(mocks.DDtheta_mocks, autocorr, nthreads=self.nthreads, binfile=self.edges[0],
                                        RA1=dpositions1[0], DEC1=dpositions1[1], RA2=positions2[0], DEC2=positions2[1],
-                                       output_thetaavg=self.compute_sepavg, fast_acos=self.attrs.get('fast_acos',False), **kwargs)
+                                       output_thetaavg=self.compute_sepavg, fast_acos=self.attrs.get('fast_acos', False), **kwargs)
                 key_sep = 'thetaavg'
 
             elif self.mode == 's':
@@ -154,7 +153,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                 key_sep = 'ravg'
 
             elif self.mode == 'smu':
-                if self.los_type in ['x','y','z']:
+                if self.los_type in ['x', 'y', 'z']:
                     positions1, positions2 = rotated_positions()
                     result = call_corrfunc(theory.DDsmu, autocorr, nthreads=self.nthreads,
                                            binfile=self.edges[0], mumax=self.edges[1][-1], nmubins=len(self.edges[1]) - 1,
@@ -173,7 +172,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                 key_sep = 'savg'
 
             elif self.mode == 'rppi':
-                if self.los_type in ['x','y','z']:
+                if self.los_type in ['x', 'y', 'z']:
                     positions1, positions2 = rotated_positions()
                     result = call_corrfunc(theory.DDrppi, autocorr, nthreads=self.nthreads,
                                            binfile=self.edges[0], pimax=self.edges[1][-1], npibins=len(self.edges[1]) - 1,
@@ -199,7 +198,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                     posmin, posmax = _get_box(*positions)
                     return posmax - posmin
 
-                if self.los_type in ['x','y','z']:
+                if self.los_type in ['x', 'y', 'z']:
                     positions1, positions2 = rotated_positions()
                     if self.periodic:
                         boxsize = boxsize()
@@ -209,7 +208,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                         else:
                             boxsize = _get_boxsize(positions1, positions2)
                         boxsize = boxsize[-1]
-                    pimax = boxsize + 1. # los axis is z
+                    pimax = boxsize + 1.  # los axis is z
                     result = call_corrfunc(theory.DDrppi, autocorr, nthreads=self.nthreads,
                                            binfile=self.edges[0], pimax=pimax, npibins=1,
                                            X1=positions1[0], Y1=positions1[1], Z1=positions1[2],
@@ -219,10 +218,6 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                 else:
                     positions1, positions2 = sky_positions()
                     # \pi = \hat{\ell} \cdot (r_{1} - r_{2}) < r_{1} + r_{2}
-                    #if autocorr:
-                    #    pimax = 2*positions1[0].max()
-                    #else:
-                    #    pimax = 2*max(positions1[0].max(),positions2[0].max()
                     # local calculation, since integrated over pi
                     # \pi = \hat{\ell} \cdot (r_{1} - r_{2}) < | r_{1} - r_{2} | < boxsize
                     if autocorr:
@@ -238,13 +233,13 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                                            output_rpavg=self.compute_sepavg, **kwargs)
 
                 # sum over pi to keep only rp
-                result = {key:result[key] for key in ['npairs','weightavg',key_sep]}
+                result = {key: result[key] for key in ['npairs', 'weightavg', key_sep]}
                 result[key_sep].shape = result['weightavg'].shape = result['npairs'].shape = self.shape + (-1,)
-                wpairs = result['npairs']*(result['weightavg'] if output_weightavg else 1)
+                wpairs = result['npairs'] * (result['weightavg'] if output_weightavg else 1)
                 result['npairs'] = np.sum(result['npairs'], axis=-1)
                 with np.errstate(divide='ignore', invalid='ignore'):
-                    result['weightavg'] = np.sum(wpairs, axis=-1)/result['npairs']
-                    result[key_sep] = np.sum(result[key_sep]*wpairs, axis=-1)/(result['npairs']*result['weightavg'])
+                    result['weightavg'] = np.sum(wpairs, axis=-1) / result['npairs']
+                    result[key_sep] = np.sum(result[key_sep] * wpairs, axis=-1) / (result['npairs'] * result['weightavg'])
                 result['weightavg'][result['npairs'] == 0] = 0.
                 result[key_sep][result['npairs'] == 0] = 0.
 
@@ -253,8 +248,8 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                 raise TwoPointCounterError('Corrfunc does not support mode {}'.format(self.mode))
 
             self.ncounts = result['npairs']
-            self.wcounts = self.ncounts*(result['weightavg'] if output_weightavg else 1)\
-                           *(self.weight_attrs['nrealizations'] if self.n_bitwise_weights else 1)
+            self.wcounts = self.ncounts * (result['weightavg'] if output_weightavg else 1)\
+                           * (self.weight_attrs['nrealizations'] if self.n_bitwise_weights else 1)
             self.wcounts[self.ncounts == 0] = 0.
             if self.compute_sepavg:
                 self.sep = result[key_sep]
@@ -266,35 +261,35 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             self.ncounts = self.mpicomm.allreduce(self.ncounts)
             if self.compute_sepavg:
                 with np.errstate(divide='ignore', invalid='ignore'):
-                    self.sep = self.mpicomm.allreduce(self.sep * wcounts)/self.wcounts
+                    self.sep = self.mpicomm.allreduce(self.sep * wcounts) / self.wcounts
 
-        if self.autocorr and self.edges[0][0] <= 0.: # remove auto-pairs
+        if self.autocorr and self.edges[0][0] <= 0.:  # remove auto-pairs
             index_zero = 0
-            if self.mode == 'smu': index_zero = self.shape[1]//2 # mu = 0 bin
+            if self.mode == 'smu': index_zero = self.shape[1] // 2  # mu = 0 bin
             self.ncounts.flat[index_zero] -= self.size1
             autocounts = self._sum_auto_weights()
             if self.compute_sepavg:
                 with np.errstate(divide='ignore', invalid='ignore'):
-                    self.sep.flat[index_zero] *= self.wcounts.flat[index_zero]/(self.wcounts.flat[index_zero] - autocounts)
+                    self.sep.flat[index_zero] *= self.wcounts.flat[index_zero] / (self.wcounts.flat[index_zero] - autocounts)
             self.wcounts.flat[index_zero] -= autocounts
 
         self.ncounts = self.ncounts.astype('i8')
-        self.wcounts[self.ncounts == 0] = 0. # as above may create uncertainty
+        self.wcounts[self.ncounts == 0] = 0.  # as above may create uncertainty
         if self.compute_sepavg:
             self.sep[self.ncounts == 0] = np.nan
 
         if self.mode == 'smu' and self.los_type == 'endpoint':
             # endpoint is 1 <-> 2 with firstpoint, and counts reversed
             for name in ['wcounts', 'ncounts']:
-                setattr(self, name, getattr(self, name)[:,::-1])
-            self.sep = self.sep[:,::-1]
-        self.is_reversible = self.autocorr or (self.los_type not in ['firstpoint', 'endpoint']) # even smu is reversible for midpoint los, i.e. positions1 <-> positions2
+                setattr(self, name, getattr(self, name)[:, ::-1])
+            self.sep = self.sep[:, ::-1]
+        self.is_reversible = self.autocorr or (self.los_type not in ['firstpoint', 'endpoint'])  # even smu is reversible for midpoint los, i.e. positions1 <-> positions2
 
     def reversed(self):
         """Return counts for reversed positions1/weights1 and positions2/weights2."""
-        new = super(CorrfuncTwoPointCounter, self).reversed() # a deepcopy with swapped size1, size2
+        new = super(CorrfuncTwoPointCounter, self).reversed()  # a deepcopy with swapped size1, size2
         if new.mode == 'smu' and not self.autocorr:
             for name in ['wcounts', 'ncounts', 'sep']:
                 if hasattr(new, name):
-                    setattr(new, name, getattr(new, name)[:,::-1])
+                    setattr(new, name, getattr(new, name)[:, ::-1])
         return new

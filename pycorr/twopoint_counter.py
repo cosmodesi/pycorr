@@ -97,6 +97,11 @@ def _vlogical_and(*arrays):
     return toret
 
 
+def get_default_nrealizations(weights):
+    """Return default number of realizations given input bitwise weights = the number of bits in input weights plus one."""
+    return 1 + 8 * sum(weight.dtype.itemsize for weight in weights)
+
+
 def get_inverse_probability_weight(*weights, noffset=1, nrealizations=None, default_value=0., dtype='f8'):
     r"""
     Return inverse probability weight given input bitwise weights.
@@ -127,12 +132,12 @@ def get_inverse_probability_weight(*weights, noffset=1, nrealizations=None, defa
     """
     if nrealizations is None:
         nrealizations = get_default_nrealizations(weights[0])
-    #denom = noffset + sum(utils.popcount(w1 & w2) for w1, w2 in zip(*weights))
+    # denom = noffset + sum(utils.popcount(w1 & w2) for w1, w2 in zip(*weights))
     denom = noffset + sum(utils.popcount(_vlogical_and(*weight)) for weight in zip(*weights))
     mask = denom == 0
     denom[mask] = 1
     toret = np.empty_like(denom, dtype=dtype)
-    toret[...] = nrealizations/denom
+    toret[...] = nrealizations / denom
     toret[mask] = default_value
     return toret
 
@@ -148,7 +153,7 @@ def _format_positions(positions, mode='auto', position_type='xyz', dtype=None, c
 
     def __format_positions(positions):
         pt = position_type
-        if position_type == 'pos': # array of shape (N, 3)
+        if position_type == 'pos':  # array of shape (N, 3)
             positions = np.array(positions, dtype=dtype, copy=copy)
             if positions.shape[-1] != 3:
                 return None, 'For position type = {}, please provide a (N, 3) array for positions'.format(position_type)
@@ -187,7 +192,7 @@ def _format_positions(positions, mode='auto', position_type='xyz', dtype=None, c
 
     error = None
     if positions is not None and (position_type == 'pos' or not all(position is None for position in positions)):
-        positions, error = __format_positions(positions) # return error separately to raise on all processes
+        positions, error = __format_positions(positions)  # return error separately to raise on all processes
     if mpicomm is not None:
         error = mpicomm.allgather(error)
     else:
@@ -197,7 +202,7 @@ def _format_positions(positions, mode='auto', position_type='xyz', dtype=None, c
         raise TwoPointCounterError(errors[0])
     if mpiroot is not None and mpicomm.bcast(positions is not None if mpicomm.rank == mpiroot else None, root=mpiroot):
         n = mpicomm.bcast(len(positions) if mpicomm.rank == mpiroot else None, root=mpiroot)
-        if mpicomm.rank != mpiroot: positions = [None]*n
+        if mpicomm.rank != mpiroot: positions = [None] * n
         positions = [get_mpi().scatter_array(position, mpicomm=mpicomm, root=mpiroot) for position in positions]
     return positions
 
@@ -215,9 +220,9 @@ def _format_weights(weights, weight_type='auto', size=None, dtype=None, copy=Tru
         individual_weights, bitwise_weights = [], []
         for w in weights:
             if np.issubdtype(w.dtype, np.integer):
-                if weight_type == 'product_individual': # enforce float individual weight
+                if weight_type == 'product_individual':  # enforce float individual weight
                     individual_weights.append(w)
-                else: # certainly bitwise weight
+                else:  # certainly bitwise weight
                     bitwise_weights.append(w)
             else:
                 individual_weights.append(w)
@@ -241,7 +246,7 @@ def _format_weights(weights, weight_type='auto', size=None, dtype=None, copy=Tru
                 raise ValueError('mpiroot = None but weights are None/empty on some ranks')
     else:
         n = mpicomm.bcast(len(weights) if mpicomm.rank == mpiroot else None, root=mpiroot)
-        if mpicomm.rank != mpiroot: weights = [None]*n
+        if mpicomm.rank != mpiroot: weights = [None] * n
         weights = [get_mpi().scatter_array(weight, mpicomm=mpicomm, root=mpiroot) for weight in weights]
         n_bitwise_weights = mpicomm.bcast(n_bitwise_weights, root=mpiroot)
 
@@ -434,7 +439,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
 
     def _set_nthreads(self, nthreads):
         if nthreads is None:
-            self.nthreads = int(os.getenv('OMP_NUM_THREADS','1'))
+            self.nthreads = int(os.getenv('OMP_NUM_THREADS', '1'))
         else:
             self.nthreads = int(nthreads)
 
@@ -452,7 +457,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             self.log_warning('Use compute_sepsavg instead of compute_sepavg.')
             compute_sepsavg = self.attrs.pop('compute_sepavg')
         if np.ndim(compute_sepsavg) == 0:
-            compute_sepsavg = (compute_sepsavg,)*self.ndim
+            compute_sepsavg = (compute_sepsavg,) * self.ndim
         self.compute_sepsavg = [bool(c) for c in compute_sepsavg]
         if len(self.compute_sepsavg) != self.ndim:
             raise TwoPointCounterError('compute_sepsavg must be either a boolean or its length must match number of dimensions = {:d} for mode = {:d}'.format(self.ndim, self.mode))
@@ -461,7 +466,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         if np.ndim(edges[0]) == 0:
             edges = (edges,)
         self.edges = [np.array(edge, dtype='f8') for edge in edges]
-        if self.mode in ['smu','rppi']:
+        if self.mode in ['smu', 'rppi']:
             if not self.ndim == 2:
                 raise TwoPointCounterError('A tuple of edges should be provided to two-point counter in mode {}'.format(self.mode))
         else:
@@ -562,7 +567,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                         indweights = self.weights1[n_bitwise_weights1] if len(self.weights1) > n_bitwise_weights1 else 1.
                         nrealizations = get_nrealizations(n_bitwise_weights1)
                         self.weights1 = [get_inverse_probability_weight(self.weights1[:n_bitwise_weights1], nrealizations=nrealizations,
-                                                                        noffset=noffset, default_value=default_value, dtype=self.dtype)*indweights]
+                                                                        noffset=noffset, default_value=default_value, dtype=self.dtype) * indweights]
                         self.n_bitwise_weights = 0
                         if not self.with_mpi or self.mpicomm.rank == 0:
                             self.log_info('Setting IIP weights for first catalog.')
@@ -570,7 +575,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                         indweights = self.weights2[n_bitwise_weights2] if len(self.weights2) > n_bitwise_weights2 else 1.
                         nrealizations = get_nrealizations(n_bitwise_weights2)
                         self.weights2 = [get_inverse_probability_weight(self.weights2[:n_bitwise_weights2], nrealizations=nrealizations,
-                                                                        noffset=noffset, default_value=default_value, dtype=self.dtype)*indweights]
+                                                                        noffset=noffset, default_value=default_value, dtype=self.dtype) * indweights]
                         self.n_bitwise_weights = 0
                         if not self.with_mpi or self.mpicomm.rank == 0:
                             self.log_info('Setting IIP weights for second catalog.')
@@ -621,7 +626,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         return (self.positions1, self.weights1), (self.positions2, self.weights2)
 
     def _get_default_seps(self):
-        return [(edges[1:] + edges[:-1])/2. for edges in self.edges]
+        return [(edges[1:] + edges[:-1]) / 2. for edges in self.edges]
 
     def _set_default_seps(self):
         self.seps = list(np.meshgrid(*self._get_default_seps(), indexing='ij'))
@@ -649,14 +654,14 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         if self.cos_twopoint_weights is not None:
             weights *= np.interp(1., self.cos_twopoint_weights.sep, self.cos_twopoint_weights.weight, left=1., right=1.)
         if not self.weights1:
-            return self.size1*weights
+            return self.size1 * weights
         # up to now weights is scalar
         if self.n_bitwise_weights:
             weights *= get_inverse_probability_weight(self.weights1[:self.n_bitwise_weights], self.weights1[:self.n_bitwise_weights], nrealizations=self.weight_attrs['nrealizations'],
                                                       noffset=self.weight_attrs['noffset'], default_value=self.weight_attrs['default_value'], dtype=self.dtype)
         for ii in range(self.n_bitwise_weights, len(self.weights1)):
             weights *= self.weights1[ii]**2
-        #assert weights.size == len(self.positions1[0])
+        # assert weights.size == len(self.positions1[0])
         weights = np.sum(weights)
         if self.with_mpi:
             weights = self.mpicomm.allreduce(weights)
@@ -711,7 +716,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             sumw_cross = 0
             for c1_, w1_ in zip(c1, w1):
                 for c2_, w2_ in zip(c2, w2):
-                    sumw_cross += w1_ * w2_ * (joint[c1_ - nalways][c2_ - nalways] if c2_ <= c1_ else joint[c2_- nalways][c1_- nalways])
+                    sumw_cross += w1_ * w2_ * (joint[c1_ - nalways][c2_ - nalways] if c2_ <= c1_ else joint[c2_ - nalways][c1_ - nalways])
             sumw_auto = 0
             if self.autocorr:
                 w1sq, c1sq = binned_weights(self.weights1, pow=2)
@@ -751,7 +756,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
     def normalized_wcounts(self):
         """Return normalized two-point counts, i.e. :attr:`wcounts` divided by :meth:`normalization`."""
         with np.errstate(divide='ignore', invalid='ignore'):
-            return _nan_to_zero(self.wcounts/self.wnorm)
+            return _nan_to_zero(self.wcounts / self.wnorm)
 
     def sepavg(self, axis=0, method=None):
         r"""
@@ -777,7 +782,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             if self.compute_sepsavg[axis]:
                 axes_to_sum_over = tuple(ii for ii in range(self.ndim) if ii != axis)
                 with np.errstate(divide='ignore', invalid='ignore'):
-                    toret = np.sum(_nan_to_zero(self.seps[axis])*self.wcounts, axis=axes_to_sum_over)/np.sum(self.wcounts, axis=axes_to_sum_over)
+                    toret = np.sum(_nan_to_zero(self.seps[axis]) * self.wcounts, axis=axes_to_sum_over) / np.sum(self.wcounts, axis=axes_to_sum_over)
             else:
                 toret = self.seps[axis][tuple(Ellipsis if ii == axis else 0 for ii in range(self.ndim))]
         elif isinstance(method, str):
@@ -820,7 +825,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                 x = self.sepavg(axis=iaxis, method='mid')
                 indices = np.flatnonzero((x >= xlim[0]) & (x <= xlim[1]))
                 if indices.size:
-                    slices.append(slice(indices[0], indices[-1]+1, 1))
+                    slices.append(slice(indices[0], indices[-1] + 1, 1))
                 else:
                     slices.append(slice(0))
         self.slice(*slices)
@@ -836,7 +841,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             counts[:10:2,:6:3] # same as above, but return new instance.
 
         """
-        inslices = list(slices) + [slice(None)]*(self.ndim - len(slices))
+        inslices = list(slices) + [slice(None)] * (self.ndim - len(slices))
         if len(inslices) > self.ndim:
             raise IndexError('Too many indices: statistics is {:d}-dimensional, but {:d} were indexed'.format(self.ndim, len(slices)))
         slices, eslices, factor = [], [], []
@@ -844,13 +849,15 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             start, stop, step = sl.start, sl.stop, sl.step
             if start is None: start = 0
             if step is None: step = 1
+            if step < 0:
+                raise IndexError('Positive slicing step only supported')
             indices = np.arange(self.wcounts.shape[iaxis])[slice(start, stop, 1)]
             if indices.size:
-                stop = indices[-1] + 1 # somewhat hacky, but correct!
+                stop = indices[-1] + 1  # somewhat hacky, but correct!
             else:
                 stop = 0
             slices.append(slice(start, stop, 1))
-            eslices.append(slice(start, stop+1, 1))
+            eslices.append(slice(start, stop + 1, 1))
             factor.append(step)
         slices = tuple(slices)
         for name in ['seps', 'wcounts', 'ncounts']:
@@ -874,20 +881,20 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             factor = (factor,)
         if len(factor) != self.ndim:
             raise TwoPointCounterError('Provide a rebinning factor for each dimension')
-        if any(s % f for s,f in zip(self.shape, factor)):
+        if any(s % f for s, f in zip(self.shape, factor)):
             raise TwoPointCounterError('Rebinning factor must divide shape')
-        new_shape = tuple(s//f for s,f in zip(self.shape, factor))
+        new_shape = tuple(s // f for s, f in zip(self.shape, factor))
         wcounts = self.wcounts
         self.wcounts = utils.rebin(wcounts, new_shape, statistic=np.sum)
         if getattr(self, 'ncounts', None) is not None:
             self.ncounts = utils.rebin(self.ncounts, new_shape, statistic=np.sum)
         self.edges = [edges[::f] for edges, f in zip(self.edges, factor)]
         seps = self.seps
-        self._set_default_seps() # reset self.seps to default
+        self._set_default_seps()  # reset self.seps to default
         for idim, (sep, compute_sepavg) in enumerate(zip(seps, self.compute_sepsavg)):
             if compute_sepavg:
                 with np.errstate(divide='ignore', invalid='ignore'):
-                    self.seps[idim] = utils.rebin(_nan_to_zero(sep)*wcounts, new_shape, statistic=np.sum)/self.wcounts
+                    self.seps[idim] = utils.rebin(_nan_to_zero(sep) * wcounts, new_shape, statistic=np.sum) / self.wcounts
 
     def reversed(self):
         """Return counts for reversed positions1/weights1 and positions2/weights2."""
@@ -910,12 +917,12 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         :attr:`wcounts` of larger scales are rescaled such their :attr:`wnorm`
         matches that of smaller scales.
         """
-        others = sorted(others, key=lambda other: np.mean(other.edges[0])) # rank input counts by mean scale
+        others = sorted(others, key=lambda other: np.mean(other.edges[0]))  # rank input counts by mean scale
         new = others[0].deepcopy()
         names = ['wcounts']
         if hasattr(new, 'ncounts'): names = ['ncounts'] + names
         for iother, other in enumerate(others[1:]):
-            mid = (other.edges[0][:-1] + other.edges[0][1:])/2.
+            mid = (other.edges[0][:-1] + other.edges[0][1:]) / 2.
             mask_low, mask_high = np.flatnonzero(mid < new.edges[0][0]), np.flatnonzero(mid > new.edges[0][-1])
             new.edges[0] = np.concatenate([other.edges[0][mask_low], new.edges[0], other.edges[0][mask_high + 1]], axis=0)
             for name in names:
@@ -925,7 +932,6 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             for idim in range(new.ndim):
                 new.seps[idim] = np.concatenate([other.seps[idim][mask_low], new.seps[idim], other.seps[idim][mask_high]], axis=0)
         return new
-
 
     @classmethod
     def sum(cls, *others):
@@ -939,15 +945,15 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         """
         new = others[0].deepcopy()
         if len(others) > 1:
-            new.size1 = new.size2 = 0 # we do not know the total size
+            new.size1 = new.size2 = 0  # we do not know the total size
         for name in ['ncounts', 'wcounts', 'wnorm']:
             if hasattr(new, name):
                 setattr(new, name, sum(getattr(other, name) for other in others))
-        new._set_default_seps() # reset self.seps to default
+        new._set_default_seps()  # reset self.seps to default
         for idim, compute_sepavg in enumerate(new.compute_sepsavg):
             if compute_sepavg:
                 with np.errstate(divide='ignore', invalid='ignore'):
-                    new.seps[idim] = sum(other.seps[idim]*other.wcounts for other in others)/new.wcounts
+                    new.seps[idim] = sum(other.seps[idim] * other.wcounts for other in others) / new.wcounts
         return new
 
     def __add__(self, other):
@@ -976,14 +982,12 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
     def __setstate__(self, state):
         super(BaseTwoPointCounter, self).__setstate__(state=state)
         if hasattr(self, 'is_reversable'):
-            self.is_reversible = self.is_reversable # for backward-compatibility; to be removed soon!
+            self.is_reversible = self.is_reversable  # for backward-compatibility; to be removed soon!
 
     def save(self, filename):
         """Save two-point counts to ``filename``."""
         if not self.with_mpi or self.mpicomm.rank == 0:
             super(BaseTwoPointCounter, self).save(filename)
-        #if self.with_mpi:
-        #    self.mpicomm.Barrier()
 
     def save_txt(self, filename, fmt='%.12e', delimiter=' ', header=None, comments='# '):
         """
@@ -1034,24 +1038,21 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             for name in coords_names:
                 labels += ['{}mid'.format(name), '{}avg'.format(name)]
             labels += ['wcounts']
-            mids = np.meshgrid(*[(edges[:-1] + edges[1:])/2. for edges in self.edges], indexing='ij')
+            mids = np.meshgrid(*[(edges[:-1] + edges[1:]) / 2. for edges in self.edges], indexing='ij')
             columns = []
             for idim in range(self.ndim):
                 columns += [mids[idim].flat, self.seps[idim].flat]
             columns += [self.wcounts.flat]
             columns = [[np.array2string(value, formatter=formatter) for value in column] for column in columns]
             widths = [max(max(map(len, column)) - len(comments) * (icol == 0), len(label)) for icol, (column, label) in enumerate(zip(columns, labels))]
-            widths[-1] = 0 # no need to leave a space
-            header.append((' '*len(delimiter)).join(['{:<{width}}'.format(label, width=width) for label, width in zip(labels, widths)]))
+            widths[-1] = 0  # no need to leave a space
+            header.append((' ' * len(delimiter)).join(['{:<{width}}'.format(label, width=width) for label, width in zip(labels, widths)]))
             widths[0] += len(comments)
             with open(filename, 'w') as file:
                 for line in header:
                     file.write(comments + line + '\n')
                 for irow in range(len(columns[0])):
                     file.write(delimiter.join(['{:<{width}}'.format(column[irow], width=width) for column, width in zip(columns, widths)]) + '\n')
-
-        #if self.with_mpi:
-        #    self.mpicomm.Barrier()
 
 
 class AnalyticTwoPointCounter(BaseTwoPointCounter):
@@ -1114,22 +1115,22 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
     def run(self):
         """Set analytical two-point counts."""
         if self.mode == 's':
-            v = 4./3. * np.pi * self.edges[0]**3
+            v = 4. / 3. * np.pi * self.edges[0]**3
             dv = np.diff(v, axis=0)
         elif self.mode == 'smu':
             # we bin in mu
-            v = 2./3. * np.pi * self.edges[0][:,None]**3 * self.edges[1]
+            v = 2. / 3. * np.pi * self.edges[0][:, None]**3 * self.edges[1]
             dv = np.diff(np.diff(v, axis=0), axis=-1)
         elif self.mode == 'rppi':
             # height is double pimax
-            v = 2. * np.pi * self.edges[0][:,None]**2 * self.edges[1]
+            v = 2. * np.pi * self.edges[0][:, None]**2 * self.edges[1]
             dv = np.diff(np.diff(v, axis=0), axis=1)
         elif self.mode == 'rp':
-            v = np.pi * self.edges[0][:,None]**2 * self.boxsize['xyz'.index(self.los_type)]
+            v = np.pi * self.edges[0][:, None]**2 * self.boxsize['xyz'.index(self.los_type)]
             dv = np.diff(v, axis=0)
         else:
             raise TwoPointCounterError('No analytic randoms provided for mode {}'.format(self.mode))
-        self.wcounts = self.normalization()*dv/self.boxsize.prod()
+        self.wcounts = self.normalization() * dv / self.boxsize.prod()
 
     def normalization(self):
         """

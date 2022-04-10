@@ -5,7 +5,6 @@ import sys
 import time
 import logging
 import traceback
-import functools
 
 import numpy as np
 
@@ -15,8 +14,8 @@ def exception_handler(exc_type, exc_value, exc_traceback):
     # Do not print traceback if the exception has been handled and logged
     _logger_name = 'Exception'
     log = logging.getLogger(_logger_name)
-    line = '='*100
-    #log.critical(line[len(_logger_name) + 5:] + '\n' + ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback)) + line)
+    line = '=' * 100
+    # log.critical(line[len(_logger_name) + 5:] + '\n' + ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback)) + line)
     log.critical('\n' + line + '\n' + ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback)) + line)
     if exc_type is KeyboardInterrupt:
         log.critical('Interrupted by the user.')
@@ -27,7 +26,7 @@ def exception_handler(exc_type, exc_value, exc_traceback):
 def mkdir(dirname):
     """Try to create ``dirnm`` and catch :class:`OSError`."""
     try:
-        os.makedirs(dirname) # MPI...
+        os.makedirs(dirname)  # MPI...
     except OSError:
         return
 
@@ -55,8 +54,8 @@ def setup_logging(level=logging.INFO, stream=sys.stdout, filename=None, filemode
     """
     # Cannot provide stream and filename kwargs at the same time to logging.basicConfig, so handle different cases
     # Thanks to https://stackoverflow.com/questions/30861524/logging-basicconfig-not-creating-log-file-when-i-run-in-pycharm
-    if isinstance(level,str):
-        level = {'info':logging.INFO,'debug':logging.DEBUG,'warning':logging.WARNING}[level.lower()]
+    if isinstance(level, str):
+        level = {'info': logging.INFO, 'debug': logging.DEBUG, 'warning': logging.WARNING}[level.lower()]
     for handler in logging.root.handlers:
         logging.root.removeHandler(handler)
 
@@ -66,16 +65,16 @@ def setup_logging(level=logging.INFO, stream=sys.stdout, filename=None, filemode
 
         def format(self, record):
             self._style._fmt = '[%09.2f] ' % (time.time() - t0) + ' %(asctime)s %(name)-28s %(levelname)-8s %(message)s'
-            return super(MyFormatter,self).format(record)
+            return super(MyFormatter, self).format(record)
 
     fmt = MyFormatter(datefmt='%m-%d %H:%M ')
     if filename is not None:
         mkdir(os.path.dirname(filename))
-        handler = logging.FileHandler(filename,mode=filemode)
+        handler = logging.FileHandler(filename, mode=filemode)
     else:
         handler = logging.StreamHandler(stream=stream)
     handler.setFormatter(fmt)
-    logging.basicConfig(level=level,handlers=[handler],**kwargs)
+    logging.basicConfig(level=level, handlers=[handler], **kwargs)
     sys.excepthook = exception_handler
 
 
@@ -105,7 +104,7 @@ class BaseMetaClass(type):
 
             return logger
 
-        for level in ['debug','info','warning','error','critical']:
+        for level in ['debug', 'info', 'warning', 'error', 'critical']:
             setattr(cls, 'log_{}'.format(level), make_logger(level))
 
 
@@ -196,10 +195,10 @@ def cartesian_to_sky(positions, wrap=True, degree=True):
     """
     dist = distance(positions)
     ra = np.arctan2(positions[1], positions[0])
-    if wrap: ra %= 2.*np.pi
-    dec = np.arcsin(positions[2]/dist)
-    conversion = np.pi/180. if degree else 1.
-    return [ra/conversion, dec/conversion, dist]
+    if wrap: ra %= 2. * np.pi
+    dec = np.arcsin(positions[2] / dist)
+    conversion = np.pi / 180. if degree else 1.
+    return [ra / conversion, dec / conversion, dist]
 
 
 def sky_to_cartesian(rdd, degree=True, dtype=None):
@@ -220,12 +219,12 @@ def sky_to_cartesian(rdd, degree=True, dtype=None):
         Positions x, y, z in cartesian coordinates.
     """
     conversion = 1.
-    if degree: conversion = np.pi/180.
+    if degree: conversion = np.pi / 180.
     ra, dec, dist = rdd
-    cos_dec = np.cos(dec*conversion)
-    x = dist*cos_dec*np.cos(ra*conversion)
-    y = dist*cos_dec*np.sin(ra*conversion)
-    z = dist*np.sin(dec*conversion)
+    cos_dec = np.cos(dec * conversion)
+    x = dist * cos_dec * np.cos(ra * conversion)
+    y = dist * cos_dec * np.sin(ra * conversion)
+    z = dist * np.sin(dec * conversion)
     return [x, y, z]
 
 
@@ -260,13 +259,13 @@ def rebin(array, new_shape, statistic=np.sum):
     for d, c in zip(new_shape, array.shape):
         if c % d != 0:
             raise ValueError('New shape should divide current shape, but {:d} % {:d} = {:d}'.format(c, d, c % d))
-        pairs.append((d, c//d))
+        pairs.append((d, c // d))
 
-    flattened = [l for p in pairs for l in p]
+    flattened = [ll for p in pairs for ll in p]
     array = array.reshape(flattened)
 
     for i in range(len(new_shape)):
-        array = statistic(array, axis=-1*(i+1))
+        array = statistic(array, axis=-1 * (i + 1))
 
     return array
 
@@ -280,8 +279,8 @@ def popcount(*arrays):
     Return number of 1 bits in each value of input array.
     Inspired from https://github.com/numpy/numpy/issues/16325.
     """
-    #if not np.issubdtype(array.dtype, np.unsignedinteger):
-    #    raise ValueError('input array must be an unsigned int dtype')
+    # if not np.issubdtype(array.dtype, np.unsignedinteger):
+    #     raise ValueError('input array must be an unsigned int dtype')
     toret = _popcount_lookuptable[arrays[0].view((np.uint8, (arrays[0].dtype.itemsize,)))].sum(axis=-1)
     for array in arrays[1:]: toret += popcount(array)
     return toret
@@ -367,14 +366,14 @@ def reformat_bitarrays(*arrays, dtype=np.uint64, copy=True):
                 nremainingbytes = dtype.itemsize
             newarray = toret[-1]
             nremainingbytes -= 1
-            newarray.append(arrayofbyte[...,None])
+            newarray.append(arrayofbyte[..., None])
     for iarray, array in enumerate(toret):
         npad = dtype.itemsize - len(array)
-        if npad: array += [np.zeros_like(array[0])]*npad
+        if npad: array += [np.zeros_like(array[0])] * npad
         if len(array) > 1 or copy:
             toret[iarray] = np.squeeze(np.concatenate(array, axis=-1).view(dtype), axis=-1)
         else:
-            toret[iarray] = array[0][...,0]
+            toret[iarray] = array[0][..., 0]
     return toret
 
 
@@ -394,10 +393,10 @@ def pascal_triangle(n_rows):
         List of list of binomial coefficients.
         The binomial coefficient :math:`(k, n)` is ``triangle[n][k]``.
     """
-    toret = [[1]] # a container to collect the rows
-    for _ in range(1, n_rows+1):
+    toret = [[1]]  # a container to collect the rows
+    for _ in range(1, n_rows + 1):
         row = [1]
-        last_row = toret[-1] # reference the previous row
+        last_row = toret[-1]  # reference the previous row
         # this is the complicated part, it relies on the fact that zip
         # stops at the shortest iterable, so for the second row, we have
         # nothing in this list comprension, but the third row sums 1 and 1
@@ -405,7 +404,7 @@ def pascal_triangle(n_rows):
         row += [sum(pair) for pair in zip(last_row, last_row[1:])]
         # finally append the final 1 to the outside
         row.append(1)
-        toret.append(row) # add the row to the results.
+        toret.append(row)  # add the row to the results.
     return toret
 
 
@@ -485,11 +484,11 @@ class DistanceToRedshift(object):
         self.distance = distance
         self.zmax = zmax
         self.nz = nz
-        zgrid = np.logspace(-8,np.log10(self.zmax),self.nz)
+        zgrid = np.logspace(-8, np.log10(self.zmax), self.nz)
         self.zgrid = np.concatenate([[0.], zgrid])
         self.rgrid = self.distance(self.zgrid)
         from scipy import interpolate
-        self.interp = interpolate.UnivariateSpline(self.rgrid,self.zgrid,k=interp_order,s=0)
+        self.interp = interpolate.UnivariateSpline(self.rgrid, self.zgrid, k=interp_order, s=0)
 
     def __call__(self, distance):
         """Return (interpolated) redshift at distance ``distance`` (scalar or array)."""
@@ -545,7 +544,7 @@ class BaseTaskManager(BaseClass):
         results : list
             The list of the return values of ``function``.
         """
-        return [function(*(t if isinstance(t,tuple) else (t,))) for t in tasks]
+        return [function(*(t if isinstance(t, tuple) else (t,))) for t in tasks]
 
 
 def get_mpi():
@@ -580,5 +579,5 @@ def cov_to_corrcoef(cov):
     if np.ndim(cov) == 0:
         return 1.
     stddev = np.sqrt(np.diag(cov).real)
-    c = cov/stddev[:,None]/stddev[None,:]
+    c = cov / stddev[:, None] / stddev[None, :]
     return c

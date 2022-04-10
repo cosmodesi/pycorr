@@ -12,7 +12,7 @@ from . import utils
 
 
 _default_ells = (0, 2, 4)
-_default_wedges = (-1., -2./3, -1./3, 0., 1./3, 2./3, 1.)
+_default_wedges = (-1., -2. / 3, -1. / 3, 0., 1. / 3, 2. / 3, 1.)
 
 
 def _format_ells(ells):
@@ -28,6 +28,7 @@ def _format_wedges(wedges):
         isscalar = len(wedges) == 2
         wedges = list(zip(wedges[:-1], wedges[1:]))
     return wedges, isscalar
+
 
 _default_wedges = _format_wedges(_default_wedges)[0]
 
@@ -76,7 +77,7 @@ def get_twopoint_estimator(estimator='auto', with_DR=True, with_jackknife=False)
     if isinstance(estimator, str):
 
         if estimator == 'auto':
-            estimator = {True:'landyszalay', False:'natural'}[with_DR]
+            estimator = {True: 'landyszalay', False: 'natural'}[with_DR]
 
         if with_jackknife:
             estimator = 'jackknife-{}'.format(estimator)
@@ -184,7 +185,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
 
     def __getattr__(self, name):
         if name in ['R1D2', 'S1D2'] and not self.with_reversed:
-            name = ''.join([{'1':'2', '2':'1'}.get(nn, nn) for nn in name])
+            name = ''.join([{'1': '2', '2': '1'}.get(nn, nn) for nn in name])
             counts = getattr(self, name[-2:] + name[:2])
             return counts.reversed()
         if name in ['S1S2', 'D1S2', 'S1D2'] and not self.with_shifted:
@@ -245,14 +246,14 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
     @classmethod
     def _tuple_requires(cls, with_reversed=False, with_shifted=False, join=None):
         toret = []
-        toret.append(('D1','D2'))
+        toret.append(('D1', 'D2'))
         key = 'S' if with_shifted else 'R'
-        toret.append(('D1','{}2'.format(key)))
+        toret.append(('D1', '{}2'.format(key)))
         if with_reversed:
             toret.append(('{}1'.format(key), 'D2'))
-        toret.append(('{}1'.format(key),'{}2'.format(key)))
+        toret.append(('{}1'.format(key), '{}2'.format(key)))
         if with_shifted:
-            toret.append(('R1','R2'))
+            toret.append(('R1', 'R2'))
         return toret
 
     @property
@@ -356,7 +357,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
 
     def __setstate__(self, state):
         kwargs = {}
-        counts = set(self.requires(with_reversed=True, with_shifted=True, join='')) | set(self.requires(with_reversed=True, with_shifted=False, join='')) # most general list
+        counts = set(self.requires(with_reversed=True, with_shifted=True, join='')) | set(self.requires(with_reversed=True, with_shifted=False, join=''))  # most general list
         for name in counts:
             if name in state:
                 kwargs[name] = TwoPointCounter.from_state(state[name])
@@ -366,8 +367,6 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         """Save estimator to ``filename``."""
         if not self.with_mpi or self.mpicomm.rank == 0:
             super(BaseTwoPointEstimator, self).save(filename)
-        #if self.with_mpi:
-        #    self.mpicomm.Barrier()
 
     def get_corr(self, return_sep=False, return_cov=None, mode='auto', **kwargs):
         r"""
@@ -426,7 +425,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
             cov = self.cov(**kwargs)
             toret.append(cov)
         elif return_cov is True:
-            raise TwoPointEstimatorError('Input estimator has no covariance') from exc
+            raise TwoPointEstimatorError('Input estimator has no covariance')
         return toret if len(toret) > 1 else toret[0]
 
     def __call__(self, *seps, return_sep=False, return_std=None, mode='auto', **kwargs):
@@ -477,14 +476,14 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         ndim = len(tmp) - int(return_std) - 1
         sepsavg = tmp[:ndim]
         corr_std = [tmp[ndim]]
-        if return_std: corr_std.append(tmp[ndim+1])
+        if return_std: corr_std.append(tmp[ndim + 1])
         isscalar = corr_std[0].ndim == 1
         if return_std:
             # Turn covariance to standard deviation
             corr_std[-1] = np.diag(corr_std[-1])**0.5
             corr_std[-1].shape = corr_std[0].shape
         if return_sep is None:
-            return_sep = sep is None
+            return_sep = bool(seps)
         if not seps:
             toret = []
             if return_sep: toret += list(sepsavg)
@@ -513,12 +512,18 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         indices = (Ellipsis, mask_seps[0]) if ndim == 1 else np.ix_(*mask_seps)
         if all(mask_sep.any() for mask_sep in mask_seps):
             if ndim == 1:
-                interp = lambda array: np.array([UnivariateSpline(sepsavg[0], arr, k=1, s=0, ext='const')(seps[0]) for arr in array], dtype=array.dtype)
+
+                def interp(array):
+                    return np.array([UnivariateSpline(sepsavg[0], arr, k=1, s=0, ext='const')(seps[0]) for arr in array], dtype=array.dtype)
+
             else:
                 i_seps = tuple(np.argsort(sep) for sep in seps)
                 sseps = tuple(sep[i_sep] for sep, i_sep in zip(seps, i_seps))
                 ii_seps = tuple(np.argsort(i_sep) for i_sep in i_seps)
-                interp = lambda array: RectBivariateSpline(*sepsavg, array, kx=1, ky=1, s=0)(*sseps, grid=True)[np.ix_(*ii_seps)]
+
+                def interp(array):
+                    return RectBivariateSpline(*sepsavg, array, kx=1, ky=1, s=0)(*sseps, grid=True)[np.ix_(*ii_seps)]
+
             for toret_array, array in zip(toret_corr_std, corr_std): toret_array[indices] = interp(array)
         if isscalar and ndim == 1:
             toret_corr_std = [array[0] for array in toret_corr_std]
@@ -597,13 +602,12 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
             return_std = return_std or return_std is None and hasattr(self, 'cov')
             tmp = self(return_sep=True, return_std=return_std, mode=mode, **kwargs)
             ndim = len(tmp) - int(return_std) - 1
-            if ndim == self.ndim: # True, except in case 2d (smu, rppi) -> 1d (poles, wp)
+            if ndim == self.ndim:  # True, except in case 2d (smu, rppi) -> 1d (poles, wp)
                 seps = tuple(self.seps[idim] for idim in range(ndim))
             else:
                 seps = tmp[:ndim]
             corr = tmp[ndim]
-            std = tmp[ndim+1] if return_std else None
-            isscalar = corr.ndim == 1
+            std = tmp[ndim + 1] if return_std else None
             names = {'poles': ('s',), 'wedges': ('s',), 'smu': ('s', 'mu'), 'wp': ('rp',), 'rppi': ('rp', 'pi')}.get(mode, (mode,))
             labels = []
             for name in names: labels += ['{}mid'.format(name), '{}avg'.format(name)]
@@ -625,24 +629,21 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
             mids = np.meshgrid(*(self.sepavg(idim, method='mid') for idim in range(ndim)), indexing='ij')
             for idim, sep in enumerate(seps):
                 columns += [mids[idim].flat, sep.flat]
-            for column in corr.reshape((-1,)*(corr.ndim == ndim) + corr.shape):
+            for column in corr.reshape((-1,) * (corr.ndim == ndim) + corr.shape):
                 columns += [column.flat]
             if std is not None:
-                for column in std.reshape((-1,)*(std.ndim == ndim) + std.shape):
+                for column in std.reshape((-1,) * (std.ndim == ndim) + std.shape):
                     columns += [column.flat]
             columns = [[np.array2string(value, formatter=formatter) for value in column] for column in columns]
             widths = [max(max(map(len, column)) - len(comments) * (icol == 0), len(label)) for icol, (column, label) in enumerate(zip(columns, labels))]
-            widths[-1] = 0 # no need to leave a space
-            header.append((' '*len(delimiter)).join(['{:<{width}}'.format(label, width=width) for label, width in zip(labels, widths)]))
+            widths[-1] = 0  # no need to leave a space
+            header.append((' ' * len(delimiter)).join(['{:<{width}}'.format(label, width=width) for label, width in zip(labels, widths)]))
             widths[0] += len(comments)
             with open(filename, 'w') as file:
                 for line in header:
                     file.write(comments + line + '\n')
                 for irow in range(len(columns[0])):
                     file.write(delimiter.join(['{:<{width}}'.format(column[irow], width=width) for column, width in zip(columns, widths)]) + '\n')
-
-        #if self.with_mpi:
-        #    self.mpicomm.Barrier()
 
 
 def _make_property(name):
@@ -677,18 +678,18 @@ class NaturalTwoPointEstimator(BaseTwoPointEstimator):
         DD = self.D1D2.normalized_wcounts()[nonzero]
         RR = self.R1R2.normalized_wcounts()[nonzero]
         SS = self.S1S2.normalized_wcounts()[nonzero]
-        tmp = (DD - SS)/RR
+        tmp = (DD - SS) / RR
         corr[nonzero] = tmp[...]
         self.corr = corr
 
     @classmethod
     def _tuple_requires(cls, with_reversed=False, with_shifted=False, join=None):
         toret = []
-        toret.append(('D1','D2'))
+        toret.append(('D1', 'D2'))
         key = 'S' if with_shifted else 'R'
-        toret.append(('{}1'.format(key),'{}2'.format(key)))
+        toret.append(('{}1'.format(key), '{}2'.format(key)))
         if with_shifted:
-            toret.append(('R1','R2'))
+            toret.append(('R1', 'R2'))
         return toret
 
 
@@ -711,7 +712,7 @@ class DavisPeeblesTwoPointEstimator(BaseTwoPointEstimator):
         DD = self.D1D2.normalized_wcounts()[nonzero]
         DR = self.D1R2.normalized_wcounts()[nonzero]
         DS = self.D1S2.normalized_wcounts()[nonzero]
-        tmp = (DD - DS)/DR
+        tmp = (DD - DS) / DR
         corr[nonzero] = tmp[...]
         self.corr = corr
 
@@ -719,11 +720,11 @@ class DavisPeeblesTwoPointEstimator(BaseTwoPointEstimator):
     def _tuple_requires(cls, with_reversed=False, with_shifted=False, join=None):
         """Yield required two-point counts."""
         toret = []
-        toret.append(('D1','D2'))
+        toret.append(('D1', 'D2'))
         key = 'S' if with_shifted else 'R'
-        toret.append(('D1','{}2'.format(key)))
+        toret.append(('D1', '{}2'.format(key)))
         if with_shifted:
-            toret.append(('D1','R2'))
+            toret.append(('D1', 'R2'))
         return toret
 
 
@@ -749,7 +750,7 @@ class LandySzalayTwoPointEstimator(BaseTwoPointEstimator):
         SD = self.S1D2.normalized_wcounts()[nonzero]
         SS = self.S1S2.normalized_wcounts()[nonzero]
 
-        tmp = (DD - DS - SD + SS)/RR
+        tmp = (DD - DS - SD + SS) / RR
         corr[nonzero] = tmp[...]
         self.corr = corr
 
@@ -771,15 +772,15 @@ class WeightTwoPointEstimator(NaturalTwoPointEstimator):
         # (DD - RR) / RR
         DD = self.D1D2.normalized_wcounts()[nonzero]
         RR = self.R1R2.normalized_wcounts()[nonzero]
-        tmp = RR/DD
+        tmp = RR / DD
         corr[nonzero] = tmp[...]
         self.corr = corr
 
     @classmethod
     def _yield_requires(cls, with_reversed=False, with_shifted=False, join=None):
         toret = []
-        toret.append(('D1','D2'))
-        toret.append(('R1','R2'))
+        toret.append(('D1', 'D2'))
+        toret.append(('R1', 'R2'))
         return toret
 
     @property
@@ -805,7 +806,7 @@ class ResidualTwoPointEstimator(BaseTwoPointEstimator):
         DS = self.D1S2.normalized_wcounts()[nonzero]
         SS = self.S1S2.normalized_wcounts()[nonzero]
         RR = self.R1R2.normalized_wcounts()[nonzero]
-        tmp = (DS - SS)/RR
+        tmp = (DS - SS) / RR
         corr[nonzero] = tmp[...]
         self.corr = corr
 
@@ -813,10 +814,10 @@ class ResidualTwoPointEstimator(BaseTwoPointEstimator):
     def _tuple_requires(cls, with_reversed=False, with_shifted=False, join=None):
         toret = []
         key = 'S' if with_shifted else 'R'
-        toret.append(('D1'.format(key),'{}2'.format(key)))
-        toret.append(('{}1'.format(key),'{}2'.format(key)))
+        toret.append(('D1', '{}2'.format(key)))
+        toret.append(('{}1'.format(key), '{}2'.format(key)))
         if with_shifted:
-            toret.append(('R1','R2'))
+            toret.append(('R1', 'R2'))
         return toret
 
 
@@ -868,14 +869,14 @@ def project_to_poles(estimator, ells=_default_ells, return_sep=True, return_cov=
     for ell in ells:
         # \sum_{i} \xi_{i} \int_{\mu_{i}}^{\mu_{i+1}} L_{\ell}(\mu^{\prime}) d\mu^{\prime}
         poly = special.legendre(ell).integ()(muedges)
-        legendre = (2*ell + 1) * (poly[1:] - poly[:-1])
+        legendre = (2 * ell + 1) * (poly[1:] - poly[:-1])
         if ignore_nan:
             correll = np.empty(estimator.corr.shape[0], dtype=estimator.corr.dtype)
             for i_s, corr_s in enumerate(estimator.corr):
                 mask_s = ~np.isnan(corr_s)
-                correll[i_s] = np.sum(corr_s[mask_s]*legendre[mask_s], axis=-1)/np.sum(dmu[mask_s])
+                correll[i_s] = np.sum(corr_s[mask_s] * legendre[mask_s], axis=-1) / np.sum(dmu[mask_s])
         else:
-            correll = np.sum(estimator.corr*legendre, axis=-1)/np.sum(dmu)
+            correll = np.sum(estimator.corr * legendre, axis=-1) / np.sum(dmu)
         corr.append(correll)
     if isscalar:
         corr = corr[0]
@@ -887,7 +888,7 @@ def project_to_poles(estimator, ells=_default_ells, return_sep=True, return_cov=
         return toret if len(toret) > 1 else toret[0]
     try:
         realizations = [project_to_poles(estimator.realization(ii, **kwargs),
-                                          ells=ells, return_sep=False, return_cov=False, ignore_nan=ignore_nan).ravel()
+                                         ells=ells, return_sep=False, return_cov=False, ignore_nan=ignore_nan).ravel()
                         for ii in estimator.realizations]
         cov = (len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0)
         toret.append(np.atleast_2d(cov))
@@ -897,7 +898,7 @@ def project_to_poles(estimator, ells=_default_ells, return_sep=True, return_cov=
     return toret if len(toret) > 1 else toret[0]
 
 
-project_to_multipoles = project_to_poles # for backward-compatibility
+project_to_multipoles = project_to_poles  # for backward-compatibility
 
 
 def project_to_wedges(estimator, wedges=_default_wedges, return_sep=True, return_cov=None, ignore_nan=False, **kwargs):
@@ -944,7 +945,7 @@ def project_to_wedges(estimator, wedges=_default_wedges, return_sep=True, return
         raise TwoPointEstimatorError('Estimating wedges is only possible in mode = "smu"')
     wedges, isscalar = _format_wedges(wedges)
     muedges = estimator.edges[1]
-    mumid = (muedges[:-1] + muedges[1:])/2.
+    mumid = (muedges[:-1] + muedges[1:]) / 2.
     dmu = np.diff(muedges)
     sep = estimator.sepavg(axis=0)
     corr = []
@@ -954,9 +955,9 @@ def project_to_wedges(estimator, wedges=_default_wedges, return_sep=True, return
             corrmu = np.empty(estimator.corr.shape[0], dtype=estimator.corr.dtype)
             for i_s, corr_s in enumerate(estimator.corr):
                 mask_s = mask & ~np.isnan(corr_s)
-                corrmu[i_s] = np.sum(corr_s[mask_s]*dmu[mask_s], axis=-1)/np.sum(dmu[mask_s])
+                corrmu[i_s] = np.sum(corr_s[mask_s] * dmu[mask_s], axis=-1) / np.sum(dmu[mask_s])
         else:
-            corrmu = np.sum(estimator.corr[:, mask]*dmu[mask], axis=-1)/np.sum(dmu[mask])
+            corrmu = np.sum(estimator.corr[:, mask] * dmu[mask], axis=-1) / np.sum(dmu[mask])
         corr.append(corrmu)
     if isscalar:
         corr = corr[0]
@@ -1018,27 +1019,25 @@ def project_to_wp(estimator, pimax=None, return_sep=True, return_cov=None, ignor
     """
     if getattr(estimator, 'mode', 'rppi') != 'rppi':
         raise TwoPointEstimatorError('Estimating projected correlation function is only possible in mode = "rppi"')
-    mask = Ellipsis
     if pimax is not None:
         estimator = estimator.copy()
         estimator.select(None, (0, pimax))
     sep = estimator.sepavg(axis=0)
     dpi = np.diff(estimator.edges[1])
-    corr = 2.*np.sum(estimator.corr*dpi, axis=-1)
     if ignore_nan:
         corr = np.empty(estimator.corr.shape[0], dtype=estimator.corr.dtype)
         for i_rp, corr_rp in enumerate(estimator.corr):
             mask_rp = ~np.isnan(corr_rp)
-            corr[i_rp] = 2.*np.sum(corr_rp[mask_rp]*dpi[mask_rp], axis=-1) * np.sum(dpi) / np.sum(dpi[mask_rp]) # extra factor to correct for missing bins
+            corr[i_rp] = 2. * np.sum(corr_rp[mask_rp] * dpi[mask_rp], axis=-1) * np.sum(dpi) / np.sum(dpi[mask_rp])  # extra factor to correct for missing bins
     else:
-        corrmu = 2.*np.sum(estimator.corr*dpi, axis=-1)
+        corr = 2. * np.sum(estimator.corr * dpi, axis=-1)
     toret = []
     if return_sep: toret.append(sep)
     toret.append(corr)
     if return_cov is False:
         return toret if len(toret) > 1 else toret[0]
     try:
-        realizations = [project_to_wp(estimator.realization(ii, **kwargs), return_sep=False, return_cov=False, ignore_nan=ignore_nan) for ii in estimator.realizations] # no need to provide pimax, as selection already performed
+        realizations = [project_to_wp(estimator.realization(ii, **kwargs), return_sep=False, return_cov=False, ignore_nan=ignore_nan) for ii in estimator.realizations]  # no need to provide pimax, as selection already performed
         cov = (len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0)
         toret.append(np.atleast_2d(cov))
     except AttributeError as exc:

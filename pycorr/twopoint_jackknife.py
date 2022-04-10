@@ -6,13 +6,12 @@ Implements methods to perform jackknife estimates of the correlation function co
 - two-point estimators, using the jackknife realizations to estimate a covariance matrix.
 """
 
-import os
 import numpy as np
 
 from .utils import BaseClass, get_mpi, TaskManager, _get_box, _make_array, _nan_to_zero
 from .twopoint_counter import BaseTwoPointCounter, TwoPointCounter, TwoPointCounterError, _format_positions
 from .twopoint_estimator import BaseTwoPointEstimator, TwoPointEstimatorError
-from . import twopoint_estimator, utils
+from . import utils
 
 
 class BaseSubsampler(BaseClass):
@@ -88,7 +87,7 @@ class BaseSubsampler(BaseClass):
         dtype = self.dtype if dtype is None else dtype
         positions = _format_positions(positions, position_type=position_type, mode=self.mode, dtype=dtype, copy=False, mpicomm=mpicomm, mpiroot=mpiroot)
         if self.mode == 'angular':
-            positions = utils.sky_to_cartesian(positions + [1.], degree=True, dtype=positions[0].dtype) # project onto unit sphere
+            positions = utils.sky_to_cartesian(positions + [1.], degree=True, dtype=positions[0].dtype)  # project onto unit sphere
         return positions
 
     def label(self, positions, position_type=None):
@@ -158,7 +157,7 @@ class BoxSubsampler(BaseSubsampler):
             if boxsize is None:
                 boxsize = (posmax - posmin) * (1. + 1e-9)
             if boxcenter is None:
-                boxcenter = (posmin + posmax)/2.
+                boxcenter = (posmin + posmax) / 2.
 
         self.boxsize = _make_array(boxsize, ndim, dtype='f8')
         self.boxcenter = _make_array(boxcenter, ndim, dtype='f8')
@@ -168,7 +167,7 @@ class BoxSubsampler(BaseSubsampler):
             self.nsamples = tuple(nsamples)
         else:
             nsamples = int(nsamples)
-            self.nsamples = (int(nsamples**(1./ndim) + 0.5),)*ndim
+            self.nsamples = (int(nsamples**(1. / ndim) + 0.5),) * ndim
             if nsamples != np.prod(self.nsamples):
                 raise ValueError('Number of regions must be a power of {:d}'.format(ndim))
 
@@ -176,7 +175,7 @@ class BoxSubsampler(BaseSubsampler):
 
     def run(self):
         """Set edges for binning along each axis."""
-        offset = self.boxcenter - self.boxsize/2.
+        offset = self.boxcenter - self.boxsize / 2.
         self.edges = [o + np.linspace(0, b, n) for o, b, n in zip(offset, self.boxsize, self.nsamples)]
 
     def label(self, positions, position_type=None):
@@ -268,7 +267,7 @@ class KMeansSubsampler(BaseSubsampler):
         else:
             positions, weights = np.asarray(self.positions).T, self.weights
             if self.with_mpi:
-                positions = get_mpi().gather_array(positions, root=None, mpicomm=self.mpicomm) # WARNING: bcast on all ranks
+                positions = get_mpi().gather_array(positions, root=None, mpicomm=self.mpicomm)  # WARNING: bcast on all ranks
                 if weights is not None:
                     weights = get_mpi().gather_array(weights, root=None, mpicomm=self.mpicomm)
         self.kmeans = cluster.KMeans(n_clusters=self.nsamples, random_state=self.random_state, **self.attrs)
@@ -317,7 +316,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
                  bin_type='auto', position_type='auto', weight_type='auto', weight_attrs=None,
                  twopoint_weights=None, los='midpoint', boxsize=None, compute_sepsavg=True, dtype=None,
                  nthreads=None, mpicomm=None, mpiroot=None, nprocs_per_real=1, samples=None, **kwargs):
-        """
+        r"""
         Initialize :class:`JackknifeTwoPointCounter`.
 
         Parameters
@@ -507,15 +506,15 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         for name in ['is_reversible', 'compute_sepsavg']:
             setattr(self, name, getattr(counts, name))
         self.is_reversible = self.autocorr or self.is_reversible
-        self.edges = counts.edges.copy() # useful when rebinning
+        self.edges = counts.edges.copy()  # useful when rebinning
         for name in ['wcounts', 'wnorm', 'ncounts']:
             if getattr(counts, name, None) is not None:
                 setattr(self, name, sum(getattr(r, name) for r in self.auto.values()) + sum(getattr(r, name) for r in self.cross12.values()))
 
-        self._set_default_seps() # reset self.seps to default
+        self._set_default_seps()  # reset self.seps to default
         for idim, compute_sepavg in enumerate(self.compute_sepsavg):
             if compute_sepavg:
-                self.seps[idim] = np.sum([_nan_to_zero(r.seps[idim])*r.wcounts for r in self.auto.values()], axis=0) + np.sum([_nan_to_zero(r.seps[idim])*r.wcounts for r in self.cross12.values()], axis=0)
+                self.seps[idim] = np.sum([_nan_to_zero(r.seps[idim]) * r.wcounts for r in self.auto.values()], axis=0) + np.sum([_nan_to_zero(r.seps[idim]) * r.wcounts for r in self.cross12.values()], axis=0)
                 with np.errstate(divide='ignore', invalid='ignore'):
                     self.seps[idim] /= self.wcounts
 
@@ -605,7 +604,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
             for name in self._result_names:
                 results = getattr(self, name)
                 for ii in samples:
-                    cls, mpiroot_worker, state, state_arrays = None, None, None, {name:None for name in ['wcounts', 'ncounts', 'seps']}
+                    cls, mpiroot_worker, state, state_arrays = None, None, None, {name: None for name in ['wcounts', 'ncounts', 'seps']}
                     if results[ii] is not None:
                         cls = results[ii].__class__
                         mpiroot_worker = self.mpicomm.rank
@@ -661,7 +660,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         if isinstance(correction, str):
             if correction == 'mohammad21':
                 # arXiv https://arxiv.org/pdf/2109.07071.pdf eq. 27
-                alpha = self.nrealizations/(2. + np.sqrt(2)*(self.nrealizations - 1))
+                alpha = self.nrealizations / (2. + np.sqrt(2) * (self.nrealizations - 1))
             else:
                 raise TwoPointCounterError('Unknown jackknife correction {}'.format(correction))
         elif correction is not None:
@@ -681,7 +680,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
                 # such that seps may be non-zero even if wcounts is zero.
                 mask = np.ones_like(state['seps'][idim], dtype='?')
                 for name in ['wcounts', 'ncounts']:
-                    if name in state: mask &= state[name] > 0 # if ncounts/wcounts computed, good indicator of whether pairs exist or not
+                    if name in state: mask &= state[name] > 0  # if ncounts/wcounts computed, good indicator of whether pairs exist or not
                 # For more robustness we restrict to those separations which lie in between the lower and upper edges
                 mask &= np.apply_along_axis(lambda x: (x >= self.edges[idim][:-1]) & (x <= self.edges[idim][1:]), idim, state['seps'][idim])
                 state['seps'][idim][~mask] = np.nan
@@ -749,7 +748,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
 
     def extend(self, other):
         """Extend current instance with another; see :meth:`concatenate`."""
-        new = self.concatenate(self, other, **kwargs)
+        new = self.concatenate(self, other)
         self.__dict__.update(new.__dict__)
 
     @classmethod
@@ -784,7 +783,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         return new
 
     def reversed(self):
-        new = super(JackknifeTwoPointCounter, self).reversed() # a deepcopy with swapped size1, size2
+        new = super(JackknifeTwoPointCounter, self).reversed()  # a deepcopy with swapped size1, size2
         if not self.autocorr:
             for name in self._result_names:
                 setattr(new, name, {k: r.reversed() for k, r in getattr(self, name).items()})
@@ -844,7 +843,7 @@ class JackknifeTwoPointEstimator(BaseTwoPointEstimator):
             try:
                 kw[name] = counts.realization(ii, **kwargs)
             except AttributeError:
-                kw[name] = counts # in case counts are not jackknife, e.g. analytic randoms (but that'd be wrong!)
+                kw[name] = counts  # in case counts are not jackknife, e.g. analytic randoms (but that'd be wrong!)
         return cls(**kw)
 
     def cov(self, **kwargs):
@@ -866,7 +865,7 @@ class JackknifeTwoPointEstimator(BaseTwoPointEstimator):
             cls_counts = getattr(new, name).__class__
             try:
                 tmp = cls_counts.concatenate(*[getattr(other, name) for other in others])
-            except AttributeError: # in case counts are not jackknife, e.g. analytic randoms
+            except AttributeError:  # in case counts are not jackknife, e.g. analytic randoms
                 tmp = getattr(new, name)
             kw[name] = tmp
         cls = others[0].__class__
@@ -874,12 +873,12 @@ class JackknifeTwoPointEstimator(BaseTwoPointEstimator):
 
     def extend(self, other):
         """Extend current instance with another; see :meth:`concatenate`."""
-        new = self.concatenate(self, other, **kwargs)
+        new = self.concatenate(self, other)
         self.__dict__.update(new.__dict__)
 
     def __setstate__(self, state):
         kwargs = {}
-        counts = set(self.requires(with_reversed=True, with_shifted=True, join='')) | set(self.requires(with_reversed=True, with_shifted=False, join='')) # most general list
+        counts = set(self.requires(with_reversed=True, with_shifted=True, join='')) | set(self.requires(with_reversed=True, with_shifted=False, join=''))  # most general list
         for name in counts:
             if name in state:
                 if 'jackknife' in state[name].get('name', ''):
@@ -894,4 +893,4 @@ for name, cls in list(BaseTwoPointEstimator._registry.items()):
 
     if name not in ['base', 'jackknife']:
         name_cls = 'Jackknife{}'.format(cls.__name__)
-        globals()[name_cls] = type(BaseTwoPointEstimator)(name_cls, (cls, JackknifeTwoPointEstimator), {'name':'jackknife-{}'.format(name), '__module__': __name__})
+        globals()[name_cls] = type(BaseTwoPointEstimator)(name_cls, (cls, JackknifeTwoPointEstimator), {'name': 'jackknife-{}'.format(name), '__module__': __name__})

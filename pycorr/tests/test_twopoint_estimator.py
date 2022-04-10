@@ -4,19 +4,19 @@ import pytest
 
 import numpy as np
 
-from pycorr import TwoPointCorrelationFunction, TwoPointEstimator, TwoPointEstimator, TwoPointCounter,\
+from pycorr import TwoPointCorrelationFunction, TwoPointEstimator, TwoPointCounter,\
                    JackknifeTwoPointEstimator, project_to_poles, project_to_wp, setup_logging
 from pycorr.twopoint_estimator import TwoPointEstimatorError
 
 
-def generate_catalogs(size=100, boxsize=(1000,)*3, offset=(0, 0, 0), n_individual_weights=1, n_bitwise_weights=0, seed=42):
+def generate_catalogs(size=100, boxsize=(1000,) * 3, offset=(0, 0, 0), n_individual_weights=1, n_bitwise_weights=0, seed=42):
     rng = np.random.RandomState(seed=seed)
     toret = []
     for i in range(2):
-        positions = [o + rng.uniform(0., 1., size)*b for o, b in zip(offset, boxsize)]
+        positions = [o + rng.uniform(0., 1., size) * b for o, b in zip(offset, boxsize)]
         weights = [rng.randint(0, 0xffffffff, size, dtype='i8') for i in range(n_bitwise_weights)]
         weights += [rng.uniform(0.5, 1., size) for i in range(n_individual_weights)]
-        toret.append(positions+weights)
+        toret.append(positions + weights)
     return toret
 
 
@@ -25,21 +25,21 @@ def test_multipoles():
     class Estimator(object):
 
         def sepavg(self, axis=0):
-            return estimator.sep[:,0]
+            return estimator.sep[:, 0]
 
     from scipy import special
 
     estimator = Estimator()
     for muedges in [np.linspace(0., 1., 10), np.linspace(0., 1., 100), np.linspace(-1., 1., 100)]:
         edges = [np.linspace(0., 1., 10), muedges]
-        ss, mumu = np.meshgrid(*[(e[:-1] + e[1:])/2. for e in edges], indexing='ij')
+        ss, mumu = np.meshgrid(*[(e[:-1] + e[1:]) / 2. for e in edges], indexing='ij')
         estimator.sep, estimator.edges, estimator.corr = ss, edges, np.ones_like(ss)
-        s, xi = project_to_poles(estimator, ells=(0,2,4))
+        s, xi = project_to_poles(estimator, ells=(0, 2, 4))
         assert np.allclose(xi[0], 1., atol=1e-9)
         for xiell in xi[1:]: assert np.allclose(xiell, 0., atol=1e-9)
 
     edges = [np.linspace(0., 1., 10), np.linspace(0., 1., 100)]
-    ss, mumu = np.meshgrid(*[(e[:-1] + e[1:])/2. for e in edges], indexing='ij')
+    ss, mumu = np.meshgrid(*[(e[:-1] + e[1:]) / 2. for e in edges], indexing='ij')
     ells = (0, 2, 4)
     for ellin in ells[1:]:
         estimator.sep, estimator.edges, estimator.corr = ss, edges, special.legendre(ellin)(mumu)
@@ -55,31 +55,31 @@ def test_estimator(mode='s'):
     list_engine = ['corrfunc']
     edges = np.linspace(1, 100, 10)
     size = 1000
-    boxsize = (500,)*3
+    boxsize = (500,) * 3
     from collections import namedtuple
     TwoPointWeight = namedtuple('TwoPointWeight', ['sep', 'weight'])
     twopoint_weights = TwoPointWeight(np.logspace(-4, 0, 40), np.linspace(4., 1., 40))
 
     list_options = []
-    list_options.append({'weights_one':['D1', 'R2']})
+    list_options.append({'weights_one': ['D1', 'R2']})
     if mode not in ['theta', 'rp']:
-        list_options.append({'estimator':'natural', 'boxsize':boxsize, 'with_randoms':False})
-        list_options.append({'autocorr':True, 'estimator':'natural', 'boxsize':boxsize, 'with_randoms':False})
+        list_options.append({'estimator': 'natural', 'boxsize': boxsize, 'with_randoms': False})
+        list_options.append({'autocorr': True, 'estimator': 'natural', 'boxsize': boxsize, 'with_randoms': False})
     for estimator in ['natural', 'landyszalay', 'davispeebles', 'weight', 'residual']:
-        list_options.append({'estimator':estimator})
+        list_options.append({'estimator': estimator})
         if estimator not in ['weight']:
-            list_options.append({'estimator':estimator, 'with_shifted':True})
-            list_options.append({'estimator':estimator, 'with_shifted':True, 'autocorr':True})
+            list_options.append({'estimator': estimator, 'with_shifted': True})
+            list_options.append({'estimator': estimator, 'with_shifted': True, 'autocorr': True})
         # pip
-        list_options.append({'estimator':estimator, 'n_individual_weights':0})
-        list_options.append({'estimator':estimator, 'n_individual_weights':1, 'n_bitwise_weights':1, 'compute_sepsavg':False})
-        list_options.append({'estimator':estimator, 'n_individual_weights':1, 'n_bitwise_weights':1})
+        list_options.append({'estimator': estimator, 'n_individual_weights': 0})
+        list_options.append({'estimator': estimator, 'n_individual_weights': 1, 'n_bitwise_weights': 1, 'compute_sepsavg': False})
+        list_options.append({'estimator': estimator, 'n_individual_weights': 1, 'n_bitwise_weights': 1})
         # twopoint weights
-        list_options.append({'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights})
+        list_options.append({'n_individual_weights': 2, 'n_bitwise_weights': 2, 'twopoint_weights': twopoint_weights})
         # los
         if mode == 'smu':
-            list_options.append({'estimator':estimator, 'los':'firstpoint', 'twopoint_weights':twopoint_weights, 'autocorr':True})
-            list_options.append({'estimator':estimator, 'los':'endpoint', 'autocorr':False})
+            list_options.append({'estimator': estimator, 'los': 'firstpoint', 'twopoint_weights': twopoint_weights, 'autocorr': True})
+            list_options.append({'estimator': estimator, 'los': 'endpoint', 'autocorr': False})
 
     mpi = False
     try:
@@ -97,7 +97,7 @@ def test_estimator(mode='s'):
     elif mode == 'rppi':
         edges = (edges, np.linspace(0, 20, 21))
     elif mode == 'theta':
-        edges = np.linspace(1e-5, 10, 11) # below 1e-5, self pairs are counted by Corrfunc
+        edges = np.linspace(1e-5, 10, 11)  # below 1e-5, self pairs are counted by Corrfunc
 
     for engine in list_engine:
         for options in list_options:
@@ -117,7 +117,7 @@ def test_estimator(mode='s'):
             los = options['los'] = options.get('los', 'x' if options['boxsize'] is not None else 'midpoint')
             options['position_type'] = 'xyz'
             npos = 3
-            for label, catalog in zip(['D1','D2','R1','R2'], [data1, data2, randoms1, randoms2]):
+            for label, catalog in zip(['D1', 'D2', 'R1', 'R2'], [data1, data2, randoms1, randoms2]):
                 if label in weights_one:
                     catalog.append(np.ones_like(catalog[0]))
 
@@ -194,7 +194,7 @@ def test_estimator(mode='s'):
                                                    **options, **kwargs)
 
             def assert_allclose(res1, res2):
-                tol = {'atol':1e-8, 'rtol':1e-6}
+                tol = {'atol': 1e-8, 'rtol': 1e-6}
                 assert np.allclose(res2.wcounts, res1.wcounts, **tol)
                 assert np.allclose(res2.wnorm, res1.wnorm, **tol)
 
@@ -207,7 +207,7 @@ def test_estimator(mode='s'):
             estimator_jackknife = run_jackknife()
             assert_allclose_estimators(estimator_jackknife, estimator_nojackknife)
             if mode in ['theta', 'rp']:
-                assert estimator_jackknife.cov().shape == (estimator_jackknife.shape[0],)*2
+                assert estimator_jackknife.cov().shape == (estimator_jackknife.shape[0],) * 2
 
             nsplits = 10
             estimator_jackknife = JackknifeTwoPointEstimator.concatenate(*[run_jackknife(samples=samples) for samples in np.array_split(np.unique(data1[-1]), nsplits)])
@@ -255,14 +255,14 @@ def test_estimator(mode='s'):
                 assert_allclose(R1R2, estimator_jackknife.R1R2)
 
             if estimator_jackknife.mode == 'smu':
-                sep, xiell = project_to_poles(estimator_nojackknife, ells=(0,2,4))
-                sep, xiell, cov = project_to_poles(estimator_jackknife, ells=(0,2,4))
-                assert cov.shape == (sum([len(xi) for xi in xiell]),)*2
+                sep, xiell = project_to_poles(estimator_nojackknife, ells=(0, 2, 4))
+                sep, xiell, cov = project_to_poles(estimator_jackknife, ells=(0, 2, 4))
+                assert cov.shape == (sum([len(xi) for xi in xiell]),) * 2
 
             if estimator_jackknife.mode == 'rppi':
 
                 def get_sepavg(estimator, sepmax):
-                    mid = [(edges[:-1] + edges[1:])/2. for edges in estimator.edges]
+                    mid = [(edges[:-1] + edges[1:]) / 2. for edges in estimator.edges]
                     if not estimator.XX.compute_sepavg:
                         return mid[0]
                     mask = mid[1] <= sepmax
@@ -273,7 +273,7 @@ def test_estimator(mode='s'):
                     else:
                         wcounts = estimator.XX.wcounts
                     with np.errstate(divide='ignore', invalid='ignore'):
-                        return np.sum(sep[:,mask]*wcounts[:,mask], axis=-1)/np.sum(wcounts[:,mask], axis=-1)
+                        return np.sum(sep[:, mask] * wcounts[:, mask], axis=-1) / np.sum(wcounts[:, mask], axis=-1)
 
                 pimax = 40
                 sep, wp = project_to_wp(estimator_nojackknife, pimax=pimax)
@@ -281,7 +281,7 @@ def test_estimator(mode='s'):
                 sep, wp, cov = project_to_wp(estimator_jackknife)
                 sep, wp, cov = project_to_wp(estimator_jackknife, pimax=pimax)
                 assert np.allclose(sep, get_sepavg(estimator_jackknife, pimax), equal_nan=True)
-                assert cov.shape == (len(sep),)*2 == (len(wp),)*2
+                assert cov.shape == (len(sep),) * 2 == (len(wp),) * 2
 
             with tempfile.TemporaryDirectory() as tmp_dir:
                 tmp_dir = '_tests'
@@ -295,20 +295,20 @@ def test_estimator(mode='s'):
                         _, tmp = tmp
                         assert np.allclose(tmp, test.corr, equal_nan=True)
                     assert np.isnan(test(-1., return_std=False)).all()
-                    isep = test.shape[0]//2
-                    sep = test.edges[0][isep:isep+2]
+                    isep = test.shape[0] // 2
+                    sep = test.edges[0][isep:isep + 2]
                     arrays = test(sep), test(sep[::-1])
                     if not isjkn: arrays = [[array] for array in arrays]
                     for array1, array2 in zip(*arrays): assert np.allclose(array1, array2[::-1], atol=0)
                     zero = test.corr.flat[0]
-                    test.corr.flat[0] = np.nan # to test ignore_nan
+                    test.corr.flat[0] = np.nan  # to test ignore_nan
                     test[::test.shape[0]].get_corr()
                     if isjkn: assert test[::test.shape[0]].get_corr(return_sep=False)[1].ndim == 2
                     if test.mode == 'smu':
                         # smu
                         arrays = test(sep, [0., 0.4]), test(sep[::-1], [0.4, 0.])
                         if not isjkn: arrays = [[array] for array in arrays]
-                        for array1, array2 in zip(*arrays): assert np.allclose(array1, array2[::-1,::-1], atol=0)
+                        for array1, array2 in zip(*arrays): assert np.allclose(array1, array2[::-1, ::-1], atol=0)
                         test.save_txt(fn_txt)
                         tmp = np.loadtxt(fn_txt, unpack=True)
                         mids = np.meshgrid(*[test.sepavg(axis=axis, method='mid') for axis in range(test.ndim)], indexing='ij')
@@ -319,7 +319,7 @@ def test_estimator(mode='s'):
                         assert np.isnan(test(ell=2)).any()
                         assert not np.isnan(test(ell=2, ignore_nan=True)).any()
                         assert np.allclose(test(sep, ells=(0, 2, 4)), test(sep, mode='poles'), atol=0)
-                        arrays = test(5., ell=2), test([5.]*3, ell=2), test([5.]*4, ells=(0, 2, 4)), test([5.]*4, [0.1, 0.2]) # corr, and std if jackknife
+                        arrays = test(5., ell=2), test([5.] * 3, ell=2), test([5.] * 4, ells=(0, 2, 4)), test([5.] * 4, [0.1, 0.2])  # corr, and std if jackknife
                         if not isjkn: arrays = [[array] for array in arrays]
                         for array in arrays[0]: assert array.shape == ()
                         for array in arrays[1]: assert array.shape == (3, )
@@ -328,18 +328,18 @@ def test_estimator(mode='s'):
                         arrays = test(sep, ell=2), test(sep[::-1], ell=2), test(sep, ell=[0, 2]), test(sep[::-1], ell=[2, 0]), test(sep, [0., 0.4]), test(sep[::-1], [0.4, 0.])
                         if not isjkn: arrays = [[array] for array in arrays]
                         for array1, array2 in zip(*arrays[:2]): assert np.allclose(array1, array2[::-1], atol=0)
-                        for array1, array2 in zip(*arrays[2:4]): assert np.allclose(array1, array2[::-1,::-1], atol=0)
+                        for array1, array2 in zip(*arrays[2:4]): assert np.allclose(array1, array2[::-1, ::-1], atol=0)
                         test.save_txt(fn_txt, ells=(0, 2))
                         tmp = np.loadtxt(fn_txt, unpack=True)
                         assert np.allclose(tmp[0], test.sepavg(method='mid'))
                         tmp2 = test(return_sep=True, ells=(0, 2))
-                        assert np.allclose(tmp[1:], np.concatenate([tmp2[0][None,:]] + tmp2[1:], axis=0), equal_nan=True)
+                        assert np.allclose(tmp[1:], np.concatenate([tmp2[0][None, :]] + tmp2[1:], axis=0), equal_nan=True)
                         # wedges
-                        if isjkn: assert test[::test.shape[0]].get_corr(wedges=(-1., -2./3, -1./3.), return_sep=False)[1].ndim == 2
+                        if isjkn: assert test[::test.shape[0]].get_corr(wedges=(-1., -2. / 3, -1. / 3.), return_sep=False)[1].ndim == 2
                         assert np.isnan(test(wedges=(-1., 0.5))).any()
                         assert not np.isnan(test(wedges=(-1., 0.5), ignore_nan=True)).any()
-                        assert np.allclose(test(sep, wedges=(-1., -2./3, -1./3, 0., 1./3, 2./3, 1.)), test(sep, mode='wedges'), atol=0)
-                        arrays = test(5., wedges=(-1., -0.8)), test([5.]*3, wedges=(-1., -0.8)), test([sep[0]]*4, wedges=(0.1, 0.3, 0.8)), test([sep[0]]*4, wedges=((0.1, 0.3), (0.3, 0.8)))
+                        assert np.allclose(test(sep, wedges=(-1., -2. / 3, -1. / 3, 0., 1. / 3, 2. / 3, 1.)), test(sep, mode='wedges'), atol=0)
+                        arrays = test(5., wedges=(-1., -0.8)), test([5.] * 3, wedges=(-1., -0.8)), test([sep[0]] * 4, wedges=(0.1, 0.3, 0.8)), test([sep[0]] * 4, wedges=((0.1, 0.3), (0.3, 0.8)))
                         if not isjkn: arrays = [[array] for array in arrays]
                         for array in arrays[0]: assert array.shape == ()
                         for array in arrays[1]: assert array.shape == (3, )
@@ -349,17 +349,17 @@ def test_estimator(mode='s'):
                         arrays = test(sep, wedges=(-1., -0.8)), test(sep[::-1], wedges=(-1., -0.8)), test(sep, wedges=(0.1, 0.3, 0.8)), test(sep[::-1], wedges=((0.3, 0.8), (0.1, 0.3)))
                         if not isjkn: arrays = [[array] for array in arrays]
                         for array1, array2 in zip(*arrays[:2]): assert np.allclose(array1, array2[::-1], atol=0)
-                        for array1, array2 in zip(*arrays[2:4]): assert np.allclose(array1, array2[::-1,::-1], atol=0)
+                        for array1, array2 in zip(*arrays[2:4]): assert np.allclose(array1, array2[::-1, ::-1], atol=0)
                         test.save_txt(fn_txt, wedges=(0.1, 0.3, 0.8))
                         tmp = np.loadtxt(fn_txt, unpack=True)
                         assert np.allclose(tmp[0], test.sepavg(method='mid'))
                         tmp2 = test(return_sep=True, wedges=(0.1, 0.3, 0.8))
-                        assert np.allclose(tmp[1:], np.concatenate([tmp2[0][None,:]] + tmp2[1:], axis=0), equal_nan=True)
+                        assert np.allclose(tmp[1:], np.concatenate([tmp2[0][None, :]] + tmp2[1:], axis=0), equal_nan=True)
                     elif test.mode == 'rppi':
                         # rppi
                         arrays = test(sep, [0., 0.4]), test(sep[::-1], [0.4, 0.])
                         if not isjkn: arrays = [[array] for array in arrays]
-                        for array1, array2 in zip(*arrays): assert np.allclose(array1, array2[::-1,::-1], atol=0)
+                        for array1, array2 in zip(*arrays): assert np.allclose(array1, array2[::-1, ::-1], atol=0)
                         test.save_txt(fn_txt)
                         tmp = np.loadtxt(fn_txt, unpack=True)
                         mids = np.meshgrid(*[test.sepavg(axis=axis, method='mid') for axis in range(test.ndim)], indexing='ij')
@@ -369,7 +369,7 @@ def test_estimator(mode='s'):
                         if isjkn: assert test[::test.shape[0]].get_corr(pimax=20, return_sep=False)[1].ndim == 2
                         assert np.isnan(test(pimax=None)).any()
                         assert not np.isnan(test(pimax=None, ignore_nan=True)).any()
-                        arrays = test(10., pimax=60), test([9.]*4, pimax=60), test([9.]*4, [10., 12.])
+                        arrays = test(10., pimax=60), test([9.] * 4, pimax=60), test([9.] * 4, [10., 12.])
                         if not isjkn: arrays = [[array] for array in arrays]
                         for array in arrays[0]: assert array.shape == ()
                         for array in arrays[1]: assert array.shape == (4, )
@@ -387,7 +387,7 @@ def test_estimator(mode='s'):
                             test(5., ell=2)
                         with pytest.raises(TwoPointEstimatorError):
                             test(10., pimax=60)
-                        arrays = test(10.), test([9.]*4)
+                        arrays = test(10.), test([9.] * 4)
                         if not isjkn: arrays = [[array] for array in arrays]
                         for array in arrays[0]: assert array.shape == ()
                         for array in arrays[1]: assert array.shape == (4, )
@@ -404,15 +404,15 @@ def test_estimator(mode='s'):
                     assert test2.with_shifted is test.with_shifted
                     assert test2.with_reversed is test.with_reversed
                     test3 = test2.copy()
-                    test3.rebin((2,5) if len(edges) == 2 else (2,))
-                    assert test3.shape[0] == test2.shape[0]//2
-                    test2 = test2[::2,::5] if len(edges) == 2 else test2[::2]
+                    test3.rebin((2, 5) if len(edges) == 2 else (2,))
+                    assert test3.shape[0] == test2.shape[0] // 2
+                    test2 = test2[::2, ::5] if len(edges) == 2 else test2[::2]
                     assert_allclose_estimators(test2, test3)
                     test3.select((0, 50.))
                     assert np.all((test3.sepavg(axis=0) <= 50.) | np.isnan(test3.sepavg(axis=0)))
                     test2 = test + test
                     assert np.allclose(test2.corr, test.corr, equal_nan=True)
-                    test2 = test.concatenate_x(test[:test.shape[0]//2], test[test.shape[0]//2:])
+                    test2 = test.concatenate_x(test[:test.shape[0] // 2], test[test.shape[0] // 2:])
                     assert np.allclose(test2.corr, test.corr, equal_nan=True)
                     if 'davispeebles' not in test.name:
                         test2 = run_jackknife(R1R2=test.R1R2)

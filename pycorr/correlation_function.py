@@ -2,12 +2,9 @@
 
 import logging
 
-import numpy as np
-
 from .twopoint_estimator import get_twopoint_estimator, TwoPointEstimator
 from .twopoint_counter import TwoPointCounter, AnalyticTwoPointCounter
 from .twopoint_jackknife import JackknifeTwoPointCounter
-from .utils import BaseClass
 
 
 def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=None, randoms_positions1=None, randoms_positions2=None, shifted_positions1=None, shifted_positions2=None,
@@ -266,11 +263,11 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     Estimator = get_twopoint_estimator(estimator, with_DR=with_randoms, with_jackknife=with_jackknife)
     if log: logger.info('Using estimator {}.'.format(Estimator))
 
-    positions = {'D1':data_positions1, 'D2':data_positions2, 'R1':randoms_positions1, 'R2':randoms_positions2, 'S1': shifted_positions1, 'S2':shifted_positions2}
-    weights = {'D1':data_weights1, 'D2':data_weights2, 'R1':randoms_weights1, 'R2':randoms_weights2, 'S1':shifted_weights1, 'S2':shifted_weights2}
-    samples = {'D1':data_samples1, 'D2':data_samples2, 'R1':randoms_samples1, 'R2':randoms_samples2, 'S1':shifted_samples1, 'S2':shifted_samples2}
-    twopoint_weights = {'D1D2':D1D2_twopoint_weights, 'D1R2':D1R2_twopoint_weights, 'R1D2':R1D2_twopoint_weights, 'R1R2':R1R2_twopoint_weights, 'S1S2':S1S2_twopoint_weights, 'D1S2':D1S2_twopoint_weights, 'S1D2':S1D2_twopoint_weights}
-    weight_type = {'D1D2':D1D2_weight_type, 'D1R2':D1R2_weight_type, 'R1D2':R1D2_weight_type, 'R1R2':R1R2_weight_type, 'S1S2':S1S2_weight_type, 'D1S2':D1S2_weight_type, 'S1D2':S1D2_weight_type}
+    positions = {'D1': data_positions1, 'D2': data_positions2, 'R1': randoms_positions1, 'R2': randoms_positions2, 'S1': shifted_positions1, 'S2': shifted_positions2}
+    weights = {'D1': data_weights1, 'D2': data_weights2, 'R1': randoms_weights1, 'R2': randoms_weights2, 'S1': shifted_weights1, 'S2': shifted_weights2}
+    samples = {'D1': data_samples1, 'D2': data_samples2, 'R1': randoms_samples1, 'R2': randoms_samples2, 'S1': shifted_samples1, 'S2': shifted_samples2}
+    twopoint_weights = {'D1D2': D1D2_twopoint_weights, 'D1R2': D1R2_twopoint_weights, 'R1D2': R1D2_twopoint_weights, 'R1R2': R1R2_twopoint_weights, 'S1S2': S1S2_twopoint_weights, 'D1S2': D1S2_twopoint_weights, 'S1D2': S1D2_twopoint_weights}
+    weight_type = {'D1D2': D1D2_weight_type, 'D1R2': D1R2_weight_type, 'R1D2': R1D2_weight_type, 'R1R2': R1R2_weight_type, 'S1S2': S1S2_weight_type, 'D1S2': D1S2_weight_type, 'S1D2': S1D2_weight_type}
     precomputed = kwargs
 
     counts = {}

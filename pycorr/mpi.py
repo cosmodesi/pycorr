@@ -20,39 +20,39 @@ def split_ranks(nranks, nranks_per_worker, include_all=False):
     """
     Divide the ranks into chunks, attempting to have `nranks_per_worker` ranks
     in each chunk. This removes the master (0) rank, such
-    that `nranks - 1` ranks are available to be grouped
+    that `nranks - 1` ranks are available to be grouped.
 
     Parameters
     ----------
     nranks : int
-        The total number of ranks available
+        The total number of ranks available.
 
     nranks_per_worker : int
-        The desired number of ranks per worker
+        The desired number of ranks per worker.
 
     include_all : bool, optional
         if `True`, then do not force each group to have
         exactly `nranks_per_worker` ranks, instead including the remainder as well;
-        default is `False`
+        default is `False`.
     """
-    available = list(range(1, nranks)) # available ranks to do work
+    available = list(range(1, nranks))  # available ranks to do work
     total = len(available)
     extra_ranks = total % nranks_per_worker
 
     if include_all:
-        for i, chunk in enumerate(np.array_split(available, max(total//nranks_per_worker, 1))):
+        for i, chunk in enumerate(np.array_split(available, max(total // nranks_per_worker, 1))):
             yield i, list(chunk)
     else:
-        for i in range(total//nranks_per_worker):
-            yield i, available[i*nranks_per_worker:(i+1)*nranks_per_worker]
+        for i in range(total // nranks_per_worker):
+            yield i, available[i * nranks_per_worker:(i + 1) * nranks_per_worker]
 
         i = total // nranks_per_worker
-        if extra_ranks and extra_ranks >= nranks_per_worker//2:
-            remove = extra_ranks % 2 # make it an even number
+        if extra_ranks and extra_ranks >= nranks_per_worker // 2:
+            remove = extra_ranks % 2  # make it an even number
             ranks = available[-extra_ranks:]
             if remove: ranks = ranks[:-remove]
             if len(ranks):
-                yield i+1, ranks
+                yield i + 1, ranks
 
 
 class MPITaskManager(BaseClass):
@@ -86,7 +86,7 @@ class MPITaskManager(BaseClass):
             evenly; default is `False`.
         """
         self.nprocs_per_task = nprocs_per_task
-        self.use_all_nprocs  = use_all_nprocs
+        self.use_all_nprocs = use_all_nprocs
 
         # the base communicator
         self.basecomm = mpicomm
@@ -119,29 +119,29 @@ class MPITaskManager(BaseClass):
         # split the ranks
         for i, ranks in split_ranks(self.size, self.nprocs_per_task, include_all=self.use_all_nprocs):
             if self.rank in ranks:
-                color = i+1
+                color = i + 1
                 self.self_worker_ranks = ranks
             total_ranks += len(ranks)
             nworkers = nworkers + 1
         self.other_ranks = [rank for rank in range(self.size) if rank not in self.self_worker_ranks]
 
-        self.workers = nworkers # store the total number of workers
+        self.workers = nworkers  # store the total number of workers
         if self.rank == 0:
-            self.log_info('Entering {} with {:d} workers.'.format(self.__class__.__name__,self.workers))
+            self.log_info('Entering {} with {:d} workers.'.format(self.__class__.__name__, self.workers))
 
         # check for no workers!
         if self.workers == 0:
-            raise ValueError('no pool workers available; try setting `use_all_nprocs` = True')
+            raise ValueError('No pool workers available; try setting `use_all_nprocs` = True')
 
         leftover = (self.size - 1) - total_ranks
         if leftover and self.rank == 0:
-            self.log_warning('with `nprocs_per_task` = {:d} and {:d} available rank(s), '\
-                                '{:d} rank(s) will do no work'.format(self.nprocs_per_task, self.size-1, leftover))
-            self.log_warning('set `use_all_nprocs=True` to use all available nranks')
+            self.log_warning('With `nprocs_per_task` = {:d} and {:d} available rank(s), \
+                             {:d} rank(s) will do no work'.format(self.nprocs_per_task, self.size - 1, leftover))
+            self.log_warning('Set `use_all_nprocs=True` to use all available nranks')
 
         # crash if we only have one process or one worker
         if self.size <= self.workers:
-            raise ValueError('only have {:d} ranks; need at least {:d} to use the desired %d workers'.format(self.size, self.workers+1, self.workers))
+            raise ValueError('Only have {:d} ranks; need at least {:d} to use the desired {:d} workers'.format(self.size, self.workers + 1, self.workers))
 
         # ranks that will do work have a nonzero color now
         self._valid_worker = color > 0
@@ -166,7 +166,7 @@ class MPITaskManager(BaseClass):
         try:
             return self._valid_worker
         except AttributeError:
-            raise ValueError('workers are only defined when inside the ``with MPITaskManager()`` context')
+            raise ValueError('Workers are only defined when inside the ``with MPITaskManager()`` context')
 
     def _get_tasks(self):
         """Internal generator that yields the next available task from a worker."""
@@ -176,7 +176,7 @@ class MPITaskManager(BaseClass):
 
         # logging info
         if self.mpicomm.rank == 0:
-            self.log_debug('worker master rank is {:d} on {} with {:d} processes available'.format(self.rank, MPI.Get_processor_name(), self.mpicomm.size))
+            self.log_debug('Worker master rank is {:d} on {} with {:d} processes available'.format(self.rank, MPI.Get_processor_name(), self.mpicomm.size))
 
         # continously loop and wait for instructions
         while True:
@@ -190,7 +190,7 @@ class MPITaskManager(BaseClass):
                 tag = self.status.Get_tag()
 
             # bcast to everyone in the worker subcomm
-            args = self.mpicomm.bcast(args) # args is [task_number, task_value]
+            args = self.mpicomm.bcast(args)  # args is [task_number, task_value]
             tag = self.mpicomm.bcast(tag)
 
             # yield the task
@@ -214,7 +214,7 @@ class MPITaskManager(BaseClass):
             self.basecomm.send(None, dest=0, tag=self.tags.EXIT)
 
         # debug logging
-        self.log_debug('rank %d process is done waiting',self.rank)
+        self.log_debug('Rank %d process is done waiting', self.rank)
 
     def _distribute_tasks(self, tasks):
         """Internal function that distributes the tasks from the root to the workers."""
@@ -223,7 +223,7 @@ class MPITaskManager(BaseClass):
             raise ValueError('only the root rank should distribute the tasks')
 
         ntasks = len(tasks)
-        task_index     = 0
+        task_index = 0
         closed_workers = 0
 
         # logging info
@@ -244,7 +244,7 @@ class MPITaskManager(BaseClass):
                 if task_index < ntasks:
                     this_task = [task_index, tasks[task_index]]
                     self.basecomm.send(this_task, dest=source, tag=self.tags.START)
-                    self.log_debug('sending task `{}` to worker {:d}'.format(str(tasks[task_index]),source))
+                    self.log_debug('sending task `{}` to worker {:d}'.format(str(tasks[task_index]), source))
                     task_index += 1
 
                 # all tasks sent -- tell worker to exit
@@ -258,7 +258,7 @@ class MPITaskManager(BaseClass):
             # track workers that exited
             elif tag == self.tags.EXIT:
                 closed_workers += 1
-                self.log_debug('worker {:d} has exited, closed workers = {:d}'.format(source,closed_workers))
+                self.log_debug('worker {:d} has exited, closed workers = {:d}'.format(source, closed_workers))
 
     def iterate(self, tasks):
         """
@@ -527,7 +527,7 @@ def broadcast_array(data, root=0, mpicomm=COMM_WORLD):
         bad_input = not isinstance(data, np.ndarray)
     else:
         bad_input = None
-    bad_input = mpicomm.bcast(bad_input,root=root)
+    bad_input = mpicomm.bcast(bad_input, root=root)
     if bad_input:
         raise ValueError('`data` must by numpy array on root in broadcast_array')
 
@@ -595,10 +595,7 @@ def local_size(size, mpicomm=COMM_WORLD):
     """
     start = mpicomm.rank * size // mpicomm.size
     stop = (mpicomm.rank + 1) * size // mpicomm.size
-    localsize = stop - start
-    #localsize = size // mpicomm.size
-    #if mpicomm.rank < size % mpicomm.size: localsize += 1
-    return localsize
+    return stop - start
 
 
 def scatter_array(data, counts=None, root=0, mpicomm=COMM_WORLD):
@@ -751,8 +748,7 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
         Split `s` into three integers, a, b, c, such
         that a * b * c == s and a <= b <= c.
         """
-        a = int(s ** (1./3.)) + 1
-        d = s
+        a = int(s ** (1. / 3.)) + 1
         while a > 1:
             if s % a == 0:
                 s = s // a
@@ -780,9 +776,6 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
     if auto:
         positions2 = positions1
         weights2 = weights1
-        size2 = size1
-    else:
-        size2 = mpicomm.allreduce(len(positions2[0]))
 
     cpositions1 = positions1
     cpositions2 = positions2
@@ -811,12 +804,12 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
         posmin, posmax = _get_box(*([cpositions1.T] if auto else [cpositions1.T, cpositions2.T]))
         posmin, posmax = np.min(mpicomm.allgather(posmin), axis=0), np.max(mpicomm.allgather(posmax), axis=0)
         diff = max(np.abs(posmax - posmin).max(), 1.)
-        posmin -= 1e-6 * diff # margin to make sure all positions will be included
+        posmin -= 1e-6 * diff  # margin to make sure all positions will be included
         posmax += 1e-6 * diff
 
     # domain decomposition
     grid = [np.linspace(pmin, pmax, grid + 1, endpoint=True) for pmin, pmax, grid in zip(posmin, posmax, ngrid)]
-    domain = GridND(grid, comm=mpicomm, periodic=periodic) # raises VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences
+    domain = GridND(grid, comm=mpicomm, periodic=periodic)  # raises VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences
 
     if not periodic:
         # balance the load
@@ -824,7 +817,7 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
 
     # exchange first particles
     layout = domain.decompose(cpositions1, smoothing=0)
-    positions1 = layout.exchange(*positions1, pack=False) # exchange takes a list of arrays
+    positions1 = layout.exchange(*positions1, pack=False)  # exchange takes a list of arrays
     if weights1 is not None and len(weights1):
         multiple_weights = len(weights1) > 1
         weights1 = layout.exchange(*weights1, pack=False)
@@ -849,6 +842,6 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
     nsize1 = mpicomm.allreduce(len(positions1[0]))
     assert nsize1 == size1, 'some particles1 disappeared (after: {:d} v.s. before: {:d})...'.format(nsize1, size1)
 
-    positions1 = list(positions1) # exchange returns tuple
+    positions1 = list(positions1)  # exchange returns tuple
     positions2 = list(positions2)
     return (positions1, weights1), (positions2, weights2)

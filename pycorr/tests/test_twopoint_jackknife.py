@@ -6,14 +6,14 @@ import numpy as np
 from pycorr import BoxSubsampler, KMeansSubsampler, TwoPointCounter, JackknifeTwoPointCounter, utils, setup_logging
 
 
-def generate_catalogs(size=200, boxsize=(1000,)*3, offset=(1000,0,0), n_individual_weights=1, n_bitwise_weights=0, seed=42):
+def generate_catalogs(size=200, boxsize=(1000,) * 3, offset=(1000, 0, 0), n_individual_weights=1, n_bitwise_weights=0, seed=42):
     rng = np.random.RandomState(seed=seed)
     toret = []
     for i in range(2):
-        positions = [o + rng.uniform(0., 1., size)*b for o, b in zip(offset, boxsize)]
-        weights = utils.pack_bitarrays(*[rng.randint(0, 2, size) for i in range(64*n_bitwise_weights)], dtype=np.uint64)
-        #weights = utils.pack_bitarrays(*[rng.randint(0, 2, size) for i in range(33)], dtype=np.uint64)
-        #weights = [rng.randint(0, 0xffffffff, size, dtype=np.uint64) for i in range(n_bitwise_weights)]
+        positions = [o + rng.uniform(0., 1., size) * b for o, b in zip(offset, boxsize)]
+        weights = utils.pack_bitarrays(*[rng.randint(0, 2, size) for i in range(64 * n_bitwise_weights)], dtype=np.uint64)
+        # weights = utils.pack_bitarrays(*[rng.randint(0, 2, size) for i in range(33)], dtype=np.uint64)
+        # weights = [rng.randint(0, 0xffffffff, size, dtype=np.uint64) for i in range(n_bitwise_weights)]
         weights += [rng.uniform(0.5, 1., size) for i in range(n_individual_weights)]
         toret.append(positions + weights)
     return toret
@@ -27,9 +27,9 @@ def test_subsampler():
     except ImportError:
         pass
 
-    boxsize = np.array([1000.]*3)
+    boxsize = np.array([1000.] * 3)
     boxcenter = np.array([100., 0., 0.])
-    catalog = generate_catalogs(size=1000, boxsize=boxsize, offset=boxcenter-boxsize/2.)[0]
+    catalog = generate_catalogs(size=1000, boxsize=boxsize, offset=boxcenter - boxsize / 2.)[0]
     positions = catalog[:3]
     positions_bak = np.array(positions, copy=True)
     nsamples = 27
@@ -90,11 +90,11 @@ def test_twopoint_counter(mode='s'):
 
     list_engine = ['corrfunc']
     size = 1000
-    boxsize = (500,)*3
+    boxsize = (500,) * 3
 
     ref_edges = np.linspace(0., 100., 41)
     if mode == 'theta':
-        #ref_edges = np.linspace(1e-1, 10., 11) # below 1e-5 for float64 (1e-1 for float32), self pairs are counted by Corrfunc
+        # ref_edges = np.linspace(1e-1, 10., 11) # below 1e-5 for float64 (1e-1 for float32), self pairs are counted by Corrfunc
         ref_edges = np.linspace(0., 10., 21)
     elif mode == 'smu':
         ref_edges = (ref_edges, np.linspace(-1., 1., 22))
@@ -116,14 +116,14 @@ def test_twopoint_counter(mode='s'):
 
     for autocorr in [False, True]:
 
-        list_options.append({'autocorr':autocorr})
+        list_options.append({'autocorr': autocorr})
         # one-column of weights
-        list_options.append({'autocorr':autocorr, 'weights_one':[1]})
+        list_options.append({'autocorr': autocorr, 'weights_one': [1]})
         # position type
         for position_type in ['rdd', 'pos', 'xyz'] + (['rd'] if mode == 'theta' else []):
-            list_options.append({'autocorr':autocorr, 'position_type':position_type})
+            list_options.append({'autocorr': autocorr, 'position_type': position_type})
 
-        for dtype in ['f8']: # in theta mode, lots of rounding errors!
+        for dtype in ['f8']:  # in theta mode, lots of rounding errors!
             itemsize = np.dtype(dtype).itemsize
             for isa in ['fastest']:
                 # binning
@@ -133,43 +133,43 @@ def test_twopoint_counter(mode='s'):
                 if mode == 'rppi':
                     edges = (edges, np.linspace(0., 90., 91))
 
-                list_options.append({'autocorr':autocorr, 'edges':edges, 'dtype':dtype, 'isa':isa})
-                list_options.append({'autocorr':autocorr, 'compute_sepsavg':False, 'edges':edges, 'dtype':dtype, 'isa':isa})
-                list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'bin_type':'custom', 'dtype':dtype, 'isa':isa})
+                list_options.append({'autocorr': autocorr, 'edges': edges, 'dtype': dtype, 'isa': isa})
+                list_options.append({'autocorr': autocorr, 'compute_sepsavg': False, 'edges': edges, 'dtype': dtype, 'isa': isa})
+                list_options.append({'autocorr': autocorr, 'n_individual_weights': 1, 'bin_type': 'custom', 'dtype': dtype, 'isa': isa})
                 # pip
-                list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'dtype':dtype, 'isa':isa})
-                list_options.append({'autocorr':autocorr, 'compute_sepsavg':False, 'n_individual_weights':2, 'n_bitwise_weights':2, 'dtype':dtype, 'isa':isa})
-                list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'n_bitwise_weights':1, 'iip':1, 'dtype':dtype, 'isa':isa})
+                list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'dtype': dtype, 'isa': isa})
+                list_options.append({'autocorr': autocorr, 'compute_sepsavg': False, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'dtype': dtype, 'isa': isa})
+                list_options.append({'autocorr': autocorr, 'n_individual_weights': 1, 'n_bitwise_weights': 1, 'iip': 1, 'dtype': dtype, 'isa': isa})
                 if not autocorr:
-                    list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'n_bitwise_weights':1, 'iip':2, 'dtype':dtype, 'isa':isa})
-                list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'n_bitwise_weights':1, 'bitwise_type': 'i4', 'iip':1, 'dtype':dtype, 'isa':isa})
-                list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'weight_attrs':{'nrealizations':129,'noffset':3}, 'dtype':dtype, 'isa':isa})
-                list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'n_bitwise_weights':2, 'weight_attrs':{'noffset':0,'default_value':0.8}, 'dtype':dtype, 'isa':isa})
+                    list_options.append({'autocorr': autocorr, 'n_individual_weights': 1, 'n_bitwise_weights': 1, 'iip': 2, 'dtype': dtype, 'isa': isa})
+                list_options.append({'autocorr': autocorr, 'n_individual_weights': 1, 'n_bitwise_weights': 1, 'bitwise_type': 'i4', 'iip': 1, 'dtype': dtype, 'isa': isa})
+                list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'weight_attrs': {'nrealizations': 129, 'noffset': 3}, 'dtype': dtype, 'isa': isa})
+                list_options.append({'autocorr': autocorr, 'n_individual_weights': 1, 'n_bitwise_weights': 2, 'weight_attrs': {'noffset': 0, 'default_value': 0.8}, 'dtype': dtype, 'isa': isa})
                 # twopoint weights
                 if itemsize > 4:
-                    list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'dtype':dtype, 'isa':isa})
-                    list_options.append({'autocorr':autocorr, 'twopoint_weights':twopoint_weights, 'los':'y', 'dtype':dtype, 'isa':isa})
+                    list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'twopoint_weights': twopoint_weights, 'dtype': dtype, 'isa': isa})
+                    list_options.append({'autocorr': autocorr, 'twopoint_weights': twopoint_weights, 'los': 'y', 'dtype': dtype, 'isa': isa})
                 # boxsize
                 if mode not in ['theta', 'rp']:
-                    list_options.append({'autocorr':autocorr, 'boxsize':boxsize, 'dtype':dtype, 'isa':isa})
-                    list_options.append({'autocorr':autocorr, 'boxsize':boxsize, 'dtype':dtype, 'isa':isa})
-                    list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'boxsize':boxsize, 'los':'x', 'dtype':dtype, 'isa':isa})
-                    list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'boxsize':boxsize, 'los':'y', 'dtype':dtype, 'isa':isa})
+                    list_options.append({'autocorr': autocorr, 'boxsize': boxsize, 'dtype': dtype, 'isa': isa})
+                    list_options.append({'autocorr': autocorr, 'boxsize': boxsize, 'dtype': dtype, 'isa': isa})
+                    list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'boxsize': boxsize, 'los': 'x', 'dtype': dtype, 'isa': isa})
+                    list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'boxsize': boxsize, 'los': 'y', 'dtype': dtype, 'isa': isa})
                 # los
-                list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'x', 'dtype':dtype, 'isa':isa})
+                list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'los': 'x', 'dtype': dtype, 'isa': isa})
                 if mode in ['smu']:
-                    list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'firstpoint', 'edges':edges, 'dtype':dtype, 'isa':isa})
-                    list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'endpoint', 'edges':edges, 'dtype':dtype, 'isa':isa})
+                    list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'los': 'firstpoint', 'edges': edges, 'dtype': dtype, 'isa': isa})
+                    list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'los': 'endpoint', 'edges': edges, 'dtype': dtype, 'isa': isa})
                     if itemsize > 4:
-                        list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'los':'endpoint', 'twopoint_weights':twopoint_weights, 'dtype':dtype, 'isa':isa})
+                        list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'los': 'endpoint', 'twopoint_weights': twopoint_weights, 'dtype': dtype, 'isa': isa})
                 # mpi
                 if mpi:
-                    list_options.append({'autocorr':autocorr, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
-                    list_options.append({'autocorr':autocorr, 'n_individual_weights':1, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
-                    list_options.append({'autocorr':autocorr, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
-                    list_options.append({'autocorr':autocorr, 'n_individual_weights':2, 'n_bitwise_weights':2, 'twopoint_weights':twopoint_weights, 'mpicomm':mpi.COMM_WORLD, 'dtype':dtype, 'isa':isa})
+                    list_options.append({'autocorr': autocorr, 'mpicomm': mpi.COMM_WORLD, 'dtype': dtype, 'isa': isa})
+                    list_options.append({'autocorr': autocorr, 'n_individual_weights': 1, 'mpicomm': mpi.COMM_WORLD, 'dtype': dtype, 'isa': isa})
+                    list_options.append({'autocorr': autocorr, 'mpicomm': mpi.COMM_WORLD, 'dtype': dtype, 'isa': isa})
+                    list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'twopoint_weights': twopoint_weights, 'mpicomm': mpi.COMM_WORLD, 'dtype': dtype, 'isa': isa})
                 # labels
-                list_options.append({'offset_label':2})
+                list_options.append({'offset_label': 2})
 
     for engine in list_engine:
         for options in list_options:
@@ -179,8 +179,8 @@ def test_twopoint_counter(mode='s'):
             else:
                 edges = ref_edges
             twopoint_weights = options.get('twopoint_weights', None)
-            n_individual_weights = options.pop('n_individual_weights',0)
-            n_bitwise_weights = options.pop('n_bitwise_weights',0)
+            n_individual_weights = options.pop('n_individual_weights', 0)
+            n_bitwise_weights = options.pop('n_bitwise_weights', 0)
             offset_label = options.pop('offset_label', 0)
             npos = 3
             data1, data2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights)
@@ -210,18 +210,18 @@ def test_twopoint_counter(mode='s'):
             set_default_value = 'default_value' in weight_attrs
             setdefaultnone(weight_attrs, 'default_value', 0)
             if set_default_value:
-                for w in data1[npos:npos+n_bitwise_weights] + data2[npos:npos+n_bitwise_weights]: w[:] = 0 # set to zero to make sure default_value is used
+                for w in data1[npos:npos + n_bitwise_weights] + data2[npos:npos + n_bitwise_weights]: w[:] = 0  # set to zero to make sure default_value is used
 
             def wiip(weights):
                 denom = weight_attrs['noffset'] + utils.popcount(*weights)
                 mask = denom == 0
                 denom[mask] = 1.
-                toret = weight_attrs['nrealizations']/denom
+                toret = weight_attrs['nrealizations'] / denom
                 toret[mask] = weight_attrs['default_value']
                 return toret
 
             def dataiip(data):
-                return data[:npos] + [wiip(data[npos:npos+n_bitwise_weights])] + data[npos+n_bitwise_weights:]
+                return data[:npos] + [wiip(data[npos:npos + n_bitwise_weights])] + data[npos + n_bitwise_weights:]
 
             if iip == 1:
                 data1 = dataiip(data1)
@@ -232,12 +232,12 @@ def test_twopoint_counter(mode='s'):
                 weight_attrs['nrealizations'] = None
 
             itemsize = np.dtype('f8' if dtype is None else dtype).itemsize
-            tol = {'atol':1e-8, 'rtol':1e-3} if itemsize <= 4 else {'atol':1e-8, 'rtol':1e-6}
+            tol = {'atol': 1e-8, 'rtol': 1e-3} if itemsize <= 4 else {'atol': 1e-8, 'rtol': 1e-6}
 
             if bitwise_type is not None and n_bitwise_weights > 0:
 
                 def update_bit_type(data):
-                    return data[:npos] + utils.reformat_bitarrays(*data[npos:npos+n_bitwise_weights], dtype=bitwise_type) + data[npos+n_bitwise_weights:]
+                    return data[:npos] + utils.reformat_bitarrays(*data[npos:npos + n_bitwise_weights], dtype=bitwise_type) + data[npos + n_bitwise_weights:]
 
                 data1 = update_bit_type(data1)
                 data2 = update_bit_type(data2)
@@ -304,9 +304,9 @@ def test_twopoint_counter(mode='s'):
                 samples1_bak = np.array(samples1, copy=True)
                 samples2_bak = np.array(samples2, copy=True)
                 toret = JackknifeTwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=None if pass_none else positions1, weights1=None if pass_none else weights1,
-                                               positions2=None if pass_none or autocorr else positions2, weights2=None if pass_none or autocorr else weights2,
-                                               samples1=None if pass_none else samples1, samples2=None if pass_none or autocorr else samples2,
-                                               position_type=position_type, bin_type=bin_type, dtype=dtype, **kwargs, **options)
+                                                 positions2=None if pass_none or autocorr else positions2, weights2=None if pass_none or autocorr else weights2,
+                                                 samples1=None if pass_none else samples1, samples2=None if pass_none or autocorr else samples2,
+                                                 position_type=position_type, bin_type=bin_type, dtype=dtype, **kwargs, **options)
                 assert np.allclose(positions1, positions1_bak)
                 assert np.allclose(positions2, positions2_bak)
                 if weights1: assert np.allclose(weights1, weights1_bak)
@@ -352,7 +352,7 @@ def test_twopoint_counter(mode='s'):
                     assert np.allclose(test_reversed.realization(ii).sep, ref_reversed.realization(ii).sep, **tol, equal_nan=True)
 
             with tempfile.TemporaryDirectory() as tmp_dir:
-                #tmp_dir = '_tests'
+                # tmp_dir = '_tests'
                 fn = os.path.join(tmp_dir, 'tmp.npy')
                 fn_txt = os.path.join(tmp_dir, 'tmp.txt')
                 test.save(fn)
@@ -375,10 +375,10 @@ def test_twopoint_counter(mode='s'):
                 assert_allclose(test2, ref)
                 test3 = test2.copy()
                 test3.rebin((2, 3) if len(edges) == 2 else (2,))
-                assert test3.shape[0] == test2.shape[0]//2
+                assert test3.shape[0] == test2.shape[0] // 2
                 assert np.allclose(np.sum(test3.wcounts), np.sum(ref.wcounts))
                 assert np.allclose(test2.wcounts, ref.wcounts)
-                test2 = test2[::2,::3] if len(edges) == 2 else test2[::2]
+                test2 = test2[::2, ::3] if len(edges) == 2 else test2[::2]
                 assert test2.shape == test3.shape
                 assert np.allclose(test2.wcounts, test3.wcounts, equal_nan=True)
                 sepmax = 20.
@@ -389,17 +389,17 @@ def test_twopoint_counter(mode='s'):
                 def check_seps(test):
                     for iaxis in range(test.ndim):
                         if not test.compute_sepsavg[iaxis]:
-                            mid = (test.edges[iaxis][:-1] + test.edges[iaxis][1:])/2.
-                            if test.ndim == 2 and iaxis == 0: mid = mid[:,None]
+                            mid = (test.edges[iaxis][:-1] + test.edges[iaxis][1:]) / 2.
+                            if test.ndim == 2 and iaxis == 0: mid = mid[:, None]
                             assert np.allclose(test.seps[iaxis], mid)
 
                 check_seps(test2)
                 check_seps(test3)
 
                 test2 = test + test
-                assert np.allclose(test2.wcounts, 2.*test.wcounts, equal_nan=True)
+                assert np.allclose(test2.wcounts, 2. * test.wcounts, equal_nan=True)
                 assert np.allclose(test2.normalized_wcounts(), test.normalized_wcounts(), equal_nan=True)
-                test2 = test.concatenate_x(test[:test.shape[0]//2], test[test.shape[0]//2:])
+                test2 = test.concatenate_x(test[:test.shape[0] // 2], test[test.shape[0] // 2:])
                 assert np.allclose(test2.wcounts, test.wcounts, equal_nan=True)
 
             if mpicomm is not None:
