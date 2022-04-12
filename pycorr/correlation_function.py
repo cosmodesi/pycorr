@@ -268,7 +268,10 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     samples = {'D1': data_samples1, 'D2': data_samples2, 'R1': randoms_samples1, 'R2': randoms_samples2, 'S1': shifted_samples1, 'S2': shifted_samples2}
     twopoint_weights = {'D1D2': D1D2_twopoint_weights, 'D1R2': D1R2_twopoint_weights, 'R1D2': R1D2_twopoint_weights, 'R1R2': R1R2_twopoint_weights, 'S1S2': S1S2_twopoint_weights, 'D1S2': D1S2_twopoint_weights, 'S1D2': S1D2_twopoint_weights}
     weight_type = {'D1D2': D1D2_weight_type, 'D1R2': D1R2_weight_type, 'R1D2': R1D2_weight_type, 'R1R2': R1R2_weight_type, 'S1S2': S1S2_weight_type, 'D1S2': D1S2_weight_type, 'S1D2': S1D2_weight_type}
-    precomputed = kwargs
+    precomputed = {}
+    for label1, label2 in Estimator.requires(with_reversed=True, with_shifted=with_shifted):
+        label12 = label1 + label2
+        precomputed[label12] = kwargs.pop(label12, None)
 
     counts = {}
     for label1, label2 in Estimator.requires(with_reversed=True, with_shifted=with_shifted):
