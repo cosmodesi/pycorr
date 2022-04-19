@@ -394,6 +394,7 @@ def test_twopoint_counter(mode='s'):
                     positions2 = get_zero(positions2)
                     weights1 = get_zero(weights1)
                     weights2 = get_zero(weights2)
+
                 if position_type == 'pos':
                     positions1 = np.array(positions1).T
                     positions2 = np.array(positions2).T
@@ -517,15 +518,16 @@ def test_twopoint_counter(mode='s'):
 
                 if itemsize <= 4: mask = ~mask_zero
                 else: mask = Ellipsis
-                test_mpi = run(mpicomm=mpicomm, pass_zero=mpicomm.rank != 0, mpiroot=None)
+                test_mpi = run(mpicomm=mpicomm, pass_zero=mpicomm.rank > 0, mpiroot=None)
                 assert np.allclose(test_mpi.wcounts[mask], test.wcounts[mask], **tol)
                 assert np.allclose(test_mpi.wnorm, test.wnorm, **tol)
-                test_mpi = run(mpicomm=mpicomm, pass_none=mpicomm.rank != 0, mpiroot=0)
+                test_mpi = run(mpicomm=mpicomm, pass_none=mpicomm.rank > 0, mpiroot=0)
                 assert np.allclose(test_mpi.wcounts[mask], test.wcounts[mask], **tol)
                 assert np.allclose(test_mpi.wnorm, test.wnorm, **tol)
                 data1 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data1]
                 data2 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data2]
                 test_mpi = run(mpicomm=mpicomm)
+                run(mpicomm=mpicomm, pass_zero=True, mpiroot=None)
 
                 with tempfile.TemporaryDirectory() as tmp_dir:
                     fn = test_mpi.mpicomm.bcast(os.path.join(tmp_dir, 'tmp.npy'), root=0)
@@ -561,7 +563,7 @@ def test_analytic_twopoint_counter(mode='s'):
     edges = np.linspace(50, 100, 5)
     size = 10000
     boxsize = (1000,) * 3
-    #list_options.append({'weight_type':'inverse_bitwise','n_bitwise_weights':2})
+    # list_options.append({'weight_type':'inverse_bitwise','n_bitwise_weights':2})
     if mode == 'smu':
         edges = (edges, np.linspace(-1, 1, 5))
     elif mode == 'rppi':
@@ -569,7 +571,7 @@ def test_analytic_twopoint_counter(mode='s'):
 
     list_options = []
     list_options.append({})
-    #list_options.append({'autocorr':True})
+    # list_options.append({'autocorr':True})
 
     for options in list_options:
         autocorr = options.pop('autocorr', False)
@@ -673,7 +675,7 @@ def test_mu1():
             assert np.allclose(counts.wcounts[1, 0], w)
             counts.wcounts[1, -1] = 0
             counts.wcounts[1, 0] = 0
-            counts.wcounts[0,counts.wcounts.shape[1] // 2] = 0.
+            counts.wcounts[0, counts.wcounts.shape[1] // 2] = 0.
             assert np.allclose(counts.wcounts, 0.)
 
 
@@ -694,7 +696,7 @@ def test_smu():
     else:
         data1 = generate_catalogs(size=int(1e6), boxsize=(150,) * 3, offset=(200., 0, 0), n_individual_weights=1, n_bitwise_weights=0, seed=42)[0]
         position_type = 'xyz'
-    #edges = (np.linspace(2.0, 20.1, 12), np.linspace(-1., 1., 11))
+    # edges = (np.linspace(2.0, 20.1, 12), np.linspace(-1., 1., 11))
     edges = ([11.7560, 16.7536, 23.8755], np.linspace(-1., 1., 11))
     counts_ref = TwoPointCounter(mode='smu', edges=edges, positions1=data1[:3], positions2=data1[:3],
                                  weights1=None, weights2=None, position_type=position_type, isa='fallback', nthreads=4)

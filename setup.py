@@ -18,4 +18,4 @@ setup(name=package_basename,
       url='http://github.com/cosmodesi/pycorr',
       install_requires=['numpy', 'scipy'],
       extras_require={'mpi': ['mpi4py', 'pmesh'], 'jackknife': ['scikit-learn', 'healpy'], 'corrfunc': ['Corrfunc @ git+https://github.com/adematti/Corrfunc@desi']},
-      packages=['pycorr'])
+      packages=[package_basename])

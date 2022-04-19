@@ -489,93 +489,6 @@ def gather_array(data, root=0, mpicomm=COMM_WORLD):
     return recvbuffer
 
 
-def broadcast_array(data, root=0, mpicomm=COMM_WORLD):
-    """
-    Broadcast the input data array across all ranks, assuming `data` is
-    initially only on `root` (and `None` on other ranks).
-    This uses ``Scatterv``, which avoids mpi4py pickling, and also
-    avoids the 2 GB mpi4py limit for bytes using a custom datatype.
-
-    Parameters
-    ----------
-    data : array_like or None
-        On `root`, this gives the data to broadcast.
-
-    root : int, default=0
-        The rank number that initially has the data.
-
-    mpicomm : MPI communicator, default=None
-        The MPI communicator.
-
-    Returns
-    -------
-    recvbuffer : array_like
-        The chunk of `data` that each rank gets.
-    """
-
-    # check for bad input
-    if mpicomm.rank == root:
-        isscalar = np.isscalar(data)
-    else:
-        isscalar = None
-    isscalar = mpicomm.bcast(isscalar, root=root)
-
-    if isscalar:
-        return mpicomm.bcast(data, root=root)
-
-    if mpicomm.rank == root:
-        bad_input = not isinstance(data, np.ndarray)
-    else:
-        bad_input = None
-    bad_input = mpicomm.bcast(bad_input, root=root)
-    if bad_input:
-        raise ValueError('`data` must by numpy array on root in broadcast_array')
-
-    if mpicomm.rank == root:
-        # need C-contiguous order
-        if not data.flags['C_CONTIGUOUS']:
-            data = np.ascontiguousarray(data)
-        shape_and_dtype = (data.shape, data.dtype)
-    else:
-        shape_and_dtype = None
-
-    # each rank needs shape/dtype of input data
-    shape, dtype = mpicomm.bcast(shape_and_dtype, root=root)
-
-    # object dtype is not supported
-    fail = False
-    if dtype.char == 'V':
-        fail = any(dtype[name] == 'O' for name in dtype.names)
-    else:
-        fail = dtype == 'O'
-    if fail:
-        raise ValueError('"object" data type not supported in broadcast_array; please specify specific data type')
-
-    # initialize empty data on non-root ranks
-    if mpicomm.rank != root:
-        np_dtype = np.dtype((dtype, shape))
-        data = np.empty(0, dtype=np_dtype)
-
-    # setup the custom dtype
-    duplicity = np.product(np.array(shape, 'intp'))
-    itemsize = duplicity * dtype.itemsize
-    dt = MPI.BYTE.Create_contiguous(itemsize)
-    dt.Commit()
-
-    # the return array
-    recvbuffer = np.empty(shape, dtype=dtype, order='C')
-
-    # the send offsets
-    counts = np.ones(mpicomm.size, dtype='i', order='C')
-    offsets = np.zeros_like(counts, order='C')
-
-    # do the scatter
-    mpicomm.Barrier()
-    mpicomm.Scatterv([data, (counts, offsets), dt], [recvbuffer, dt], root=root)
-    dt.Free()
-    return recvbuffer
-
-
 def local_size(size, mpicomm=COMM_WORLD):
     """
     Divide global ``size`` into local (process) size.
@@ -740,7 +653,12 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
     (positions1, weights1), (positions2, weights2) : arrays
         The (decomposed) set of positions and weights.
     """
-    if mpicomm.size == 1:
+    autocorr = positions2 is None
+    if autocorr:
+        positions2 = positions1
+        weights2 = weights1
+
+    if mpicomm.size == 1 or len(positions1[0]) == 0 or len(positions2[0]) == 0:
         return (positions1, weights1), (positions2, weights2)
 
     def split_size_3d(s):
@@ -772,17 +690,12 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
 
     size1 = mpicomm.allreduce(len(positions1[0]))
 
-    auto = positions2 is None
-    if auto:
-        positions2 = positions1
-        weights2 = weights1
-
     cpositions1 = positions1
     cpositions2 = positions2
     if angular:
         # project to unit sphere
         cpositions1 = utils.sky_to_cartesian([*positions1, np.ones_like(positions1[0])], degree=True)
-        if auto:
+        if autocorr:
             cpositions2 = cpositions1
         else:
             cpositions2 = utils.sky_to_cartesian([*positions2, np.ones_like(positions2[0])], degree=True)
@@ -790,7 +703,7 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
     cpositions1 = np.array(cpositions1).T
     if periodic:
         cpositions1 %= boxsize
-    if auto:
+    if autocorr:
         cpositions2 = cpositions1
     else:
         cpositions2 = np.array(cpositions2).T
@@ -801,7 +714,7 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
         posmin = np.zeros_like(boxsize)
         posmax = np.asarray(boxsize)
     else:
-        posmin, posmax = _get_box(*([cpositions1.T] if auto else [cpositions1.T, cpositions2.T]))
+        posmin, posmax = _get_box(*([cpositions1.T] if autocorr else [cpositions1.T, cpositions2.T]))
         posmin, posmax = np.min(mpicomm.allgather(posmin), axis=0), np.max(mpicomm.allgather(posmax), axis=0)
         diff = max(np.abs(posmax - posmin).max(), 1.)
         posmin -= 1e-6 * diff  # margin to make sure all positions will be included

@@ -614,14 +614,16 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
                         if mpiroot_worker is not None: break
                     cls = self.mpicomm.bcast(cls, root=mpiroot_worker)
                     state = self.mpicomm.bcast(state, root=mpiroot_worker)
-                    # We separate out large arrays to bypass 2 Gb limit
+                    # We separate out large arrays to bypass 2 Gb limit (actually not for the moment)
                     for key, value in state_arrays.items():
                         if self.mpicomm.bcast(value is not None, root=mpiroot_worker):
                             if key == 'seps':
                                 if value is None: value = self.seps
-                                state[key] = [get_mpi().broadcast_array(val, mpicomm=self.mpicomm, root=mpiroot_worker) for val in value]
+                                # state[key] = [get_mpi().broadcast_array(val, mpicomm=self.mpicomm, root=mpiroot_worker) for val in value]
+                                state[key] = [self.mpicomm.bcast(val, root=mpiroot_worker) for val in value]
                             else:
-                                state[key] = get_mpi().broadcast_array(value, mpicomm=self.mpicomm, root=mpiroot_worker)
+                                # state[key] = get_mpi().broadcast_array(value, mpicomm=self.mpicomm, root=mpiroot_worker)
+                                state[key] = self.mpicomm.bcast(value, root=mpiroot_worker)
                     results[ii] = cls.from_state(state)
 
         self._set_sum()

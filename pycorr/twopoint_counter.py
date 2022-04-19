@@ -191,8 +191,9 @@ def _format_positions(positions, mode='auto', position_type='xyz', dtype=None, c
         return positions, None
 
     error = None
-    if positions is not None and (position_type == 'pos' or not all(position is None for position in positions)):
-        positions, error = __format_positions(positions)  # return error separately to raise on all processes
+    if mpiroot is None or (mpicomm.rank == mpiroot):
+        if positions is not None and (position_type == 'pos' or not all(position is None for position in positions)):
+            positions, error = __format_positions(positions)  # return error separately to raise on all processes
     if mpicomm is not None:
         error = mpicomm.allgather(error)
     else:
