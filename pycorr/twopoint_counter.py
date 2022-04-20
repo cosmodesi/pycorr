@@ -510,6 +510,10 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         self.positions1 = _format_positions(positions1, mode=self.mode, position_type=position_type, dtype=dtype, copy=copy, mpicomm=self.mpicomm, mpiroot=mpiroot)
         self.positions2 = _format_positions(positions2, mode=self.mode, position_type=position_type, dtype=dtype, copy=copy, mpicomm=self.mpicomm, mpiroot=mpiroot)
         self.autocorr = self.positions2 is None
+        if self.periodic:
+            self.positions1 = [p % b.astype(p.dtype) for p, b in zip(self.positions1, self.boxsize)]
+            if not self.autocorr:
+                self.positions2 = [p % b.astype(p.dtype) for p, b in zip(self.positions2, self.boxsize)]
         self.dtype = self.positions1[0].dtype
 
         self.size1 = self.size2 = len(self.positions1[0])
@@ -645,6 +649,8 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
     def _set_boxsize(self, boxsize):
         self.boxsize = boxsize
         if self.periodic:
+            if self.mode == 'theta':
+                raise TwoPointCounterError('boxsize must not be provided with mode = theta (no periodic conditions available)')
             self.boxsize = _make_array(boxsize, 3, dtype='f8')
 
     def _sum_auto_weights(self):

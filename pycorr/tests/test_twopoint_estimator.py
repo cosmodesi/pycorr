@@ -55,7 +55,7 @@ def test_estimator(mode='s'):
     list_engine = ['corrfunc']
     edges = np.linspace(1, 100, 10)
     size = 1000
-    boxsize = (500,) * 3
+    cboxsize = (500,) * 3
     from collections import namedtuple
     TwoPointWeight = namedtuple('TwoPointWeight', ['sep', 'weight'])
     twopoint_weights = TwoPointWeight(np.logspace(-4, 0, 40), np.linspace(4., 1., 40))
@@ -63,8 +63,8 @@ def test_estimator(mode='s'):
     list_options = []
     list_options.append({'weights_one': ['D1', 'R2']})
     if mode not in ['theta', 'rp']:
-        list_options.append({'estimator': 'natural', 'boxsize': boxsize, 'with_randoms': False})
-        list_options.append({'autocorr': True, 'estimator': 'natural', 'boxsize': boxsize, 'with_randoms': False})
+        list_options.append({'estimator': 'natural', 'boxsize': cboxsize, 'with_randoms': False})
+        list_options.append({'autocorr': True, 'estimator': 'natural', 'boxsize': cboxsize, 'with_randoms': False})
     for estimator in ['natural', 'landyszalay', 'davispeebles', 'weight', 'residual']:
         list_options.append({'estimator': estimator})
         if estimator not in ['weight']:
@@ -90,7 +90,7 @@ def test_estimator(mode='s'):
     if mpi:
         list_options.append({'mpicomm': mpi.COMM_WORLD})
 
-    #list_options.append({'weight_type':'inverse_bitwise','n_bitwise_weights':2})
+    # list_options.append({'weight_type':'inverse_bitwise','n_bitwise_weights':2})
     edges = np.linspace(1e-9, 100, 11)
     if mode == 'smu':
         edges = (edges, np.linspace(-1, 1, 21))
@@ -106,15 +106,15 @@ def test_estimator(mode='s'):
             n_individual_weights = options.get('n_individual_weights', 1)
             n_bitwise_weights = options.get('n_bitwise_weights', 0)
             twopoint_weights = options.pop('twopoint_weights', None)
-            data1, data2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights, seed=42)
-            randoms1, randoms2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights, seed=43)
-            shifted1, shifted2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights, seed=44)
+            data1, data2 = generate_catalogs(size, boxsize=cboxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights, seed=42)
+            randoms1, randoms2 = generate_catalogs(size, boxsize=cboxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights, seed=43)
+            shifted1, shifted2 = generate_catalogs(size, boxsize=cboxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights, seed=44)
             autocorr = options.pop('autocorr', False)
             mpicomm = options.pop('mpicomm', None)
             with_randoms = options.pop('with_randoms', True)
             with_shifted = options.pop('with_shifted', False)
-            options.setdefault('boxsize', None)
-            los = options['los'] = options.get('los', 'x' if options['boxsize'] is not None else 'midpoint')
+            boxsize = options.get('boxsize', None)
+            los = options['los'] = options.get('los', 'x' if boxsize is not None else 'midpoint')
             options['position_type'] = 'xyz'
             npos = 3
             for label, catalog in zip(['D1', 'D2', 'R1', 'R2'], [data1, data2, randoms1, randoms2]):

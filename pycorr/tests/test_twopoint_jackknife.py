@@ -90,7 +90,7 @@ def test_twopoint_counter(mode='s'):
 
     list_engine = ['corrfunc']
     size = 1000
-    boxsize = (500,) * 3
+    cboxsize = (500,) * 3
 
     ref_edges = np.linspace(0., 100., 41)
     if mode == 'theta':
@@ -151,10 +151,10 @@ def test_twopoint_counter(mode='s'):
                     list_options.append({'autocorr': autocorr, 'twopoint_weights': twopoint_weights, 'los': 'y', 'dtype': dtype, 'isa': isa})
                 # boxsize
                 if mode not in ['theta', 'rp']:
-                    list_options.append({'autocorr': autocorr, 'boxsize': boxsize, 'dtype': dtype, 'isa': isa})
-                    list_options.append({'autocorr': autocorr, 'boxsize': boxsize, 'dtype': dtype, 'isa': isa})
-                    list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'boxsize': boxsize, 'los': 'x', 'dtype': dtype, 'isa': isa})
-                    list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'boxsize': boxsize, 'los': 'y', 'dtype': dtype, 'isa': isa})
+                    list_options.append({'autocorr': autocorr, 'boxsize': cboxsize, 'dtype': dtype, 'isa': isa})
+                    list_options.append({'autocorr': autocorr, 'boxsize': cboxsize, 'dtype': dtype, 'isa': isa})
+                    list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'boxsize': cboxsize, 'los': 'x', 'dtype': dtype, 'isa': isa})
+                    list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'boxsize': cboxsize, 'los': 'y', 'dtype': dtype, 'isa': isa})
                 # los
                 list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'los': 'x', 'dtype': dtype, 'isa': isa})
                 if mode in ['smu']:
@@ -183,15 +183,15 @@ def test_twopoint_counter(mode='s'):
             n_bitwise_weights = options.pop('n_bitwise_weights', 0)
             offset_label = options.pop('offset_label', 0)
             npos = 3
-            data1, data2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights)
+            data1, data2 = generate_catalogs(size, boxsize=cboxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights)
 
             subsampler = KMeansSubsampler(mode='angular', positions=data1[:npos], nsamples=5, nside=512, random_state=42, position_type='xyz')
             data1.append(subsampler.label(data1[:npos]) + offset_label)
             data2.append(subsampler.label(data2[:npos]) + offset_label)
 
             autocorr = options.pop('autocorr', False)
-            options.setdefault('boxsize', None)
-            los = options['los'] = options.get('los', 'x' if options['boxsize'] is not None else 'midpoint')
+            boxsize = options.get('boxsize', None)
+            los = options['los'] = options.get('los', 'x' if boxsize is not None else 'midpoint')
             bin_type = options.pop('bin_type', 'auto')
             mpicomm = options.pop('mpicomm', None)
             bitwise_type = options.pop('bitwise_type', None)
