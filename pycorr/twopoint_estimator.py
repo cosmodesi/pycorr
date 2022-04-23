@@ -143,7 +143,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
     """
     name = 'base'
 
-    def __init__(self, D1D2=None, R1R2=None, D1R2=None, R1D2=None, S1S2=None, D1S2=None, S1D2=None):
+    def __init__(self, D1D2=None, R1R2=None, D1R2=None, R1D2=None, S1S2=None, D1S2=None, S1D2=None, S1R2=None):
         """
         Initialize :class:`BaseTwoPointEstimator`, and set correlation
         estimation :attr:`corr` (calling :meth:`run`).
@@ -173,8 +173,11 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
 
         S1D2 : BaseTwoPointCounter, default=None
             S1D2 two-point counts, see ``S1S2``. Defaults to ``R1D2``.
+
+        S1R2 : BaseTwoPointCounter, default=None
+            S1R2 two-point counts. Defaults to ``R1R2``.
         """
-        self.with_shifted = S1S2 is not None or D1S2 is not None or S1D2 is not None
+        self.with_shifted = S1S2 is not None or D1S2 is not None or S1D2 is not None or S1R2 is not None
         self.with_reversed = R1D2 is not None or S1D2 is not None
         for name in self.count_names:
             counts = locals()[name]
@@ -188,7 +191,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
             name = ''.join([{'1': '2', '2': '1'}.get(nn, nn) for nn in name])
             counts = getattr(self, name[-2:] + name[:2])
             return counts.reversed()
-        if name in ['S1S2', 'D1S2', 'S1D2'] and not self.with_shifted:
+        if name in ['S1S2', 'D1S2', 'S1D2', 'S1R2'] and not self.with_shifted:
             return getattr(self, name.replace('S', 'R'))
         raise AttributeError('Attribute {} does not exist'.format(name))
 
@@ -233,10 +236,10 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         return len(self.edges)
 
     @classmethod
-    def requires(cls, with_reversed=False, with_shifted=False, join=None):
+    def requires(cls, join=None, **kwargs):
         """List required counts."""
         toret = []
-        for tu in cls._tuple_requires(with_reversed=with_reversed, with_shifted=with_shifted):
+        for tu in cls._tuple_requires(**kwargs):
             if join is not None:
                 toret.append(join.join(tu))
             else:
@@ -796,17 +799,17 @@ class ResidualTwoPointEstimator(BaseTwoPointEstimator):
     def run(self):
         """
         Set correlation function estimate :attr:`corr` based on the residual estimator
-        :math:`(D1S2 - S1S2)/R1R2`.
+        :math:`(D1R2 - S1R2)/R1R2`.
         """
         nonzero = self.R1R2.wcounts != 0
         # init
         corr = np.empty_like(self.R1R2.wcounts, dtype='f8')
         corr[...] = np.nan
 
-        DS = self.D1S2.normalized_wcounts()[nonzero]
-        SS = self.S1S2.normalized_wcounts()[nonzero]
+        DR = self.D1R2.normalized_wcounts()[nonzero]
+        SR = self.S1R2.normalized_wcounts()[nonzero]
         RR = self.R1R2.normalized_wcounts()[nonzero]
-        tmp = (DS - SS) / RR
+        tmp = (DR - SR) / RR
         corr[nonzero] = tmp[...]
         self.corr = corr
 
@@ -814,8 +817,8 @@ class ResidualTwoPointEstimator(BaseTwoPointEstimator):
     def _tuple_requires(cls, with_reversed=False, with_shifted=False, join=None):
         toret = []
         key = 'S' if with_shifted else 'R'
-        toret.append(('D1', '{}2'.format(key)))
-        toret.append(('{}1'.format(key), '{}2'.format(key)))
+        toret.append(('D1', 'R2'))
+        toret.append(('{}1'.format(key), 'R2'))
         if with_shifted:
             toret.append(('R1', 'R2'))
         return toret

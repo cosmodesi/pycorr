@@ -4,8 +4,8 @@ import pytest
 
 import numpy as np
 
-from pycorr import TwoPointCorrelationFunction, TwoPointEstimator, TwoPointCounter,\
-                   JackknifeTwoPointEstimator, project_to_poles, project_to_wp, setup_logging
+from pycorr import (TwoPointCorrelationFunction, TwoPointEstimator, TwoPointCounter,
+                    JackknifeTwoPointEstimator, project_to_poles, project_to_wp, setup_logging)
 from pycorr.twopoint_estimator import TwoPointEstimatorError
 
 
@@ -61,25 +61,25 @@ def test_estimator(mode='s'):
     twopoint_weights = TwoPointWeight(np.logspace(-4, 0, 40), np.linspace(4., 1., 40))
 
     list_options = []
-    list_options.append({'weights_one': ['D1', 'R2']})
-    if mode not in ['theta', 'rp']:
-        list_options.append({'estimator': 'natural', 'boxsize': cboxsize, 'with_randoms': False})
-        list_options.append({'autocorr': True, 'estimator': 'natural', 'boxsize': cboxsize, 'with_randoms': False})
-    for estimator in ['natural', 'landyszalay', 'davispeebles', 'weight', 'residual']:
-        list_options.append({'estimator': estimator})
-        if estimator not in ['weight']:
-            list_options.append({'estimator': estimator, 'with_shifted': True})
-            list_options.append({'estimator': estimator, 'with_shifted': True, 'autocorr': True})
-        # pip
-        list_options.append({'estimator': estimator, 'n_individual_weights': 0})
-        list_options.append({'estimator': estimator, 'n_individual_weights': 1, 'n_bitwise_weights': 1, 'compute_sepsavg': False})
-        list_options.append({'estimator': estimator, 'n_individual_weights': 1, 'n_bitwise_weights': 1})
-        # twopoint weights
-        list_options.append({'n_individual_weights': 2, 'n_bitwise_weights': 2, 'twopoint_weights': twopoint_weights})
-        # los
-        if mode == 'smu':
-            list_options.append({'estimator': estimator, 'los': 'firstpoint', 'twopoint_weights': twopoint_weights, 'autocorr': True})
-            list_options.append({'estimator': estimator, 'los': 'endpoint', 'autocorr': False})
+    for autocorr in [False, True]:
+        for with_shifted in [False, True]:
+            list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'weights_one': ['D1', 'R2']})
+            if mode not in ['theta', 'rp']:
+                list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': 'natural', 'boxsize': cboxsize, 'with_randoms': False})
+            for estimator in ['natural', 'landyszalay', 'davispeebles', 'weight', 'residual']:
+                list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator})
+                if estimator not in ['weight']:
+                    list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator})
+                # pip
+                list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 0})
+                list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 1, 'n_bitwise_weights': 1, 'compute_sepsavg': False})
+                list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 1, 'n_bitwise_weights': 1})
+                # twopoint weights
+                list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'twopoint_weights': twopoint_weights})
+                # los
+                if mode == 'smu':
+                    list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'los': 'firstpoint', 'twopoint_weights': twopoint_weights})
+                    list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'los': 'endpoint'})
 
     mpi = False
     try:
@@ -226,28 +226,41 @@ def test_estimator(mode='s'):
                                        weights1=data1[npos:-1], weights2=None if autocorr else data2[npos:-1], twopoint_weights=twopoint_weights, **options_counts)
 
                 assert_allclose(D1D2, estimator_jackknife.D1D2)
-            if with_shifted:
-                if estimator in ['landyszalay', 'natural', 'residual']:
-                    R1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:npos], positions2=None if autocorr else randoms2[:npos],
-                                           weights1=randoms1[npos:-1], weights2=None if autocorr else randoms2[npos:-1], **options_counts)
-                    assert_allclose(R1R2, estimator_jackknife.R1R2)
-                # for following computation
-                randoms1 = shifted1
-                randoms2 = shifted2
-            if estimator in ['landyszalay', 'davispeebles', 'residual']:
+            if estimator in ['residual']:
                 D1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:npos], positions2=randoms1[:npos] if autocorr else randoms2[:npos],
                                        weights1=data1[npos:-1], weights2=randoms1[npos:-1] if autocorr else randoms2[npos:-1], twopoint_weights=twopoint_weights, **options_counts)
+                assert_allclose(D1R2, estimator_jackknife.D1R2)
+            if estimator in ['landyszalay', 'natural', 'residual'] and with_randoms:
+                R1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:npos], positions2=None if autocorr else randoms2[:npos],
+                                       weights1=randoms1[npos:-1], weights2=None if autocorr else randoms2[npos:-1], **options_counts)
+                assert_allclose(R1R2, estimator_jackknife.R1R2)
+            if with_shifted:
+                if estimator in ['residual']:
+                    S1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=shifted1[:npos], positions2=randoms1[:npos] if autocorr else randoms2[:npos],
+                                           weights1=shifted1[npos:-1], weights2=randoms1[npos:-1] if autocorr else randoms2[npos:-1], **options_counts)
+                    assert_allclose(S1R2, estimator_jackknife.S1R2)
+                # for following computation
+                tmp_randoms1 = shifted1
+                tmp_randoms2 = shifted2
+                tmp_twopoint_weights = None
+            else:
+                tmp_randoms1 = randoms1
+                tmp_randoms2 = randoms2
+                tmp_twopoint_weights = twopoint_weights
+            if estimator in ['landyszalay', 'davispeebles']:
+                D1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:npos], positions2=tmp_randoms1[:npos] if autocorr else tmp_randoms2[:npos],
+                                       weights1=data1[npos:-1], weights2=tmp_randoms1[npos:-1] if autocorr else tmp_randoms2[npos:-1], twopoint_weights=tmp_twopoint_weights, **options_counts)
                 assert_allclose(D1R2, estimator_jackknife.D1S2)
                 assert estimator_jackknife.with_reversed == ((not autocorr or los in ['firstpoint', 'endpoint']) and estimator in ['landyszalay'])
                 if estimator_jackknife.with_reversed:
-                    R1D2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:npos], positions2=data1[:npos] if autocorr else data2[:npos],
-                                           weights1=randoms1[npos:-1], weights2=data1[npos:-1] if autocorr else data2[npos:-1], twopoint_weights=twopoint_weights if autocorr else None, **options_counts)
+                    R1D2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=tmp_randoms1[:npos], positions2=data1[:npos] if autocorr else data2[:npos],
+                                           weights1=tmp_randoms1[npos:-1], weights2=data1[npos:-1] if autocorr else data2[npos:-1], twopoint_weights=tmp_twopoint_weights if autocorr else None, **options_counts)
                     assert_allclose(R1D2, estimator_jackknife.S1D2)
                 else:
                     assert_allclose(D1R2, estimator_jackknife.D1S2)
-            if estimator in ['landyszalay', 'natural', 'weight', 'residual'] and with_randoms:
-                R1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=randoms1[:npos], positions2=None if autocorr else randoms2[:npos],
-                                       weights1=randoms1[npos:-1], weights2=None if autocorr else randoms2[npos:-1], **options_counts)
+            if estimator in ['landyszalay', 'natural', 'weight'] and with_randoms:
+                R1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=tmp_randoms1[:npos], positions2=None if autocorr else tmp_randoms2[:npos],
+                                       weights1=tmp_randoms1[npos:-1], weights2=None if autocorr else tmp_randoms2[npos:-1], **options_counts)
                 assert_allclose(R1R2, estimator_jackknife.S1S2)
             if estimator in ['natural'] and not with_randoms:
                 R1R2 = TwoPointCounter(mode=mode, edges=edges, engine='analytic', boxsize=estimator_jackknife.D1D2.boxsize,

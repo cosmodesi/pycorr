@@ -10,8 +10,8 @@ from .twopoint_jackknife import JackknifeTwoPointCounter
 def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=None, randoms_positions1=None, randoms_positions2=None, shifted_positions1=None, shifted_positions2=None,
                                 data_weights1=None, data_weights2=None, randoms_weights1=None, randoms_weights2=None, shifted_weights1=None, shifted_weights2=None,
                                 data_samples1=None, data_samples2=None, randoms_samples1=None, randoms_samples2=None, shifted_samples1=None, shifted_samples2=None,
-                                D1D2_weight_type='auto', D1R2_weight_type='auto', R1D2_weight_type='auto', R1R2_weight_type='auto', S1S2_weight_type='auto', D1S2_weight_type='auto', S1D2_weight_type='auto',
-                                D1D2_twopoint_weights=None, D1R2_twopoint_weights=None, R1D2_twopoint_weights=None, R1R2_twopoint_weights=None, S1S2_twopoint_weights=None, D1S2_twopoint_weights=None, S1D2_twopoint_weights=None,
+                                D1D2_weight_type='auto', D1R2_weight_type='auto', R1D2_weight_type='auto', R1R2_weight_type='auto', S1S2_weight_type='auto', D1S2_weight_type='auto', S1D2_weight_type='auto', S1R2_weight_type='auto',
+                                D1D2_twopoint_weights=None, D1R2_twopoint_weights=None, R1D2_twopoint_weights=None, R1R2_twopoint_weights=None, S1S2_twopoint_weights=None, D1S2_twopoint_weights=None, S1D2_twopoint_weights=None, S1R2_twopoint_weights=None,
                                 estimator='auto', boxsize=None, mpicomm=None, mpiroot=None, **kwargs):
     r"""
     Compute two-point counts and correlation function estimation, optionally with jackknife realizations.
@@ -254,11 +254,8 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
             return array is None
         return mpicomm.allgather(array is None)[mpiroot]
 
-    autocorr = is_none(data_positions2)
     with_randoms = not is_none(randoms_positions1)
     with_shifted = not is_none(shifted_positions1)
-    if with_shifted and not with_randoms:
-        raise ValueError('Shifted catalog is provided, but no randoms')
     with_jackknife = not is_none(data_samples1)
     Estimator = get_twopoint_estimator(estimator, with_DR=with_randoms, with_jackknife=with_jackknife)
     if log: logger.info('Using estimator {}.'.format(Estimator))
@@ -266,11 +263,16 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     positions = {'D1': data_positions1, 'D2': data_positions2, 'R1': randoms_positions1, 'R2': randoms_positions2, 'S1': shifted_positions1, 'S2': shifted_positions2}
     weights = {'D1': data_weights1, 'D2': data_weights2, 'R1': randoms_weights1, 'R2': randoms_weights2, 'S1': shifted_weights1, 'S2': shifted_weights2}
     samples = {'D1': data_samples1, 'D2': data_samples2, 'R1': randoms_samples1, 'R2': randoms_samples2, 'S1': shifted_samples1, 'S2': shifted_samples2}
-    twopoint_weights = {'D1D2': D1D2_twopoint_weights, 'D1R2': D1R2_twopoint_weights, 'R1D2': R1D2_twopoint_weights, 'R1R2': R1R2_twopoint_weights, 'S1S2': S1S2_twopoint_weights, 'D1S2': D1S2_twopoint_weights, 'S1D2': S1D2_twopoint_weights}
-    weight_type = {'D1D2': D1D2_weight_type, 'D1R2': D1R2_weight_type, 'R1D2': R1D2_weight_type, 'R1R2': R1R2_weight_type, 'S1S2': S1S2_weight_type, 'D1S2': D1S2_weight_type, 'S1D2': S1D2_weight_type}
+    twopoint_weights = {'D1D2': D1D2_twopoint_weights, 'D1R2': D1R2_twopoint_weights, 'R1D2': R1D2_twopoint_weights, 'R1R2': R1R2_twopoint_weights,
+                        'S1S2': S1S2_twopoint_weights, 'D1S2': D1S2_twopoint_weights, 'S1D2': S1D2_twopoint_weights, 'S1R2': S1R2_twopoint_weights, 'R1S2': S1R2_twopoint_weights}
+    weight_type = {'D1D2': D1D2_weight_type, 'D1R2': D1R2_weight_type, 'R1D2': R1D2_weight_type, 'R1R2': R1R2_weight_type,
+                   'S1S2': S1S2_weight_type, 'D1S2': D1S2_weight_type, 'S1D2': S1D2_weight_type, 'S1R2': S1R2_weight_type, 'R1S2': S1R2_weight_type}  # RS and SR only used by 'residual' estimator
+
+    autocorr = False
     precomputed = {}
     for label1, label2 in Estimator.requires(with_reversed=True, with_shifted=with_shifted):
         label12 = label1 + label2
+        if is_none(positions[label2]): autocorr = True
         precomputed[label12] = kwargs.pop(label12, None)
 
     counts = {}
@@ -291,33 +293,34 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
             if not autocorr:
                 size2 = counts['D1D2'].size2
             counts[label12] = AnalyticTwoPointCounter(mode, edges, boxsize, size1=size1, size2=size2)
-        else:
-            if log: logger.info('Computing two-point counts {}.'.format(label12))
-            # label12 is D1R2, but we only have R1, so switch label2 to R1; same for D1S2
-            # No need for e.g. R1R2, as R2 being None, TwoPointCounter will understand it has to run the autocorrelation; same for S1S2
-            if label2[:-1] != label1[:-1]:
-                if autocorr:
-                    label2 = label2.replace('2', '1')
-                for label in [label1, label2]:
-                    if is_none(positions[label]):
-                        raise ValueError('Estimator requires {} to be provided'.format(label))
-            jackknife_kwargs = {}
-            with_jackknife = not is_none(samples[label1])
-            if with_jackknife:
-                Counter = JackknifeTwoPointCounter
-                jackknife_kwargs['samples1'] = samples[label1]
-                jackknife_kwargs['samples2'] = samples[label2]
+            continue
+        if log: logger.info('Computing two-point counts {}.'.format(label12))
+        twopoint_weights_kwargs = {'twopoint_weights': twopoint_weights[label12], 'weight_type': weight_type[label12]}
+        if autocorr:
+            if label2[:-1] == label1[:-1]:
+                label2 = None
             else:
-                Counter = TwoPointCounter
-            twopoint_weights_kwargs = {'twopoint_weights': twopoint_weights[label12], 'weight_type': weight_type[label12]}
-            # in case of autocorrelation, los = firstpoint or endpoint, R1D2 = R1D1 should get the same angular weight as D1R2 = D2R1
-            if autocorr and label2[:-1] != label1[:-1]:
+                # label12 is D1R2, but we only have R1, so switch label2 to R1; same for D1S2
+                label2 = label2.replace('2', '1')
+                # In case of autocorrelation, los = firstpoint or endpoint, R1D2 = R1D1 should get the same angular weight as D1R2 = D2R1
                 for name in ['twopoint_weights', 'weight_type']:
                     if twopoint_weights_kwargs[name] is None: twopoint_weights_kwargs[name] = locals()[name][label21]
+        jackknife_kwargs = {}
+        with_jackknife = not is_none(samples[label1])
+        if with_jackknife:
+            Counter = JackknifeTwoPointCounter
+            jackknife_kwargs['samples1'] = samples[label1]
+            jackknife_kwargs['samples2'] = samples[label2] if label2 is not None else None
+        else:
+            Counter = TwoPointCounter
 
-            counts[label12] = Counter(mode, edges, positions[label1], positions2=positions[label2],
-                                      weights1=weights[label1], weights2=weights[label2],
-                                      boxsize=boxsize, mpicomm=mpicomm, mpiroot=mpiroot, **jackknife_kwargs, **twopoint_weights_kwargs, **kwargs)
+        for label in [label1] + ([label2] if label2 is not None else []):
+            if is_none(positions[label]): raise ValueError('{} must be provided'.format(label))
+
+        counts[label12] = Counter(mode, edges, positions[label1], positions2=positions[label2] if label2 is not None else None,
+                                  weights1=weights[label1], weights2=weights[label2] if label2 is not None else None,
+                                  boxsize=boxsize, mpicomm=mpicomm, mpiroot=mpiroot,
+                                  **jackknife_kwargs, **twopoint_weights_kwargs, **kwargs)
     return Estimator(**counts)
 
 
