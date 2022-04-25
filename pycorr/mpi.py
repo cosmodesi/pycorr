@@ -1,5 +1,4 @@
 import numpy as np
-
 from mpi4py import MPI
 from pmesh.domain import GridND
 
@@ -161,7 +160,7 @@ class MPITaskManager(BaseClass):
     def is_worker(self):
         """
         Is the current process a valid worker?
-        Workers wait for instructions from the master.
+        Workers wait for instructions from the root.
         """
         try:
             return self._valid_worker
@@ -176,14 +175,14 @@ class MPITaskManager(BaseClass):
 
         # logging info
         if self.mpicomm.rank == 0:
-            self.log_debug('Worker master rank is {:d} on {} with {:d} processes available'.format(self.rank, MPI.Get_processor_name(), self.mpicomm.size))
+            self.log_debug('Worker root rank is {:d} on {} with {:d} processes available'.format(self.rank, MPI.Get_processor_name(), self.mpicomm.size))
 
         # continously loop and wait for instructions
         while True:
             args = None
             tag = -1
 
-            # have the master rank of the subcomm ask for task and then broadcast
+            # have the root rank of the subcomm ask for task and then broadcast
             if self.mpicomm.rank == 0:
                 self.basecomm.send(None, dest=0, tag=self.tags.READY)
                 args = self.basecomm.recv(source=0, tag=MPI.ANY_TAG, status=self.status)
@@ -199,7 +198,7 @@ class MPITaskManager(BaseClass):
                 # yield the task value
                 yield args
 
-                # wait for everyone in task group before telling master this task is done
+                # wait for everyone in task group before telling root this task is done
                 self.mpicomm.Barrier()
                 if self.mpicomm.rank == 0:
                     self.basecomm.send([args[0], None], dest=0, tag=self.tags.DONE)
@@ -227,7 +226,7 @@ class MPITaskManager(BaseClass):
         closed_workers = 0
 
         # logging info
-        self.log_debug('master starting with {:d} worker(s) with {:d} total tasks'.format(self.workers, ntasks))
+        self.log_debug('root starting with {:d} worker(s) with {:d} total tasks'.format(self.workers, ntasks))
 
         # loop until all workers have finished with no more tasks
         while closed_workers < self.workers:
@@ -279,7 +278,7 @@ class MPITaskManager(BaseClass):
         task :
             The individual items of `tasks`, iterated through in parallel.
         """
-        # master distributes the tasks and tracks closed workers
+        # root distributes the tasks and tracks closed workers
         if self.is_root():
             self._distribute_tasks(tasks)
 
@@ -314,7 +313,7 @@ class MPITaskManager(BaseClass):
         """
         results = []
 
-        # master distributes the tasks and tracks closed workers
+        # root distributes the tasks and tracks closed workers
         if self.is_root():
             self._distribute_tasks(tasks)
 
@@ -349,7 +348,7 @@ class MPITaskManager(BaseClass):
         self.basecomm.Barrier()
 
         if self.is_root():
-            self.log_debug('Master is finished; terminating')
+            self.log_debug('Root is finished; terminating')
 
         if self.mpicomm is not None:
             self.mpicomm.Free()
@@ -658,7 +657,7 @@ def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=N
         positions2 = positions1
         weights2 = weights1
 
-    if mpicomm.size == 1 or len(positions1[0]) == 0 or len(positions2[0]) == 0:
+    if mpicomm.size == 1 or mpicomm.allreduce(len(positions1[0])) == 0 or mpicomm.allreduce(len(positions2[0])) == 0:
         return (positions1, weights1), (positions2, weights2)
 
     def split_size_3d(s):

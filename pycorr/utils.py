@@ -108,7 +108,7 @@ class BaseMetaClass(type):
             setattr(cls, 'log_{}'.format(level), make_logger(level))
 
 
-class BaseClass(object,metaclass=BaseMetaClass):
+class BaseClass(object, metaclass=BaseMetaClass):
     """
     Base class that implements :meth:`copy`.
     To be used throughout this package.
