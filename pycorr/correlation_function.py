@@ -270,9 +270,9 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
 
     autocorr = False
     precomputed = {}
-    for label1, label2 in Estimator.requires(with_reversed=True, with_shifted=with_shifted):
+    for ilabel, (label1, label2) in enumerate(Estimator.requires(with_reversed=True, with_shifted=with_shifted)):
         label12 = label1 + label2
-        if is_none(positions[label2]): autocorr = True
+        if ilabel == 0 and is_none(positions[label2]): autocorr = True
         precomputed[label12] = kwargs.pop(label12, None)
 
     counts = {}

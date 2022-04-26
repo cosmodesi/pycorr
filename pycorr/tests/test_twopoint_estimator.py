@@ -154,10 +154,10 @@ def test_estimator(mode='s'):
 
                 return TwoPointCorrelationFunction(mode=mode, edges=edges, engine=engine, data_positions1=data_positions1, data_positions2=None if autocorr else data_positions2,
                                                    data_weights1=data_weights1, data_weights2=None if autocorr else data_weights2,
-                                                   randoms_positions1=randoms_positions1 if with_randoms else None, randoms_positions2=None if autocorr else randoms_positions2,
-                                                   randoms_weights1=randoms_weights1 if with_randoms else None, randoms_weights2=None if autocorr else randoms_weights2,
-                                                   shifted_positions1=shifted_positions1 if with_shifted else None, shifted_positions2=None if autocorr else shifted_positions2,
-                                                   shifted_weights1=shifted_weights1 if with_shifted else None, shifted_weights2=None if autocorr else shifted_weights2,
+                                                   randoms_positions1=randoms_positions1 if with_randoms else None, randoms_positions2=None if autocorr or not with_randoms else randoms_positions2,
+                                                   randoms_weights1=randoms_weights1 if with_randoms else None, randoms_weights2=None if autocorr or not with_randoms else randoms_weights2,
+                                                   shifted_positions1=shifted_positions1 if with_shifted else None, shifted_positions2=None if autocorr or not with_shifted else shifted_positions2,
+                                                   shifted_weights1=shifted_weights1 if with_shifted else None, shifted_weights2=None if autocorr or not with_shifted else shifted_weights2,
                                                    **options, **kwargs)
 
             def run_jackknife(pass_none=False, pass_zero=False, **kwargs):
