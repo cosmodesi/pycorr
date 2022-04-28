@@ -960,7 +960,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         for idim, compute_sepavg in enumerate(new.compute_sepsavg):
             if compute_sepavg:
                 with np.errstate(divide='ignore', invalid='ignore'):
-                    new.seps[idim] = sum(other.seps[idim] * other.wcounts for other in others) / new.wcounts
+                    new.seps[idim] = sum(_nan_to_zero(other.seps[idim]) * other.wcounts for other in others) / new.wcounts
         return new
 
     def __add__(self, other):
