@@ -316,6 +316,32 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         new.run()
         return new
 
+    def normalize(self, wnorm='XX'):
+        """
+        Renormalize all counts (:attr:`BaseTwoPointCounter.wcounts` and :attr:`BaseTwoPointCounter.wnorm`).
+        This is useful when combining measurements in various regions.
+
+        Parameters
+        ----------
+        wnorm : float, string, default='XX'
+            If float, rescale all :attr:`BaseTwoPointCounter.wcounts` and :attr:`BaseTwoPointCounter.wnorm`
+            such that :attr:`BaseTwoPointCounter.wnorm` matches ``wnorm``.
+            Else, name of counts (e.g. 'D1D2', 'R1R2', etc.) to take ``wnorm`` from.
+            'XX' is the first counts of the estimator (usually 'D1D2').
+
+        Returns
+        -------
+        new : BaseTwoPointEstimator
+            New estimator, with all counts renormalized.
+            :attr:`corr` is expected to be exactly the same.
+        """
+        new = self.copy()
+        if isinstance(wnorm, str):
+            wnorm = getattr(self, wnorm).wnorm
+        for name in new.count_names:
+            setattr(new, name, getattr(new, name).normalize(wnorm=wnorm))
+        return new
+
     @classmethod
     def sum(cls, *others):
         """

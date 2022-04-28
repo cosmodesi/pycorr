@@ -213,6 +213,17 @@ def test_estimator(mode='s'):
             estimator_jackknife = JackknifeTwoPointEstimator.concatenate(*[run_jackknife(samples=samples) for samples in np.array_split(np.unique(data1[-1]), nsplits)])
             assert_allclose_estimators(estimator_jackknife, estimator_nojackknife)
 
+            for estimator in [estimator_nojackknife, estimator_jackknife]:
+                estimator_renormalized = estimator.normalize(1.)
+                for name in estimator_renormalized.count_names:
+                    assert np.allclose(getattr(estimator_renormalized, name).wnorm, 1.)
+                assert_allclose_estimators(estimator_renormalized, estimator_nojackknife)
+
+                estimator_renormalized = estimator.normalize()
+                for name in estimator_renormalized.count_names:
+                    assert np.allclose(getattr(estimator_renormalized, name).wnorm, estimator_nojackknife.XX.wnorm)
+                assert_allclose_estimators(estimator_renormalized, estimator_nojackknife)
+
             ii = data1[-1][0]
             estimator_nojackknife_ii = run_nojackknife(ii=ii)
             estimator_jackknife_ii = estimator_jackknife.realization(ii, correction=None)

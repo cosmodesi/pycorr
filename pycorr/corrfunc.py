@@ -248,8 +248,8 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                 raise TwoPointCounterError('Corrfunc does not support mode {}'.format(self.mode))
 
             self.ncounts = result['npairs']
-            self.wcounts = self.ncounts * (result['weightavg'] if output_weightavg else 1)\
-                           * (self.weight_attrs['nrealizations'] if self.n_bitwise_weights else 1)
+            self.wcounts = self.ncounts * (result['weightavg'] if output_weightavg else 1.)\
+                           * (self.weight_attrs['nrealizations'] if self.n_bitwise_weights else 1.)
             self.wcounts[self.ncounts == 0] = 0.
             if self.compute_sepavg:
                 self.sep = result[key_sep]

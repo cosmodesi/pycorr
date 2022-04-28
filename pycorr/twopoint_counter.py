@@ -940,6 +940,27 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                 new.seps[idim] = np.concatenate([other.seps[idim][mask_low], new.seps[idim], other.seps[idim][mask_high]], axis=0)
         return new
 
+    def normalize(self, wnorm):
+        """
+        Rescale both :attr:`wcounts` and :attr:`wnorm` such that new :attr:`wnorm` matches ``wnorm``.
+        This is useful when combining counts in various regions.
+
+        Parameters
+        ----------
+        wnorm : float
+            New normalization :attr:`wnorm`.
+
+        Returns
+        -------
+        new : BaseTwoPointCounter
+            Normalized counts.
+        """
+        new = self.deepcopy()
+        factor = wnorm / new.wnorm
+        new.wcounts = new.wcounts * factor
+        new.wnorm = new.wnorm * factor
+        return new
+
     @classmethod
     def sum(cls, *others):
         """
