@@ -235,7 +235,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                 # sum over pi to keep only rp
                 result = {key: result[key] for key in ['npairs', 'weightavg', key_sep]}
                 result[key_sep].shape = result['weightavg'].shape = result['npairs'].shape = self.shape + (-1,)
-                wpairs = result['npairs'] * (result['weightavg'] if output_weightavg else 1)
+                wpairs = result['npairs'] * (result['weightavg'] if output_weightavg else 1.)
                 result['npairs'] = np.sum(result['npairs'], axis=-1)
                 with np.errstate(divide='ignore', invalid='ignore'):
                     result['weightavg'] = np.sum(wpairs, axis=-1) / result['npairs']
@@ -283,7 +283,6 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             for name in ['wcounts', 'ncounts']:
                 setattr(self, name, getattr(self, name)[:, ::-1])
             self.sep = self.sep[:, ::-1]
-        self.is_reversible = self.autocorr or (self.los_type not in ['firstpoint', 'endpoint'])  # even smu is reversible for midpoint los, i.e. positions1 <-> positions2
 
     def reversed(self):
         """Return counts for reversed positions1/weights1 and positions2/weights2."""

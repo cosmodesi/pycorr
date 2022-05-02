@@ -477,6 +477,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         self._set_weights(weights1, weights2, weight_type=weight_type, twopoint_weights=twopoint_weights, weight_attrs=weight_attrs, copy=False, mpiroot=mpiroot)
         self._set_samples(samples1, samples2, mpiroot=mpiroot)
         self._set_zeros()
+        self._set_reversible()
         self.auto, self.cross12, self.cross21 = {}, {}, {}
         self.run(samples=samples)
         del self.positions1, self.positions2, self.weights1, self.weights2, self.samples1, self.samples2
@@ -501,6 +502,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         if not self.auto:
             self.wnorm = 0.
             self._set_zeros()
+            self._set_reversible()
             return
         for counts in self.cross12.values(): break
         for name in ['is_reversible', 'compute_sepsavg']:

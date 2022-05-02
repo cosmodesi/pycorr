@@ -224,7 +224,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         Array type for positions and weights.
         If ``None``, defaults to type of first array of positions.
         Double precision is highly recommended in case ``mode`` is "theta",
-        or ``twopoint_weights`` is provided (due to cosine).
+        ``twopoint_weights`` is provided (due to cosine), or ``compute_sepsavg`` is ``True``.
 
     nthreads : int
         Number of OpenMP threads to use.

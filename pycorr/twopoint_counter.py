@@ -394,7 +394,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             Array type for positions and weights.
             If ``None``, defaults to type of first ``positions1`` array.
             Double precision is highly recommended in case ``mode`` is "theta",
-            or ``twopoint_weights`` is provided (due to cosine).
+            ``twopoint_weights`` is provided (due to cosine), or ``compute_sepsavg`` is ``True``.
 
         nthreads : int, default=None
             Number of OpenMP threads to use.
@@ -421,14 +421,14 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         self._set_compute_sepsavg(compute_sepsavg)
         self._set_positions(positions1, positions2, position_type=position_type, dtype=dtype, copy=False, mpiroot=mpiroot)
         self._set_weights(weights1, weights2, weight_type=weight_type, twopoint_weights=twopoint_weights, weight_attrs=weight_attrs, copy=False, mpiroot=mpiroot)
-        self.wnorm = self.normalization()
         self._set_zeros()
-        if self.size1 * self.size2:
-            t0 = time.time()
-            self.run()
-            t1 = time.time()
-            if not self.with_mpi or self.mpicomm.rank == 0:
-                self.log_debug('Two-point counts computed in elapsed time {:.2f} s.'.format(t1 - t0))
+        self._set_reversible()
+        self.wnorm = self.normalization()
+        t0 = time.time()
+        self.run()
+        t1 = time.time()
+        if not self.with_mpi or self.mpicomm.rank == 0:
+            self.log_debug('Two-point counts computed in elapsed time {:.2f} s.'.format(t1 - t0))
         del self.positions1, self.positions2, self.weights1, self.weights2
 
     def run(self):
@@ -446,7 +446,11 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
 
     def _set_mode(self, mode):
         self.mode = mode.lower()
+
+    def _set_reversible(self):
         self.is_reversible = self.mode in ['theta', 's', 'rp', 'rppi']
+        if self.mode == 'smu':
+            self.is_reversible = self.autocorr or (self.los_type not in ['firstpoint', 'endpoint'])  # even smu is reversible for midpoint los, i.e. positions1 <-> positions2
 
     def _set_zeros(self):
         self._set_default_seps()
@@ -508,13 +512,13 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
 
     def _set_positions(self, positions1, positions2=None, position_type='auto', dtype=None, copy=False, mpiroot=None):
         self.positions1 = _format_positions(positions1, mode=self.mode, position_type=position_type, dtype=dtype, copy=copy, mpicomm=self.mpicomm, mpiroot=mpiroot)
-        self.positions2 = _format_positions(positions2, mode=self.mode, position_type=position_type, dtype=dtype, copy=copy, mpicomm=self.mpicomm, mpiroot=mpiroot)
+        self.dtype = self.positions1[0].dtype
+        self.positions2 = _format_positions(positions2, mode=self.mode, position_type=position_type, dtype=self.dtype, copy=copy, mpicomm=self.mpicomm, mpiroot=mpiroot)
         self.autocorr = self.positions2 is None
         if self.periodic:
             self.positions1 = [p % b.astype(p.dtype) for p, b in zip(self.positions1, self.boxsize)]
             if not self.autocorr:
                 self.positions2 = [p % b.astype(p.dtype) for p, b in zip(self.positions2, self.boxsize)]
-        self.dtype = self.positions1[0].dtype
 
         self.size1 = self.size2 = len(self.positions1[0])
         if not self.autocorr: self.size2 = len(self.positions2[0])
@@ -957,8 +961,8 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         """
         new = self.deepcopy()
         factor = wnorm / new.wnorm
-        new.wcounts = new.wcounts * factor
-        new.wnorm = new.wnorm * factor
+        for name in ['wcounts', 'wnorm']:
+            setattr(new, name, getattr(new, name) * factor)
         return new
 
     @classmethod
@@ -970,6 +974,8 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         Warning
         -------
         If > 1 input two-point counts, :attr:`size1`, :attr:`size2` attributes will be lost.
+        Input two-point counts must have same edges for this operation to make sense
+        (no checks performed).
         """
         new = others[0].deepcopy()
         if len(others) > 1:
@@ -1002,7 +1008,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
     def __getstate__(self):
         state = {}
         for name in ['name', 'autocorr', 'is_reversible', 'seps', 'ncounts', 'wcounts', 'wnorm', 'size1', 'size2', 'edges', 'mode', 'bin_type',
-                     'boxsize', 'los_type', 'compute_sepsavg', 'weight_attrs', 'attrs']:
+                     'boxsize', 'los_type', 'compute_sepsavg', 'weight_attrs', 'dtype', 'attrs']:
             if hasattr(self, name):
                 state[name] = getattr(self, name)
         return state
@@ -1137,8 +1143,9 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
         self.autocorr = size2 is None
         self._set_compute_sepsavg(False)
         self._set_default_seps()
-        self.run()
+        self._set_reversible()
         self.wnorm = self.normalization()
+        self.run()
 
     def run(self):
         """Set analytical two-point counts."""

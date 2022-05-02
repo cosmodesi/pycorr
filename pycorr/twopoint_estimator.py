@@ -347,6 +347,8 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         """
         Sum input estimators (their two-point counts, actually).
         See e.g. https://arxiv.org/pdf/1905.01133.pdf for a use case.
+        Input two-point estimators must have same edges for this operation to make sense
+        (no checks performed).
         """
         new = others[0].copy()
         for name in new.count_names:
