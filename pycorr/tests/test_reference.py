@@ -325,5 +325,5 @@ if __name__ == '__main__':
     base_dir = os.path.join(os.path.dirname(__file__), 'reference')
 
     setup_logging()
-    save_reference(base_dir)
+    # save_reference(base_dir)
     test_reference(base_dir)
