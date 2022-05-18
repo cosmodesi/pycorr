@@ -171,7 +171,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
 
     estimator : string, default='auto'
         Estimator name, one of ["auto", "natural", "landyszalay", "davispeebles", "weight", "residual"].
-        If "auto", "landyszalay" will be chosen if random catalog(s) is/are provided, else "natural".
+        If "auto", "landyszalay" will be chosen if random or shifted catalog(s) is/are provided, else "natural".
 
     bin_type : string, default='auto'
         Binning type for first dimension, e.g. :math:`r_{p}` when ``mode`` is "rppi".
@@ -257,7 +257,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     with_randoms = not is_none(randoms_positions1)
     with_shifted = not is_none(shifted_positions1)
     with_jackknife = not is_none(data_samples1)
-    Estimator = get_twopoint_estimator(estimator, with_DR=with_randoms, with_jackknife=with_jackknife)
+    Estimator = get_twopoint_estimator(estimator, with_DR=with_randoms or with_shifted, with_jackknife=with_jackknife)
     if log: logger.info('Using estimator {}.'.format(Estimator))
 
     positions = {'D1': data_positions1, 'D2': data_positions2, 'R1': randoms_positions1, 'R2': randoms_positions2, 'S1': shifted_positions1, 'S2': shifted_positions2}
@@ -292,6 +292,8 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
             size2 = None
             if not autocorr:
                 size2 = counts['D1D2'].size2
+            if boxsize is None:
+                raise ValueError('boxsize must be provided for analytic two-point counts {}.'.format(label12))
             counts[label12] = AnalyticTwoPointCounter(mode, edges, boxsize, size1=size1, size2=size2)
             continue
         if log: logger.info('Computing two-point counts {}.'.format(label12))
