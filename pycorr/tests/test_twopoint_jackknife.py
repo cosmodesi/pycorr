@@ -166,7 +166,6 @@ def test_twopoint_counter(mode='s'):
                 if mpi:
                     list_options.append({'autocorr': autocorr, 'mpicomm': mpi.COMM_WORLD, 'dtype': dtype, 'isa': isa})
                     list_options.append({'autocorr': autocorr, 'n_individual_weights': 1, 'mpicomm': mpi.COMM_WORLD, 'dtype': dtype, 'isa': isa})
-                    list_options.append({'autocorr': autocorr, 'mpicomm': mpi.COMM_WORLD, 'dtype': dtype, 'isa': isa})
                     list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'twopoint_weights': twopoint_weights, 'mpicomm': mpi.COMM_WORLD, 'dtype': dtype, 'isa': isa})
                 # labels
                 list_options.append({'offset_label': 2})

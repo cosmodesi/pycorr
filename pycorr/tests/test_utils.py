@@ -137,7 +137,7 @@ def test_normalization():
 
     assert prob(1, 1, 1) == 0.5
 
-    base_dir = os.path.join(os.path.dirname(__file__), 'ref_pc_analytic')
+    base_dir = os.path.join(os.path.dirname(__file__), 'reference_pip')
     nrealizations = 124
     fn = os.path.join(base_dir, 'pc_analytic_nbits{:d}_con.dat'.format(nrealizations))
     tmp = np.loadtxt(fn, usecols=3)
@@ -188,6 +188,4 @@ if __name__ == '__main__':
     test_popcount()
     test_reformatbit()
     test_pack_unpack()
-    test_normalization()
     test_rebin()
-    test_normalization()

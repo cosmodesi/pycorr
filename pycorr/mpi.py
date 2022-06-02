@@ -611,6 +611,113 @@ def scatter_array(data, counts=None, root=0, mpicomm=COMM_WORLD):
     return recvbuffer
 
 
+def send_array(data, dest, tag=0, blocking=True, mpicomm=COMM_WORLD):
+    """
+    Send input array ``data`` to process ``dest``.
+
+    Parameters
+    ----------
+    data : array
+        Array to send.
+
+    dest : int
+        Rank of process to send array to.
+
+    tag : int, default=0
+        Message identifier.
+
+    blocking : bool, default=False
+        Blocking?
+
+    mpicomm : MPI communicator, default=MPI.COMM_WORLD
+        Communicator. Defaults to current communicator.
+    """
+    data = np.asarray(data)
+    shape, dtype = (data.shape, data.dtype)
+    data = np.ascontiguousarray(data)
+
+    fail = False
+    if dtype.char == 'V':
+        fail = any(dtype[name] == 'O' for name in dtype.names)
+    else:
+        fail = dtype == 'O'
+    if fail:
+        raise ValueError('"object" data type not supported in send; please specify specific data type')
+
+    duplicity = np.prod(shape[1:], dtype='intp')
+    itemsize = duplicity * dtype.itemsize
+    dt = MPI.BYTE.Create_contiguous(itemsize)
+    dt.Commit()
+
+    if blocking: mpisend, mpiSend = mpicomm.send, mpicomm.Send
+    else: mpisend, mpiSend = mpicomm.isend, mpicomm.Isend
+    mpisend((shape, dtype), dest=dest, tag=tag)
+    mpiSend([data, dt], dest=dest, tag=tag)
+
+
+def recv_array(source=MPI.ANY_SOURCE, tag=MPI.ANY_TAG, mpicomm=COMM_WORLD):
+    """
+    Receive array from process ``source``.
+
+    Parameters
+    ----------
+    source : int, default=MPI.ANY_SOURCE
+        Rank of process to receive array from.
+
+    tag : int, default=0
+        Message identifier.
+
+    mpicomm : MPI communicator, default=MPI.COMM_WORLD
+        Communicator. Defaults to current communicator.
+
+    Returns
+    -------
+    data : array
+    """
+    shape, dtype = mpicomm.recv(source=source, tag=tag)
+    data = np.zeros(shape, dtype=dtype)
+
+    duplicity = np.prod(shape[1:], dtype='intp')
+    itemsize = duplicity * dtype.itemsize
+    dt = MPI.BYTE.Create_contiguous(itemsize)
+    dt.Commit()
+
+    mpicomm.Recv([data, dt], source=source, tag=tag)
+    return data
+
+
+def bcast_array(data, root=0, mpicomm=COMM_WORLD):
+    """
+    Broadcast the input data array across all ranks, assuming ``data`` is
+    initially only on `root` (and `None` on other ranks).
+    This uses ``Scatterv``, which avoids mpi4py pickling, and also
+    avoids the 2 GB mpi4py limit for bytes using a custom datatype.
+
+    Parameters
+    ----------
+    data : array_like or None
+        On `root`, this gives the data to broadcast.
+
+    root : int, default=0
+        The rank number that initially has the data.
+
+    mpicomm : MPI communicator, default=None
+        The MPI communicator.
+
+    Returns
+    -------
+    recvbuffer : array_like
+        ``data`` on each rank.
+    """
+    if mpicomm.rank == root:
+        recvbuffer = np.asarray(data)
+        for rank in range(mpicomm.size):
+            if rank != root: send_array(data, rank, tag=0, blocking=True, mpicomm=mpicomm)
+    else:
+        recvbuffer = recv_array(source=root, tag=0, mpicomm=mpicomm)
+    return recvbuffer
+
+
 def domain_decompose(mpicomm, smoothing, positions1, weights1=None, positions2=None, weights2=None, boxsize=None, domain_factor=None):
     """
     Adapted from https://github.com/bccp/nbodykit/blob/master/nbodykit/algorithms/pair_counters/domain.py.

@@ -205,6 +205,10 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         and "nnever", stating the number of bits systematically set to 0 (defaulting to 0).
         These will only impact the normalization factors.
         For example, for the "zero-truncated" estimator (arXiv:1912.08803), one would use noffset = 0, nalways = 1, nnever = 0.
+        The method used to compute the normalization with PIP weights can be specified with the keyword "normalization": if ``None``,
+        normalization is given by eq. 22 of arXiv:1912.08803; "brute_force" (using OpenMP'ed C code)
+        or "brute_force_npy" (slower, using numpy only methods; both methods match within machine precision)
+        loop over all pairs.
 
     los : string, default='midpoint'
         Line-of-sight to be used when ``mode`` is "smu", "rppi" or "rp"; one of:

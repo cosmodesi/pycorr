@@ -365,8 +365,12 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             and "default_value", the default value of pairwise weights if the denominator is zero (defaulting to 0).
             One can also provide "nalways", stating the number of bits systematically set to 1 (defaulting to 0),
             and "nnever", stating the number of bits systematically set to 0 (defaulting to 0).
-            These will only impact the normalization factors.
+            These will only impact the normalization factors, if not computed with the brute-force approach.
             For example, for the "zero-truncated" estimator (arXiv:1912.08803), one would use noffset = 0, nalways = 1, nnever = 0.
+            The method used to compute the normalization with PIP weights can be specified with the keyword "normalization": if ``None``,
+            normalization is given by eq. 22 of arXiv:1912.08803; "brute_force" (using OpenMP'ed C code)
+            or "brute_force_npy" (slower, using numpy only methods; both methods match within machine precision)
+            loop over all pairs.
 
         twopoint_weights : WeightTwoPointEstimator, default=None
             Weights to be applied to each pair of particles.
@@ -520,10 +524,11 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             if not self.autocorr:
                 self.positions2 = [p % b.astype(p.dtype) for p, b in zip(self.positions2, self.boxsize)]
 
-        self.size1 = self.size2 = len(self.positions1[0])
-        if not self.autocorr: self.size2 = len(self.positions2[0])
+        self._size1 = self._size2 = len(self.positions1[0])
+        if not self.autocorr: self._size2 = len(self.positions2[0])
+        self.size1, self.size2 = self._size1, self._size2
         if self.with_mpi:
-            self.size1, self.size2 = self.mpicomm.allreduce(self.size1), self.mpicomm.allreduce(self.size2)
+            self.size1, self.size2 = self.mpicomm.allreduce(self._size1), self.mpicomm.allreduce(self._size2)
 
     def _set_weights(self, weights1, weights2=None, weight_type='auto', twopoint_weights=None, weight_attrs=None, copy=False, mpiroot=None):
 
@@ -542,12 +547,15 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
 
         else:
 
-            self.weight_attrs.update(nalways=weight_attrs.get('nalways', 0), nnever=weight_attrs.get('nnever', 0))
+            self.weight_attrs.update(nalways=weight_attrs.get('nalways', 0), nnever=weight_attrs.get('nnever', 0), normalization=weight_attrs.get('normalization', None))
             noffset = weight_attrs.get('noffset', 1)
+            if int(noffset) != noffset:
+                raise TwoPointCounterError('Only integer offset accepted')
+            noffset = int(noffset)
             default_value = weight_attrs.get('default_value', 0.)
             self.weight_attrs.update(noffset=noffset, default_value=default_value)
 
-            self.weights1, n_bitwise_weights1 = _format_weights(weights1, weight_type=self.weight_type, size=len(self.positions1[0]), dtype=self.dtype, copy=copy, mpicomm=self.mpicomm, mpiroot=mpiroot)
+            self.weights1, n_bitwise_weights1 = _format_weights(weights1, weight_type=self.weight_type, size=self._size1, dtype=self.dtype, copy=copy, mpicomm=self.mpicomm, mpiroot=mpiroot)
 
             def get_nrealizations(n_bitwise_weights):
                 nrealizations = weight_attrs.get('nrealizations', None)
@@ -563,7 +571,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                 self.n_bitwise_weights = n_bitwise_weights1
 
             else:
-                self.weights2, n_bitwise_weights2 = _format_weights(weights2, weight_type=self.weight_type, size=len(self.positions2[0]), dtype=self.dtype, copy=copy, mpicomm=self.mpicomm, mpiroot=mpiroot)
+                self.weights2, n_bitwise_weights2 = _format_weights(weights2, weight_type=self.weight_type, size=self._size2, dtype=self.dtype, copy=copy, mpicomm=self.mpicomm, mpiroot=mpiroot)
 
                 if n_bitwise_weights2 == n_bitwise_weights1:
 
@@ -594,9 +602,9 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                 self.weight_attrs.update(nrealizations=nrealizations)
 
         if len(self.weights1) == len(self.weights2) + 1:
-            self.weights2.append(np.ones(len(self.positions2[0]), dtype=self.dtype))
+            self.weights2.append(np.ones(self._size2, dtype=self.dtype))
         elif len(self.weights1) == len(self.weights2) - 1:
-            self.weights1.append(np.ones(len(self.positions1[0]), dtype=self.dtype))
+            self.weights1.append(np.ones(self._size1, dtype=self.dtype))
         elif len(self.weights1) != len(self.weights2):
             raise ValueError('Something fishy happened with weights; number of weights1/weights2 is {:d}/{:d}'.format(len(self.weights1), len(self.weights2)))
 
@@ -706,10 +714,91 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             nalways = self.weight_attrs['nalways'] - self.weight_attrs['nnever']
             default_value = self.weight_attrs['default_value']
 
-            def binned_weights(weights, pow=1):
+            def get_individual_weights(weights):
                 indweights = weights[self.n_bitwise_weights:]
-                if indweights: indweights = np.prod(indweights, axis=0)**pow
-                else: indweights = None
+                if indweights: return np.prod(indweights, axis=0)
+
+            method = self.weight_attrs.get('normalization', None)
+            method = method or ''
+
+            if 'brute_force' in method:
+
+                if self.with_mpi:
+                    from . import mpi
+
+                weights1, weights2 = self.weights1, self.weights2
+                if self.autocorr: weights2 = self.weights1
+                size1, size2 = len(weights1[0]), len(weights2[0])
+                indweights1, indweights2 = (get_individual_weights(w) for w in [weights1, weights2])
+                bitweights1, bitweights2 = (utils.reformat_bitarrays(*w[:self.n_bitwise_weights], dtype='i8') for w in [weights1, weights2])
+                sumw_auto = 0.
+                if self.autocorr:
+                    tmp = get_inverse_probability_weight(bitweights1, bitweights1, nrealizations=nrealizations, noffset=noffset, default_value=default_value, dtype=self.dtype)
+                    if indweights1 is not None: tmp *= indweights1 ** 2
+                    sumw_auto = tmp.sum()
+
+                def slice_array(array, start, stop):
+                    # Simple enough, but maybe just import mpytools?
+                    if not self.with_mpi:
+                        return array[start:stop]
+                    cumsize = np.cumsum([0] + self.mpicomm.allgather(len(array)))[self.mpicomm.rank]
+                    start, stop = max(start - cumsize, 0), max(stop - cumsize, 0)
+                    return mpi.bcast_array(mpi.gather_array(array[start:stop], root=0), root=0, mpicomm=self.mpicomm)
+
+                _slab_npairs_max = 1000 * 1000
+                if method.endswith('npy'):
+                    csize2 = size2
+                    if self.with_mpi:
+                        csize2 = self.mpicomm.allreduce(size2)
+                    nslabs = min(size1 * csize2 // _slab_npairs_max + 1, csize2)
+                    sumw_cross = 0
+                    for islab in range(nslabs):
+                        start, stop = islab * csize2 // nslabs, (islab + 1) * csize2 // nslabs
+                        bw1, bw2 = bitweights1, [slice_array(w, start, stop) for w in bitweights2]
+                        bw1, bw2 = zip(*[np.meshgrid(ww1, ww2, indexing='ij') for ww1, ww2 in zip(bw1, bw2)])
+                        tmp = get_inverse_probability_weight(bw1, bw2, nrealizations=nrealizations, noffset=noffset, default_value=default_value, dtype=self.dtype)
+                        if indweights1 is not None: tmp *= (indweights1[:, None] * slice_array(indweights2, start, stop))
+                        sumw_cross += tmp.sum()
+                else:
+                    idtype, precision = {4: (np.int32, 'float'), 8: (np.int64, 'double')}[self.dtype.itemsize]
+                    bitweights1, bitweights2 = (np.column_stack(utils.reformat_bitarrays(*w[:self.n_bitwise_weights], dtype=idtype)) for w in [weights1, weights2])
+                    n_bitwise_weights = bitweights1.shape[-1]
+                    bitweights1, bitweights2 = bitweights1.ravel(), bitweights2.ravel()
+                    path_lib = os.path.join(utils.lib_dir, 'utils_{}.so'.format(precision))
+                    import ctypes
+                    from numpy import ctypeslib
+                    lib = ctypes.CDLL(path_lib, mode=ctypes.RTLD_LOCAL)
+                    func = lib.set_num_threads
+                    func.argtypes = (ctypes.c_int,)
+                    func(self.nthreads)
+                    func = lib.sum_weights
+                    cfdtype = ctypeslib.as_ctypes_type(self.dtype)
+                    cidtype = ctypeslib.as_ctypes_type(idtype)
+                    func.argtypes = (ctypes.c_size_t, ctypes.c_size_t,
+                                     ctypes.POINTER(cfdtype) if indweights1 is None else ctypeslib.ndpointer(dtype=cfdtype, flags='C'),
+                                     ctypes.POINTER(cfdtype) if indweights1 is None else ctypeslib.ndpointer(dtype=cfdtype, flags='C'),
+                                     ctypeslib.ndpointer(dtype=cidtype, flags='C'),
+                                     ctypeslib.ndpointer(dtype=cidtype, flags='C'),
+                                     ctypes.c_int, ctypes.c_int, cfdtype)
+                    func.restype = cfdtype
+                    if self.with_mpi:
+                        sumw_cross = 0.
+                        for irank in range(self.mpicomm.size):
+                            bw2 = mpi.bcast_array(bitweights2, root=irank, mpicomm=self.mpicomm)
+                            iw2 = mpi.bcast_array(indweights2, root=irank, mpicomm=self.mpicomm) if indweights1 is not None else None
+                            sumw_cross += func(size1, self.mpicomm.bcast(size2, root=irank), indweights1, iw2, bitweights1, bw2, n_bitwise_weights, noffset, default_value / nrealizations)
+                    else:
+                        sumw_cross = func(size1, size2, indweights1, indweights2, bitweights1, bitweights2, n_bitwise_weights, noffset, default_value / nrealizations)
+                    sumw_cross *= nrealizations
+
+                sumw = sumw_cross - sumw_auto
+                if self.with_mpi:
+                    sumw = self.mpicomm.allreduce(sumw)
+                return sumw
+
+            def binned_weights(weights, pow=1):
+                indweights = get_individual_weights(weights)
+                if indweights is not None: indweights **= pow
                 w = np.bincount(utils.popcount(*weights[:self.n_bitwise_weights]),
                                 weights=indweights, minlength=self.n_bitwise_weights * 8 + 1)
                 if self.with_mpi:
@@ -1087,6 +1176,102 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                     file.write(comments + line + '\n')
                 for irow in range(len(columns[0])):
                     file.write(delimiter.join(['{:<{width}}'.format(column[irow], width=width) for column, width in zip(columns, widths)]) + '\n')
+
+
+def normalization(weights1, weights2=None, weight_type='auto', weight_attrs=None, dtype=None,
+                  nthreads=None, mpicomm=None, mpiroot=None):
+    r"""
+    Initialize :class:`BaseTwoPointCounter`, and run actual two-point counts
+    (calling :meth:`run`), setting :attr:`wcounts` and :attr:`sep`.
+
+    Parameters
+    ----------
+    weights1 : int, array, list
+        Weights (or local size, if no weights) of the first catalog.
+        See ``weight_type``.
+
+    weights2 : array, list, default=None
+        Optionally, for cross-two-point counts, weights (or local size, if no weights) in the second catalog. See ``weights1``.
+
+    weight_type : string, default='auto'
+        The type of weighting to apply to provided weights. One of:
+
+            - ``None``: no weights are applied.
+            - "product_individual": each pair is weighted by the product of weights :math:`w_{1} w_{2}`.
+            - "inverse_bitwise": each pair is weighted by :math:`\mathrm{nrealizations}/(\mathrm{noffset} + \mathrm{popcount}(w_{1} \& w_{2}))`.
+               Multiple bitwise weights can be provided as a list.
+               Individual weights can additionally be provided as float arrays.
+               In case of cross-correlations with floating weights, bitwise weights are automatically turned to IIP weights,
+               i.e. :math:`\mathrm{nrealizations}/(\mathrm{noffset} + \mathrm{popcount}(w_{1}))`.
+            - "auto": automatically choose weighting based on input ``weights1`` and ``weights2``,
+               i.e. ``None`` when ``weights1`` and ``weights2`` are ``None``,
+               "inverse_bitwise" if one of input weights is integer, else "product_individual".
+
+    weight_attrs : dict, default=None
+        Dictionary of weighting scheme attributes. In case ``weight_type`` is "inverse_bitwise",
+        one can provide "nrealizations", the total number of realizations (*including* current one;
+        defaulting to the number of bits in input weights plus one);
+        "noffset", the offset to be added to the bitwise counts in the denominator (defaulting to 1)
+        and "default_value", the default value of pairwise weights if the denominator is zero (defaulting to 0).
+        One can also provide "nalways", stating the number of bits systematically set to 1 (defaulting to 0),
+        and "nnever", stating the number of bits systematically set to 0 (defaulting to 0).
+        These will only impact the normalization factors.
+        For example, for the "zero-truncated" estimator (arXiv:1912.08803), one would use noffset = 0, nalways = 1, nnever = 0.
+
+    dtype : string, np.dtype, default=None
+        Array type for weights.
+        If ``None``, defaults to type of first ``weights1`` array if a floating-point array is provided, else 'f8'.
+        Double precision is highly recommended .
+
+    nthreads : int, default=None
+        Number of OpenMP threads to use.
+
+    mpicomm : MPI communicator, default=None
+        The MPI communicator, to MPI-distribute calculation.
+
+    mpiroot : int, default=None
+        In case ``mpicomm`` is provided, if ``None``, input weights are assumed to be scattered across all ranks.
+        Else the MPI rank where input weights are gathered.
+    """
+    # Somewhat hacky, but works!
+    self = BaseTwoPointCounter.__new__(BaseTwoPointCounter)
+    self.mpicomm = mpicomm
+    if self.mpicomm is None and mpiroot is not None:
+        raise TwoPointCounterError('mpiroot is not None, but no mpicomm provided')
+    self._set_nthreads(nthreads)
+    self.dtype = np.dtype(dtype) if dtype is not None else dtype
+    self._size1 = self._size2 = None
+    self.autocorr = weights2 is None or isinstance(weights2, (tuple, list)) and not weights2
+    if self.with_mpi:
+        self.autocorr = all(self.mpicomm.allgather(self.autocorr))
+    if self.autocorr:
+        weights2 = None
+
+    def size_weights(weights):
+        import numbers
+        local_is_size = is_size = isinstance(weights, numbers.Number)
+        if self.with_mpi: is_size = any(self.mpicomm.allgather(is_size))
+        if is_size:
+            size = csize = weights
+            if self.with_mpi:
+                csize = self.mpicomm.allreduce(size if local_is_size else 0)
+            return size, csize
+        return None, None
+
+    self._size1, self.size1 = size_weights(weights1)
+    if self.size1 is not None:
+        weights1 = None
+    self._size2, self.size2 = size_weights(weights2)
+    if self.size2 is not None:
+        weights2 = None
+
+    self._set_weights(weights1, weights2, weight_type=weight_type, weight_attrs=weight_attrs, copy=False, mpiroot=mpiroot)
+    if self.weights1[self.n_bitwise_weights:]:
+        self.dtype = self.weights1[-1].dtype
+    else:
+        self.dtype = 'f8'
+    self.dtype = np.dtype(self.dtype)
+    return self.normalization()
 
 
 class AnalyticTwoPointCounter(BaseTwoPointCounter):

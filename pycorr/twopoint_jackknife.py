@@ -452,7 +452,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         nprocs_per_real : int, default=1
             In case ``mpicomm`` is provided, the number of MPI processes to devote to the calculation of two-point counts for each jackknife realization.
             If ``nprocs_per_real`` is e.g. 1 (default), the parallelization is exclusively on the jackknife realizations.
-            If ``nprocs_per_real`` is e.g. 2, the parallelization is on the jackknife realizations (with ``mpicomm.size//n_procs_per_real`` realizations treated in parallel)
+            If ``nprocs_per_real`` is e.g. 2, the parallelization is on the jackknife realizations (with ``mpicomm.size // n_procs_per_real`` realizations treated in parallel)
             and the counts within each jackknife realization use 2 MPI processes.
 
         samples : list, array, default=None
