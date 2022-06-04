@@ -687,7 +687,7 @@ def test_pip_normalization():
                 counter = FakeTwoPointCounter(mode='s', edges=edges, positions1=positions, weights1=weights, weight_attrs={'nrealizations': 1 + nbits, 'normalization': 'brute_force'}, **kwargs)
                 assert np.allclose(counter.wnorm / 2., truth['wpip_brute_force'], rtol=1e-8 if no_indweight else 1e-12)
                 counter_npy = FakeTwoPointCounter(mode='s', edges=edges, positions1=positions, weights1=weights, weight_attrs={'nrealizations': 1 + nbits, 'normalization': 'brute_force_npy'}, **kwargs)
-                # print(counter_npy.wnorm / counter.wnorm - 1., counter_npy.wnorm / 2. / truth['wpip_brute_force'] - 1., counter.wnorm / 2. / truth['wpip_brute_force'] - 1.)
+                # print(no_indweight, counter_npy.wnorm / counter.wnorm - 1., counter_npy.wnorm / 2. / truth['wpip_brute_force'] - 1., counter.wnorm / 2. / truth['wpip_brute_force'] - 1.)
                 assert np.allclose(counter_npy.wnorm, counter.wnorm, rtol=1e-8 if no_indweight else 1e-12)
 
 
@@ -727,7 +727,6 @@ def test_analytic_twopoint_counter(mode='s'):
     edges = np.linspace(50, 100, 5)
     size = 10000
     boxsize = (1000,) * 3
-    # list_options.append({'weight_type':'inverse_bitwise','n_bitwise_weights':2})
     if mode == 'smu':
         edges = (edges, np.linspace(-1, 1, 5))
     elif mode == 'rppi':
@@ -735,7 +734,7 @@ def test_analytic_twopoint_counter(mode='s'):
 
     list_options = []
     list_options.append({})
-    # list_options.append({'autocorr':True})
+    list_options.append({'autocorr': True})
 
     for options in list_options:
         autocorr = options.pop('autocorr', False)
@@ -908,6 +907,5 @@ if __name__ == '__main__':
         test_analytic_twopoint_counter(mode=mode)
 
     test_rebin()
-
     test_pip_normalization()
     test_pip_counts()
