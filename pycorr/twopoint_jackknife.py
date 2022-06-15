@@ -762,10 +762,11 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         see :meth:`BaseTwoPointCounter.concatenate_x`.
         """
         new = others[0].copy()
+        alpha = [1.] + [new.wnorm / other.wnorm for other in others[1:]]
         for name in cls._result_names:
             tmp = getattr(new, name)
             for k in tmp:
-                tmp[k] = tmp[k].concatenate_x(*[getattr(other, name)[k] for other in others])
+                tmp[k] = tmp[k].concatenate_x(*[getattr(other, name)[k] for other in others], alpha=alpha)
         new._set_sum()
         return new
 
@@ -815,7 +816,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         if not self.autocorr:
             for name in self._result_names:
                 setattr(new, name, {k: r.reversed() for k, r in getattr(self, name).items()})
-            self.cross12, self.cross21 = self.cross21, self.cross12
+            new.cross12, new.cross21 = new.cross21, new.cross12
             new._set_sum()
         return new
 

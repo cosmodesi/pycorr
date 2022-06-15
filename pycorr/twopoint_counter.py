@@ -1005,7 +1005,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         return new
 
     @classmethod
-    def concatenate_x(cls, *others):
+    def concatenate_x(cls, *others, alpha=None):
         """
         Concatenate input two-point counts along :attr:`sep`;
         useful when running two-point counts at different particle densities,
@@ -1019,6 +1019,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         """
         others = sorted(others, key=lambda other: np.mean(other.edges[0]))  # rank input counts by mean scale
         new = others[0].deepcopy()
+        if alpha is not None: new.wcounts *= alpha[0]
         names = ['wcounts']
         if hasattr(new, 'ncounts'): names = ['ncounts'] + names
         for iother, other in enumerate(others[1:]):
@@ -1026,7 +1027,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             mask_low, mask_high = np.flatnonzero(mid < new.edges[0][0]), np.flatnonzero(mid > new.edges[0][-1])
             new.edges[0] = np.concatenate([other.edges[0][mask_low], new.edges[0], other.edges[0][mask_high + 1]], axis=0)
             for name in names:
-                if name == 'wcounts': tmp = other.normalized_wcounts() * new.wnorm
+                if name == 'wcounts': tmp = other.wcounts * (alpha[iother + 1] if alpha is not None else new.wnorm / other.wnorm)
                 else: tmp = getattr(other, name)
                 setattr(new, name, np.concatenate([tmp[mask_low], getattr(new, name), tmp[mask_high]], axis=0))
             for idim in range(new.ndim):
