@@ -721,17 +721,28 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         """
         for name in self._result_names:
             for r in getattr(self, name).values(): r.slice(*slices)
-        self._set_sum()
+        # Cannot do super(JackknifeTwoPointCounter, self).slice(*slices), as this would call self.rebin()
+        tmp = BaseTwoPointCounter.__new__(BaseTwoPointCounter)
+        tmp.__dict__.update(self.__dict__)
+        tmp.slice(*slices)
+        self.__dict__.update(tmp.__dict__)
+        # self._set_sum()
 
     def rebin(self, factor=1):
         """
         Rebin two-point counts, by factor(s) ``factor``.
         A tuple must be provided in case :attr:`ndim` is greater than 1.
         Input factors must divide :attr:`shape`.
+
+        Warning
+        -------
+        If current instance is the result of :meth:`concatenate_x`,
+        rebinning is exact only if ``factor`` divides each of the constant-:attr:`wnorm` chunks.
         """
         for name in self._result_names:
             for r in getattr(self, name).values(): r.rebin(factor=factor)
-        self._set_sum()
+        super(JackknifeTwoPointCounter, self).rebin(factor=factor)
+        # self._set_sum()
 
     @classmethod
     def concatenate(cls, *others):
@@ -743,6 +754,9 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         if not others:
             raise TwoPointCounterError('Provide at least one {} instance.'.format(cls.__name__))
         new = others[0].copy()
+        if np.ndim(new.wnorm) > 1:
+            import warnings
+            warnings.warn('Calling concatenate after concatenate_x & rebin will yield slightly incorrect wcounts at the boundaries of the x-concatenated wcounts; if you did not call rebin, you can ignore this message')
         for name in cls._result_names:
             tmp = {}
             for other in others: tmp.update(getattr(other, name))
@@ -761,12 +775,13 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         Concatenate input two-point counts along :attr:`sep`;
         see :meth:`BaseTwoPointCounter.concatenate_x`.
         """
-        new = others[0].copy()
+        # new = others[0].copy()
+        new = super(JackknifeTwoPointCounter, cls).concatenate_x(*[other for other in others])
         for name in cls._result_names:
             tmp = getattr(new, name)
             for k in tmp:
                 tmp[k] = tmp[k].concatenate_x(*[getattr(other, name)[k] for other in others])
-        new._set_sum()
+        # new._set_sum()
         return new
 
     def normalize(self, wnorm):
@@ -784,24 +799,26 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         new : JackknifeTwoPointCounter
             Normalized counts.
         """
-        new = self.copy()
+        # new = self.copy()
+        new = super(JackknifeTwoPointCounter, self).normalize(wnorm)
         factor = wnorm / new.wnorm
         for name in self._result_names:
             tmp = getattr(new, name)
             for k in tmp:
                 tmp[k] = tmp[k].normalize(factor * tmp[k].wnorm)
-        new._set_sum()
+        # new._set_sum()
         return new
 
     @classmethod
     def sum(cls, *others):
         """Sum input two-point counts, see :meth:`BaseTwoPointCounter.sum`."""
-        new = others[0].copy()
+        # new = self.copy()
+        new = super(JackknifeTwoPointCounter, cls).sum(*others)
         for name in cls._result_names:
             tmp = getattr(new, name)
             for k in tmp:
                 tmp[k] = tmp[k].sum(*[getattr(other, name)[k] for other in others])
-        new._set_sum()
+        # new._set_sum()
         return new
 
     def __copy__(self):
@@ -816,7 +833,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
             for name in self._result_names:
                 setattr(new, name, {k: r.reversed() for k, r in getattr(self, name).items()})
             new.cross12, new.cross21 = new.cross21, new.cross12
-            new._set_sum()
+            # new._set_sum()
         return new
 
     def __getstate__(self):

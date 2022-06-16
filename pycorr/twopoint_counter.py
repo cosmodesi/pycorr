@@ -978,26 +978,32 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         Rebin two-point counts, by factor(s) ``factor``.
         A tuple must be provided in case :attr:`ndim` is greater than 1.
         Input factors must divide :attr:`shape`.
+
+        Warning
+        -------
+        If current instance is the result of :meth:`concatenate_x`,
+        rebinning is exact only if ``factor`` divides each of the constant-:attr:`wnorm` chunks.
         """
         if np.ndim(factor) == 0:
             factor = (factor,)
         if len(factor) != self.ndim:
             raise TwoPointCounterError('Provide a rebinning factor for each dimension')
         if any(s % f for s, f in zip(self.shape, factor)):
-            raise TwoPointCounterError('Rebinning factor must divide shape')
+            raise TwoPointCounterError('Rebinning factor must divide shape {}'.format(self.shape))
         new_shape = tuple(s // f for s, f in zip(self.shape, factor))
-        wcounts = self.wcounts
-        for name in ['wcounts', 'ncounts']:
-            if hasattr(self, name):
-                setattr(self, name, utils.rebin(getattr(self, name), new_shape, statistic=np.sum))
-        if np.ndim(self.wnorm) > 0: self.wnorm = self.wnorm[tuple(slice(0, None, f) for f in factor)]
+        normalized_wcounts = self.normalized_wcounts()
+        rebinned_normalized_wcounts = utils.rebin(normalized_wcounts, new_shape, statistic=np.sum)
+        if np.ndim(self.wnorm) > 0: self.wnorm = utils.rebin(self.wnorm, new_shape, statistic=np.mean)  # somewhat conventional...
+        self.wcounts = rebinned_normalized_wcounts * self.wnorm
+        if hasattr(self, 'ncounts'):
+            self.ncounts = utils.rebin(self.ncounts, new_shape, statistic=np.sum)  # somewhat conventional...
         self.edges = [edges[::f] for edges, f in zip(self.edges, factor)]
         seps = self.seps
         self._set_default_seps()  # reset self.seps to default
         for idim, (sep, compute_sepavg) in enumerate(zip(seps, self.compute_sepsavg)):
             if compute_sepavg:
                 with np.errstate(divide='ignore', invalid='ignore'):
-                    self.seps[idim] = utils.rebin(_nan_to_zero(sep) * wcounts, new_shape, statistic=np.sum) / self.wcounts
+                    self.seps[idim] = utils.rebin(_nan_to_zero(sep) * normalized_wcounts, new_shape, statistic=np.sum) / rebinned_normalized_wcounts
 
     def reversed(self):
         """Return counts for reversed positions1/weights1 and positions2/weights2."""
