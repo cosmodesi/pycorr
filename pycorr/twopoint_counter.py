@@ -5,7 +5,7 @@ import time
 
 import numpy as np
 
-from .utils import BaseClass, get_mpi, _make_array, _nan_to_zero
+from .utils import BaseClass, get_mpi, _make_array, _make_array_like, _nan_to_zero
 from . import utils
 
 
@@ -960,13 +960,15 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             eslices.append(slice(start, stop + 1, 1))
             factor.append(step)
         slices = tuple(slices)
-        for name in ['seps', 'wcounts', 'ncounts']:
-            tmp = getattr(self, name, None)
-            if tmp is None: continue
-            if isinstance(tmp, list):
-                setattr(self, name, [tt[slices] for tt in tmp])
-            else:
-                setattr(self, name, tmp[slices])
+        names = ['seps', 'wcounts', 'ncounts']
+        if np.ndim(self.wnorm) > 0: names.append('wnorm')
+        for name in names:
+            if hasattr(self, name):
+                tmp = getattr(self, name)
+                if isinstance(tmp, list):
+                    setattr(self, name, [tt[slices] for tt in tmp])
+                else:
+                    setattr(self, name, tmp[slices])
         self.edges = [edges[eslice] for edges, eslice in zip(self.edges, eslices)]
         if not all(f == 1 for f in factor):
             self.rebin(factor=factor)
@@ -985,9 +987,10 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             raise TwoPointCounterError('Rebinning factor must divide shape')
         new_shape = tuple(s // f for s, f in zip(self.shape, factor))
         wcounts = self.wcounts
-        self.wcounts = utils.rebin(wcounts, new_shape, statistic=np.sum)
-        if getattr(self, 'ncounts', None) is not None:
-            self.ncounts = utils.rebin(self.ncounts, new_shape, statistic=np.sum)
+        for name in ['wcounts', 'ncounts']:
+            if hasattr(self, name):
+                setattr(self, name, utils.rebin(getattr(self, name), new_shape, statistic=np.sum))
+        if np.ndim(self.wnorm) > 0: self.wnorm = self.wnorm[tuple(slice(0, None, f) for f in factor)]
         self.edges = [edges[::f] for edges, f in zip(self.edges, factor)]
         seps = self.seps
         self._set_default_seps()  # reset self.seps to default
@@ -1005,7 +1008,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         return new
 
     @classmethod
-    def concatenate_x(cls, *others, alpha=None):
+    def concatenate_x(cls, *others):
         """
         Concatenate input two-point counts along :attr:`sep`;
         useful when running two-point counts at different particle densities,
@@ -1014,12 +1017,12 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
 
         Warning
         -------
-        :attr:`wcounts` of larger scales are rescaled such their :attr:`wnorm`
-        matches that of smaller scales.
+        :attr:`wnorm` is cast to a :attr:`ndim` array.
         """
         others = sorted(others, key=lambda other: np.mean(other.edges[0]))  # rank input counts by mean scale
         new = others[0].deepcopy()
-        if alpha is not None: new.wcounts *= alpha[0]
+        if len(others) > 1:
+            new.wnorm = _make_array_like(new.wnorm, new.wcounts)
         names = ['wcounts']
         if hasattr(new, 'ncounts'): names = ['ncounts'] + names
         for iother, other in enumerate(others[1:]):
@@ -1027,9 +1030,10 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             mask_low, mask_high = np.flatnonzero(mid < new.edges[0][0]), np.flatnonzero(mid > new.edges[0][-1])
             new.edges[0] = np.concatenate([other.edges[0][mask_low], new.edges[0], other.edges[0][mask_high + 1]], axis=0)
             for name in names:
-                if name == 'wcounts': tmp = other.wcounts * (alpha[iother + 1] if alpha is not None else new.wnorm / other.wnorm)
-                else: tmp = getattr(other, name)
+                tmp = getattr(other, name)
                 setattr(new, name, np.concatenate([tmp[mask_low], getattr(new, name), tmp[mask_high]], axis=0))
+            wnorm = _make_array_like(other.wnorm, other.wcounts)
+            new.wnorm = np.concatenate([wnorm[mask_low], new.wnorm, wnorm[mask_high]], axis=0)
             for idim in range(new.ndim):
                 new.seps[idim] = np.concatenate([other.seps[idim][mask_low], new.seps[idim], other.seps[idim][mask_high]], axis=0)
         return new
@@ -1146,9 +1150,8 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             if header is None: header = []
             elif isinstance(header, str): header = [header]
             else: header = list(header)
-            attrs = {}
-            for name in ['mode', 'autocorr', 'size1', 'size2', 'wnorm', 'los_type', 'bin_type']:
-                value = attrs.get(name, getattr(self, name, None))
+            for name in ['mode', 'autocorr', 'size1', 'size2', 'los_type', 'bin_type']:
+                value = getattr(self, name, None)
                 if value is None:
                     value = 'None'
                 elif any(name.startswith(key) for key in ['mode', 'los_type', 'bin_type']):
@@ -1161,12 +1164,12 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             labels = []
             for name in coords_names:
                 labels += ['{}mid'.format(name), '{}avg'.format(name)]
-            labels += ['wcounts']
+            labels += ['wcounts', 'wnorm']
             mids = np.meshgrid(*[(edges[:-1] + edges[1:]) / 2. for edges in self.edges], indexing='ij')
             columns = []
             for idim in range(self.ndim):
                 columns += [mids[idim].flat, self.seps[idim].flat]
-            columns += [self.wcounts.flat]
+            columns += [self.wcounts.flat, _make_array_like(self.wnorm, self.wcounts).flat]
             columns = [[np.array2string(value, formatter=formatter) for value in column] for column in columns]
             widths = [max(max(map(len, column)) - len(comments) * (icol == 0), len(label)) for icol, (column, label) in enumerate(zip(columns, labels))]
             widths[-1] = 0  # no need to leave a space

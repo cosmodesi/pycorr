@@ -510,7 +510,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         self.is_reversible = self.autocorr or self.is_reversible
         self.edges = counts.edges.copy()  # useful when rebinning
         for name in ['wcounts', 'wnorm', 'ncounts']:
-            if getattr(counts, name, None) is not None:
+            if hasattr(counts, name):
                 setattr(self, name, sum(getattr(r, name) for r in self.auto.values()) + sum(getattr(r, name) for r in self.cross12.values()))
 
         self._set_default_seps()  # reset self.seps to default
@@ -671,7 +671,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
             alpha = float(correction)
         state = self.auto[ii].__getstate__()
         for name in ['wcounts', 'wnorm', 'ncounts']:
-            if getattr(self, name, None) is not None:
+            if hasattr(self, name):
                 state[name] = getattr(self, name) - getattr(self.auto[ii], name) - alpha * (getattr(self.cross12[ii], name) + getattr(self.cross21[ii], name))
 
         state['seps'] = state['seps'].copy()
@@ -762,11 +762,10 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         see :meth:`BaseTwoPointCounter.concatenate_x`.
         """
         new = others[0].copy()
-        alpha = [1.] + [new.wnorm / other.wnorm for other in others[1:]]
         for name in cls._result_names:
             tmp = getattr(new, name)
             for k in tmp:
-                tmp[k] = tmp[k].concatenate_x(*[getattr(other, name)[k] for other in others], alpha=alpha)
+                tmp[k] = tmp[k].concatenate_x(*[getattr(other, name)[k] for other in others])
         new._set_sum()
         return new
 

@@ -151,8 +151,15 @@ def distance(positions):
 
 
 def _make_array(value, shape, dtype='f8'):
-    # Return numpy array filled with value
+    # Return numpy array filled with ``value``
     toret = np.empty(shape, dtype=dtype)
+    toret[...] = value
+    return toret
+
+
+def _make_array_like(value, like):
+    # Return numpy array like ``like`` filled with ``value``
+    toret = np.empty_like(like)
     toret[...] = value
     return toret
 

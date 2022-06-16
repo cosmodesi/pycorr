@@ -516,12 +516,6 @@ def test_twopoint_counter(mode='s'):
                 fn_txt = os.path.join(tmp_dir, 'tmp.txt')
                 wcounts, sep = test.wcounts.copy(), test.sep.copy()
                 test.save_txt(fn_txt)
-                wnorm = None
-                txt = '# wnorm = '
-                with open(fn_txt, 'r') as file:
-                    for line in file:
-                        if txt in line: wnorm = float(line.replace(txt, ''))
-                assert np.allclose(wnorm, test.wnorm)
                 tmp = np.loadtxt(fn_txt, unpack=True)
 
                 def mid(edges):
@@ -531,7 +525,7 @@ def test_twopoint_counter(mode='s'):
                 mids = np.meshgrid(*[mid(test.edges[axis]) for axis in range(test.ndim)], indexing='ij')
                 seps = []
                 for axis in range(test.ndim): seps += [mids[axis], test.seps[axis]]
-                assert np.allclose([tt.reshape(test.shape) for tt in tmp], seps + [wcounts], equal_nan=True)
+                assert np.allclose([tt.reshape(test.shape) for tt in tmp], seps + [wcounts, utils._make_array_like(test.wnorm, test.wcounts)], equal_nan=True)
                 test.save(fn)
                 test2 = TwoPointCounter.load(fn)
                 assert np.allclose(test2.wcounts, wcounts)

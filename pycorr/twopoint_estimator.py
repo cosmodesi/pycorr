@@ -198,20 +198,20 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
     @property
     def sep(self):
         """Array of separation values of first dimension, taken from :attr:`R1R2` if provided, else :attr:`D1D2`."""
-        if getattr(self, 'R1R2', None) is not None:
+        if hasattr(self, 'R1R2'):
             return self.R1R2.sep
         return self.XX.sep
 
     @property
     def seps(self):
         """Array of separation values, taken from :attr:`R1R2` if provided, else :attr:`D1D2`."""
-        if getattr(self, 'R1R2', None) is not None:
+        if hasattr(self, 'R1R2'):
             return self.R1R2.seps
         return self.XX.seps
 
     def sepavg(self, *args, **kwargs):
         """Return average of separation for input axis; this is an 1D array of size :attr:`shape[axis]`."""
-        if getattr(self, 'R1R2', None) is not None:
+        if hasattr(self, 'R1R2'):
             return self.R1R2.sepavg(*args, **kwargs)
         return self.XX.sepavg(*args, **kwargs)
 
@@ -616,7 +616,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
             else: header = list(header)
             attrs = {}
             for count in self.count_names:
-                for name in ['size1', 'size2', 'wnorm']:
+                for name in ['size1', 'size2']:
                     attrs['.'.join([count, name])] = getattr(getattr(self, count), name, None)
             for name in ['mode', 'autocorr'] + list(attrs.keys()) + ['los_type', 'bin_type']:
                 value = attrs.get(name, getattr(self.XX, name, None))
