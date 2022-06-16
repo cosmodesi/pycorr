@@ -1011,6 +1011,10 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             raise TwoPointCounterError('These counts are not reversible')
         new = self.deepcopy()
         new.size1, new.size2 = new.size2, new.size1
+        if new.mode == 'smu' and not self.autocorr:
+            for name in ['wcounts', 'ncounts', 'sep']:
+                if hasattr(new, name):
+                    setattr(new, name, getattr(new, name)[:, ::-1])
         return new
 
     @classmethod

@@ -828,7 +828,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         return new
 
     def reversed(self):
-        new = super(JackknifeTwoPointCounter, self).reversed()  # a deepcopy with swapped size1, size2
+        new = super(JackknifeTwoPointCounter, self).reversed()  # a deepcopy with swapped size1, size2, and reversed counts
         if not self.autocorr:
             for name in self._result_names:
                 setattr(new, name, {k: r.reversed() for k, r in getattr(self, name).items()})
