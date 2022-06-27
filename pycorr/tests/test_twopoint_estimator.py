@@ -224,6 +224,9 @@ def test_estimator(mode='s'):
                     assert np.allclose(getattr(estimator_renormalized, name).wnorm, estimator_nojackknife.XX.wnorm)
                 assert_allclose_estimators(estimator_renormalized, estimator_nojackknife)
 
+                estimator_renormalized2 = estimator.normalize() + estimator.normalize()
+                assert_allclose_estimators(estimator_renormalized2, estimator)
+
             ii = data1[-1][0]
             estimator_nojackknife_ii = run_nojackknife(ii=ii)
             estimator_jackknife_ii = estimator_jackknife.realization(ii, correction=None)
