@@ -799,12 +799,12 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         new : JackknifeTwoPointCounter
             Normalized counts.
         """
-        # new = self.copy()
         new = super(JackknifeTwoPointCounter, self).normalize(wnorm)
-        factor = wnorm / new.wnorm
+        factor = wnorm / self.wnorm
         for name in self._result_names:
             tmp = getattr(new, name)
             for k in tmp:
+                # tmp[k] = tmp[k].normalize(wnorm)
                 tmp[k] = tmp[k].normalize(factor * tmp[k].wnorm)
         # new._set_sum()
         return new
