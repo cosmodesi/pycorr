@@ -861,7 +861,7 @@ def project_to_poles(estimator, ells=_default_ells, return_sep=True, return_cov=
     estimator : BaseTwoPointEstimator
         Estimator for :math:`(s, \mu)` correlation function.
 
-    ells : tuple, int, default=(0,2,4)
+    ells : tuple, int, default=(0, 2, 4)
         Order of Legendre polynomial.
 
     return_sep : bool, default=True
@@ -941,7 +941,7 @@ def project_to_wedges(estimator, wedges=_default_wedges, return_sep=True, return
     estimator : BaseTwoPointEstimator
         Estimator for :math:`(s, \mu)` correlation function.
 
-    wedges : tuple, default=(-1., -2./3, -1./3., 0., 1./3, 2./3, 1.)
+    wedges : tuple, default=(-1., -2./3, -1./3, 0., 1./3, 2./3, 1.)
         :math:`mu`-wedges.
         Single or list of tuples :math:`(\mu_{\mathrm{min}}, \mu_{\mathrm{max}})`,
         or :math:`\mu`-edges :math:`(\mu_{0}, ..., \mu_{n})`,
