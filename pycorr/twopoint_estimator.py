@@ -445,7 +445,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
             return project_to_wedges(self, return_sep=return_sep, return_cov=return_cov, **kwargs)
         if mode == 'wp':
             return project_to_wp(self, return_sep=return_sep, return_cov=return_cov, **kwargs)
-        for name in ['ells', 'wedges' 'pimax']: kwargs.pop(name, None)
+        for name in ['ells', 'wedges', 'pimax']: kwargs.pop(name, None)
         toret = []
         if return_sep:
             for axis in range(self.ndim): toret.append(self.sepavg(axis=axis))
@@ -539,21 +539,21 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         shape = ((len(corr_std[0]),) if ndim == 1 else tuple()) + tuple(sep.size for sep in seps)
         toret_corr_std = [np.nan * np.zeros(shape, dtype=corr_std[0].dtype) for i in range(len(corr_std))]
         mask_seps = tuple((sep >= self.edges[idim][0]) & (sep <= self.edges[idim][-1]) for idim, sep in enumerate(seps))
-        seps = tuple(sep[mask] for sep, mask in zip(seps, mask_seps))
+        seps_masked = tuple(sep[mask] for sep, mask in zip(seps, mask_seps))
         indices = (Ellipsis, mask_seps[0]) if ndim == 1 else np.ix_(*mask_seps)
-        if all(mask_sep.any() for mask_sep in mask_seps):
+        if all(sep_masked.size for sep_masked in seps_masked):
             if ndim == 1:
 
                 def interp(array):
-                    return np.array([UnivariateSpline(sepsavg[0], arr, k=1, s=0, ext='const')(seps[0]) for arr in array], dtype=array.dtype)
+                    return np.array([UnivariateSpline(sepsavg[0], arr, k=1, s=0, ext='const')(seps_masked[0]) for arr in array], dtype=array.dtype)
 
             else:
-                i_seps = tuple(np.argsort(sep) for sep in seps)
-                sseps = tuple(sep[i_sep] for sep, i_sep in zip(seps, i_seps))
+                i_seps = tuple(np.argsort(sep) for sep in seps_masked)
+                sseps_masked = tuple(sep[i_sep] for sep, i_sep in zip(seps_masked, i_seps))
                 ii_seps = tuple(np.argsort(i_sep) for i_sep in i_seps)
 
                 def interp(array):
-                    return RectBivariateSpline(*sepsavg, array, kx=1, ky=1, s=0)(*sseps, grid=True)[np.ix_(*ii_seps)]
+                    return RectBivariateSpline(*sepsavg, array, kx=1, ky=1, s=0)(*sseps_masked, grid=True)[np.ix_(*ii_seps)]
 
             for toret_array, array in zip(toret_corr_std, corr_std): toret_array[indices] = interp(array)
         if isscalar and ndim == 1:
@@ -675,6 +675,97 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
                     file.write(comments + line + '\n')
                 for irow in range(len(columns[0])):
                     file.write(delimiter.join(['{:<{width}}'.format(column[irow], width=width) for column, width in zip(columns, widths)]) + '\n')
+
+    def plot(self, plot_std=None, mode='auto', ax=None, fn=None, kw_save=None, show=False, **kwargs):
+        r"""
+        Plot correlation function.
+
+        Parameters
+        ----------
+        plot_std : bool, default=None
+            If ``True`` or ``None`` and estimator holds a covariance estimate :meth:`cov` (e.g. from jackknife realizations),
+            plot standard deviation estimate.
+            If ``True`` and estimator does not have :meth:`cov`,
+            raise :class:`TwoPointEstimatorError`.
+
+        mode : str, default='auto'
+            If 'poles', save multipoles.
+            If 'wp', save projected correlation function.
+            If 'auto', and 'ells' provided (see ``kwargs``), save multipoles;
+            else if 'pimax' provided, save projected correlation function.
+
+        ax : matplotlib.axes.Axes, default=None
+            Axes where to plot samples. If ``None``, takes current axes.
+
+        fn : string, default=None
+            If not ``None``, file name where to save figure.
+
+        kw_save : dict, default=None
+            Optional arguments for :meth:`matplotlib.figure.Figure.savefig`.
+
+        show : bool, default=False
+            Whether to show figure.
+
+        kwargs : dict
+            Optionally arguments for :func:`project_to_poles` (if :attr:`mode` is 'smu'), e.g. ``ells``,
+            `project_to_wp` (if :attr:`mode` is 'rpppi'), e.g. ``pimax``, and :meth:`cov`.
+
+        Returns
+        -------
+        ax : matplotlib.axes.Axes
+        """
+        mode, kwargs = _get_project_mode(mode=mode, **kwargs)
+        if mode is None: mode = self.mode
+        plot_std = plot_std or plot_std is None and hasattr(self, 'cov')
+        tmp = self(return_sep=True, return_std=plot_std, mode=mode, **kwargs)
+        if len(tmp) - int(plot_std) - 1 > 1:
+            raise ValueError('Cannot plot > 1D correlation function')
+        sep, corr = tmp[:2]
+        std = tmp[2] if plot_std else None
+        from matplotlib import pyplot as plt
+        if ax is None: ax = plt.gca()
+
+        def plot(x, y, yerr=None, **kwargs):
+            if yerr is None:
+                ax.plot(x, y, **kwargs)
+            else:
+                ax.errorbar(x, y, yerr=yerr, linestyle='none', marker='o', **kwargs)
+
+        if mode == 'poles':
+            ells = _format_ells(kwargs.get('ells', _default_ells))[0]
+            for ill, ell in enumerate(ells):
+                plot(sep, sep**2 * corr[ill], yerr=sep**2 * std[ill] if std is not None else None, label=r'$\ell = {:d}$'.format(ell))
+            ax.set_xlabel(r'$s$ [$\mathrm{Mpc}/h$]')
+            ax.set_ylabel(r'$s^{2} \xi_{\ell}(s)$ [$(\mathrm{Mpc}/h)^{2}$]')
+        elif mode == 'wedges':
+            wedges = _format_wedges(kwargs.get('wedges', _default_wedges))[0]
+            for iwedge, wedge in enumerate(wedges):
+                plot(sep, sep**2 * corr[iwedge], yerr=sep**2 * std[iwedge] if std is not None else None, label=r'${:.2f} < \mu < {:.2f}$'.format(*wedge))
+            ax.set_xlabel(r'$s$ [$\mathrm{Mpc}/h$]')
+            ax.set_ylabel(r'$s^{2} \xi(s, \mu)$ [$(\mathrm{Mpc}/h)^{2}$]')
+        elif mode in ['rp', 'wp']:
+            plot(sep, sep * corr, yerr=sep * std if std is not None else None)
+            ax.set_xscale('log')
+            ax.set_xlabel(r'$r_{p}$ [$\mathrm{Mpc}/h$]')
+            ax.set_ylabel(r'$r_{p} w_{p}$ [$(\mathrm{{Mpc}}/h)^{{2}}$]')
+        elif mode == 's':
+            plot(sep, sep**2 * corr, yerr=sep**2 * std if std is not None else None)
+            ax.set_xlabel(r'$s$ [$\mathrm{Mpc}/h$]')
+            ax.set_ylabel(r'$s^{2} \xi(s)$ [$(\mathrm{Mpc}/h)^{2}$]')
+        elif mode == 'theta':
+            plot(sep, sep * corr, yerr=sep * std if std is not None else None)
+            ax.set_xlabel(r'$\theta$ [deg]')
+            ax.set_ylabel(r'$\theta w(\theta)$')
+        else:
+            raise ValueError('mode must be one of [poles, wedges, rp, s, theta]')
+        ax.legend()
+        ax.grid(True)
+        if not self.with_mpi or self.mpicomm.rank == 0:
+            if fn is not None:
+                utils.savefig(fn, **(kw_save or {}))
+            if show:
+                plt.show()
+        return ax
 
 
 def _make_property(name):

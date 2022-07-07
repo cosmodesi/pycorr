@@ -424,6 +424,17 @@ def test_estimator(mode='s'):
                         assert np.allclose(tmp[1:], test(return_sep=True), equal_nan=True)
                     test.corr.flat[0] = zero
                     test.save(fn)
+                    if test.mode == 'smu':
+                        test.plot(mode='wedges')
+                        if isjkn: test.plot(plot_std=True, mode='wedges')
+                        test.plot(mode='poles')
+                        if isjkn: test.plot(plot_std=True, mode='poles')
+                    elif test.mode == 'rppi':
+                        test.plot(mode='wp')
+                        if isjkn: test.plot(plot_std=True, mode='wp')
+                    else:
+                        test.plot()
+                        if isjkn: test.plot(plot_std=True)
                     test2 = TwoPointEstimator.load(fn)
                     assert type(TwoPointCorrelationFunction.from_state(test2.__getstate__())) is type(test2)
                     test2 = TwoPointCorrelationFunction.load(fn)
