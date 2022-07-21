@@ -314,6 +314,7 @@ def test_estimator(mode='s'):
                 tmp_dir = '_tests'
                 fn = os.path.join(tmp_dir, 'tmp.npy')
                 fn_txt = os.path.join(tmp_dir, 'tmp.txt')
+                plot_fn = os.path.join(tmp_dir, 'tmp.png')
                 for test, isjkn in zip([estimator_nojackknife, estimator_jackknife], [False, True]):
                     tmp = test(*[test.sepavg(idim) for idim in range(test.ndim)], return_sep=True, return_std=False)
                     if mode in ['smu', 'rppi']:
@@ -426,12 +427,12 @@ def test_estimator(mode='s'):
                     test.save(fn)
                     if test.mode == 'smu':
                         test.plot(mode='wedges')
-                        if isjkn: test.plot(plot_std=True, mode='wedges')
+                        if isjkn: test.plot(plot_std=True, mode='wedges', fn=plot_fn)
                         test.plot(mode='poles')
-                        if isjkn: test.plot(plot_std=True, mode='poles')
+                        if isjkn: test.plot(plot_std=True, mode='poles', fn=plot_fn)
                     elif test.mode == 'rppi':
                         test.plot(mode='wp')
-                        if isjkn: test.plot(plot_std=True, mode='wp')
+                        if isjkn: test.plot(plot_std=True, mode='wp', fn=plot_fn)
                     else:
                         test.plot()
                         if isjkn: test.plot(plot_std=True)

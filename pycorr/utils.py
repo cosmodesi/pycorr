@@ -11,6 +11,9 @@ import numpy as np
 lib_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'lib')
 
 
+logger = logging.getLogger('Utils')
+
+
 def exception_handler(exc_type, exc_value, exc_traceback):
     """Print exception with a logger."""
     # Do not print traceback if the exception has been handled and logged
@@ -26,7 +29,7 @@ def exception_handler(exc_type, exc_value, exc_traceback):
 
 
 def mkdir(dirname):
-    """Try to create ``dirnm`` and catch :class:`OSError`."""
+    """Try to create ``dirname`` and catch :class:`OSError`."""
     try:
         os.makedirs(dirname)  # MPI...
     except OSError:

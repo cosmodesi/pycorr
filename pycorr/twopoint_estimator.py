@@ -723,7 +723,8 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         sep, corr = tmp[:2]
         std = tmp[2] if plot_std else None
         from matplotlib import pyplot as plt
-        if ax is None: ax = plt.gca()
+        fig = None
+        if ax is None: fig, ax = plt.subplots()
 
         def plot(x, y, yerr=None, **kwargs):
             if yerr is None:
@@ -762,7 +763,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         ax.grid(True)
         if not self.with_mpi or self.mpicomm.rank == 0:
             if fn is not None:
-                utils.savefig(fn, **(kw_save or {}))
+                utils.savefig(fn, fig=fig, **(kw_save or {}))
             if show:
                 plt.show()
         return ax
