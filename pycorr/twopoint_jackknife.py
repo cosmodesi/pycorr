@@ -512,7 +512,8 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         for name in ['wcounts', 'wnorm', 'ncounts']:
             if hasattr(counts, name):
                 setattr(self, name, sum(getattr(r, name) for r in self.auto.values()) + sum(getattr(r, name) for r in self.cross12.values()))
-
+        if hasattr(self, 'ncounts'):
+            self.wcounts[self.ncounts == 0] = 0.
         self._set_default_seps()  # reset self.seps to default
         for idim, compute_sepavg in enumerate(self.compute_sepsavg):
             if compute_sepavg:
@@ -673,7 +674,8 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         for name in ['wcounts', 'wnorm', 'ncounts']:
             if hasattr(self, name):
                 state[name] = getattr(self, name) - getattr(self.auto[ii], name) - alpha * (getattr(self.cross12[ii], name) + getattr(self.cross21[ii], name))
-
+        if 'ncounts' in state:
+            state['wcounts'][state['ncounts'] == 0] = 0.
         state['seps'] = state['seps'].copy()
         for idim, compute_sepavg in enumerate(self.compute_sepsavg):
             if compute_sepavg:
@@ -683,8 +685,10 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
                 # The above may lead to rounding errors
                 # such that seps may be non-zero even if wcounts is zero.
                 mask = np.ones_like(state['seps'][idim], dtype='?')
-                for name in ['wcounts', 'ncounts']:
-                    if name in state: mask &= state[name] > 0  # if ncounts/wcounts computed, good indicator of whether pairs exist or not
+                for name in ['ncounts', 'wcounts']:
+                    if name in state:
+                        mask &= state[name] != 0  # if ncounts / wcounts computed, good indicator of whether pairs exist or not
+                        break
                 # For more robustness we restrict to those separations which lie in between the lower and upper edges
                 mask &= np.apply_along_axis(lambda x: (x >= self.edges[idim][:-1]) & (x <= self.edges[idim][1:]), idim, state['seps'][idim])
                 state['seps'][idim][~mask] = np.nan

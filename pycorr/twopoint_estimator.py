@@ -196,18 +196,18 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         raise AttributeError('Attribute {} does not exist'.format(name))
 
     @property
-    def sep(self):
-        """Array of separation values of first dimension, taken from :attr:`R1R2` if provided, else :attr:`D1D2`."""
-        if hasattr(self, 'R1R2'):
-            return self.R1R2.sep
-        return self.XX.sep
-
-    @property
     def seps(self):
-        """Array of separation values, taken from :attr:`R1R2` if provided, else :attr:`D1D2`."""
+        """Array of separation values, if not set by :meth:`run`, taken from :attr:`R1R2` if provided, else :attr:`XX`."""
+        if hasattr(self, '_seps'):
+            return self._seps
         if hasattr(self, 'R1R2'):
             return self.R1R2.seps
         return self.XX.seps
+
+    @property
+    def sep(self):
+        """Array of separation values of first dimension; if not set by :meth:`run`, taken from :attr:`R1R2` if provided, else :attr:`XX`."""
+        return self.seps[0]
 
     def sepavg(self, *args, **kwargs):
         """Return average of separation for input axis; this is an 1D array of size :attr:`shape[axis]`."""
@@ -898,6 +898,11 @@ class WeightTwoPointEstimator(NaturalTwoPointEstimator):
         tmp = RR / DD
         corr[nonzero] = tmp[...]
         self.corr = corr
+        self._seps = [sep.copy() for sep in self.R1R2.seps]
+        zero = self.R1R2.wcounts == 0.
+        seps_mid = list(np.meshgrid(*self.R1R2._get_default_seps(), indexing='ij'))
+        for sep, sep_mid in zip(self._seps, seps_mid):
+            sep[zero] = sep_mid[zero]
 
     @classmethod
     def _yield_requires(cls, with_reversed=False, with_shifted=False, join=None):
@@ -1111,8 +1116,8 @@ def project_to_wp(estimator, pimax=None, return_sep=True, return_cov=None, ignor
     estimator : BaseTwoPointEstimator
         Estimator for :math:`(r_{p}, \pi)` correlation function.
 
-    pimax : float, default=None
-        Upper bound for summation of :math:`\pi`.
+    pimax : float, tuple, default=None
+        Upper bound for summation of :math:`\pi`, or tuple of (lower bound, upper bound).
 
     return_sep : bool, default=True
         Whether (``True``) to return separation.
@@ -1142,18 +1147,23 @@ def project_to_wp(estimator, pimax=None, return_sep=True, return_cov=None, ignor
     """
     if getattr(estimator, 'mode', 'rppi') != 'rppi':
         raise TwoPointEstimatorError('Estimating projected correlation function is only possible in mode = "rppi"')
+
     if pimax is not None:
+        tpimax = pimax
+        if np.ndim(pimax) == 0:
+            tpimax = (-pimax, pimax)
         estimator = estimator.copy()
-        estimator.select(None, (0, pimax))
+        estimator.select(None, tpimax)
+
     sep = estimator.sepavg(axis=0)
     dpi = np.diff(estimator.edges[1])
     if ignore_nan:
         corr = np.empty(estimator.corr.shape[0], dtype=estimator.corr.dtype)
         for i_rp, corr_rp in enumerate(estimator.corr):
             mask_rp = ~np.isnan(corr_rp)
-            corr[i_rp] = 2. * np.sum(corr_rp[mask_rp] * dpi[mask_rp], axis=-1) * np.sum(dpi) / np.sum(dpi[mask_rp])  # extra factor to correct for missing bins
+            corr[i_rp] = np.sum(corr_rp[mask_rp] * dpi[mask_rp], axis=-1) * np.sum(dpi) / np.sum(dpi[mask_rp])  # extra factor to correct for missing bins
     else:
-        corr = 2. * np.sum(estimator.corr * dpi, axis=-1)
+        corr = np.sum(estimator.corr * dpi, axis=-1)
     toret = []
     if return_sep: toret.append(sep)
     toret.append(corr)

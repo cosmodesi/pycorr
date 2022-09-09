@@ -293,14 +293,16 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
 
         edges : tuple, array
             Tuple of bin edges (arrays), for the first (e.g. :math:`r_{p}`)
-            and optionally second (e.g. :math:`\pi > 0`, :math:`\mu \in [-1, 1]`) dimensions.
+            and optionally second (e.g. :math:`\pi \in [-\infty, \infty]`, :math:`\mu \in [-1, 1]`) dimensions.
             In case of single-dimension binning (e.g. ``mode`` is "theta", "s" or "rp"),
             the single array of bin edges can be provided directly.
             Edges are inclusive on the low end, exclusive on the high end,
             i.e. a pair separated by :math:`s` falls in bin `i` if ``edges[i] <= s < edges[i+1]``.
-            In case ``mode`` is "smu" however, the first :math:`\mu`-bin is exclusive on the low end
+            In case ``mode`` is "smu" however, the first :math:`\mu`-bin is also exclusive on the low end
             (increase the :math:`\mu`-range by a tiny value to include :math:`\mu = \pm 1`).
             Pairs at separation :math:`s = 0` are included in the :math:`\mu = 0` bin.
+            Similarly, in case ``mode`` is "rppi", the first :math:`\pi`-bin is also exclusive on the low end
+            and pairs at separation :math:`s = 0` are included in the :math:`\pi = 0` bin.
             In case of auto-correlation (no ``positions2`` provided), auto-pairs (pairs of same objects) are not counted.
             In case of cross-correlation, all pairs are counted.
             In any case, duplicate objects (with separation zero) will be counted.
@@ -383,8 +385,14 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         los : string, default='midpoint'
             Line-of-sight to be used when ``mode`` is "smu", "rppi" or "rp"; one of:
 
+                - "x", "y" or "z": Cartesian axis
                 - "midpoint": the mean position of the pair: :math:`\mathbf{\eta} = (\mathbf{r}_{1} + \mathbf{r}_{2})/2`
-                - "x", "y" or "z": cartesian axis
+                - "firstpoint": the first position of the pair: :math:`\mathbf{\eta} = \mathbf{r}_{1}`
+                - "endpoint": the second position of the pair: :math:`\mathbf{\eta} = \mathbf{r}_{2}`
+
+            WARNING: "endpoint" is obtained by reversing "firstpoint" (which is the only line-of-sight implemented in the counter).
+            This means, if "s" or "rp" edges starts at 0, and the number of "mu" or "pi" bins is even,
+            zero separation pairs (due to duplicate objects) will be counted in ``counts[0, (counts.shape[1] - 1) // 2]`` instead of ``counts[0, counts.shape[1] // 2]``.
 
         boxsize : array, float, default=None
             For periodic wrapping, the side-length(s) of the periodic cube.
@@ -452,8 +460,8 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         self.mode = mode.lower()
 
     def _set_reversible(self):
-        self.is_reversible = self.mode in ['theta', 's', 'rp', 'rppi']
-        if self.mode == 'smu':
+        self.is_reversible = self.mode in ['theta', 's', 'rp']
+        if self.mode in ['smu', 'rppi']:
             self.is_reversible = self.autocorr or (self.los_type not in ['firstpoint', 'endpoint'])  # even smu is reversible for midpoint los, i.e. positions1 <-> positions2
 
     def _set_zeros(self):
@@ -855,8 +863,12 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
 
     def normalized_wcounts(self):
         """Return normalized two-point counts, i.e. :attr:`wcounts` divided by :meth:`normalization`."""
-        with np.errstate(divide='ignore', invalid='ignore'):
-            return _nan_to_zero(self.wcounts / self.wnorm)
+        #with np.errstate(divide='ignore', invalid='ignore'):
+        #    return _nan_to_zero(self.wcounts / self.wnorm)
+        toret = np.zeros_like(self.wcounts)
+        nonzero = self.wcounts != 0.
+        toret[nonzero] = self.wcounts[nonzero] / (self.wnorm[nonzero] if np.ndim(self.wnorm) else self.wnorm)
+        return toret
 
     def sepavg(self, axis=0, method=None):
         r"""
@@ -1011,7 +1023,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             raise TwoPointCounterError('These counts are not reversible')
         new = self.deepcopy()
         new.size1, new.size2 = new.size2, new.size1
-        if new.mode == 'smu' and not self.autocorr:
+        if new.mode in ['smu', 'rppi'] and not self.autocorr:
             for name in ['wcounts', 'ncounts', 'sep']:
                 if hasattr(new, name):
                     setattr(new, name, getattr(new, name)[:, ::-1])
@@ -1119,8 +1131,22 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
 
     def __setstate__(self, state):
         super(BaseTwoPointCounter, self).__setstate__(state=state)
+        # For backward-compatibility; to be removed soon!
         if hasattr(self, 'is_reversable'):
-            self.is_reversible = self.is_reversable  # for backward-compatibility; to be removed soon!
+            self.is_reversible = self.is_reversable
+        if self.mode == 'rppi' and self.is_reversible and np.all(self.edges[1] >= 0.):
+            import warnings
+            warnings.warn('Loaded pair count is assumed to have been produced with < 20220909 version; if so please save it again to disk to remove this warning;'
+                           'else these must be sliced pair counts: in this case, sorry I removed the slicing, please do counts[:, counts.shape[1]:]!')
+            self.edges[1] = np.concatenate([-self.edges[1][:0:-1], self.edges[1]], axis=0)
+            self.seps[0] = np.concatenate([self.seps[0][...,::-1], self.seps[0]], axis=-1)
+            self.seps[1] = np.concatenate([-self.seps[1][...,::-1], self.seps[1]], axis=-1)
+            for name in ['ncounts', 'wcounts', 'wnorm']:
+                if hasattr(self, name):
+                    tmp = getattr(self, name)
+                    if np.ndim(tmp):
+                        tmp = np.concatenate([tmp[..., ::-1], tmp], axis=-1)
+                        setattr(self, name, tmp)
 
     def save(self, filename):
         """Save two-point counts to ``filename``."""
@@ -1356,8 +1382,7 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
             v = 2. / 3. * np.pi * self.edges[0][:, None]**3 * self.edges[1]
             dv = np.diff(np.diff(v, axis=0), axis=-1)
         elif self.mode == 'rppi':
-            # height is double pimax
-            v = 2. * np.pi * self.edges[0][:, None]**2 * self.edges[1]
+            v = np.pi * self.edges[0][:, None]**2 * self.edges[1]
             dv = np.diff(np.diff(v, axis=0), axis=1)
         elif self.mode == 'rp':
             v = np.pi * self.edges[0][:, None]**2 * self.boxsize['xyz'.index(self.los_type)]

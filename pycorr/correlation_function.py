@@ -29,14 +29,16 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
 
     edges : tuple, array
         Tuple of bin edges (arrays), for the first (e.g. :math:`r_{p}`)
-        and optionally second (e.g. :math:`\pi > 0`, :math:`\mu \in [-1, 1]`) dimensions.
+        and optionally second (e.g. :math:`\pi \in [-\infty, \infty]`, :math:`\mu \in [-1, 1]`) dimensions.
         In case of single-dimension binning (e.g. ``mode`` is "theta", "s" or "rp"),
         the single array of bin edges can be provided directly.
         Edges are inclusive on the low end, exclusive on the high end,
         i.e. a pair separated by :math:`s` falls in bin `i` if ``edges[i] <= s < edges[i+1]``.
-        In case ``mode`` is "smu" however, the first :math:`\mu`-bin is exclusive on the low end
+        In case ``mode`` is "smu" however, the first :math:`\mu`-bin is also exclusive on the low end
         (increase the :math:`\mu`-range by a tiny value to include :math:`\mu = \pm 1`).
         Pairs at separation :math:`s = 0` are included in the :math:`\mu = 0` bin.
+        Similarly, in case ``mode`` is "rppi", the first :math:`\pi`-bin is also exclusive on the low end
+        and pairs at separation :math:`s = 0` are included in the :math:`\pi = 0` bin.
         In case of auto-correlation (no ``positions2`` provided), auto-pairs (pairs of same objects) are not counted.
         In case of cross-correlation, all pairs are counted.
         In any case, duplicate objects (with separation zero) will be counted.
@@ -210,11 +212,17 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         or "brute_force_npy" (slower, using numpy only methods; both methods match within machine precision)
         loop over all pairs.
 
-    los : string, default='midpoint'
-        Line-of-sight to be used when ``mode`` is "smu", "rppi" or "rp"; one of:
+        los : string, default='midpoint'
+            Line-of-sight to be used when ``mode`` is "smu", "rppi" or "rp"; one of:
 
-            - "midpoint": the mean position of the pair: :math:`\mathbf{\eta} = (\mathbf{r}_{1} + \mathbf{r}_{2})/2`
-            - "x", "y" or "z": cartesian axis
+                - "x", "y" or "z": Cartesian axis
+                - "midpoint": the mean position of the pair: :math:`\mathbf{\eta} = (\mathbf{r}_{1} + \mathbf{r}_{2})/2`
+                - "firstpoint": the first position of the pair: :math:`\mathbf{\eta} = \mathbf{r}_{1}`
+                - "endpoint": the second position of the pair: :math:`\mathbf{\eta} = \mathbf{r}_{2}`
+
+            WARNING: "endpoint" is obtained by reversing "firstpoint" (which is the only line-of-sight implemented in the counter).
+            This means, if "s" or "rp" edges starts at 0, and the number of "mu" or "pi" bins is even,
+            zero separation pairs (due to duplicate objects) will be counted in ``counts[0, (counts.shape[1] - 1) // 2]`` instead of ``counts[0, counts.shape[1] // 2]``.
 
     boxsize : array, float, default=None
         For periodic wrapping, the side-length(s) of the periodic cube.

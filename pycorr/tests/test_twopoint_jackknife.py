@@ -99,7 +99,7 @@ def test_twopoint_counter(mode='s'):
     elif mode == 'smu':
         ref_edges = (ref_edges, np.linspace(-1., 1., 22))
     elif mode == 'rppi':
-        ref_edges = (ref_edges, np.linspace(0., 40., 28))
+        ref_edges = (ref_edges, np.linspace(-40., 40., 55))
 
     from collections import namedtuple
     TwoPointWeight = namedtuple('TwoPointWeight', ['sep', 'weight'])
@@ -131,7 +131,7 @@ def test_twopoint_counter(mode='s'):
                 if mode == 'smu':
                     edges = (edges, np.linspace(-0.8, 0.8, 61))
                 if mode == 'rppi':
-                    edges = (edges, np.linspace(0., 90., 91))
+                    edges = (edges, np.linspace(-90., 90., 181))
 
                 list_options.append({'autocorr': autocorr, 'edges': edges, 'dtype': dtype, 'isa': isa})
                 list_options.append({'autocorr': autocorr, 'compute_sepsavg': False, 'edges': edges, 'dtype': dtype, 'isa': isa})
@@ -157,7 +157,7 @@ def test_twopoint_counter(mode='s'):
                     list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'boxsize': cboxsize, 'los': 'y', 'dtype': dtype, 'isa': isa})
                 # los
                 list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'los': 'x', 'dtype': dtype, 'isa': isa})
-                if mode in ['smu']:
+                if mode in ['smu', 'rppi']:
                     list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'los': 'firstpoint', 'edges': edges, 'dtype': dtype, 'isa': isa})
                     list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'los': 'endpoint', 'edges': edges, 'dtype': dtype, 'isa': isa})
                     if itemsize > 4:
@@ -172,6 +172,7 @@ def test_twopoint_counter(mode='s'):
 
     for engine in list_engine:
         for options in list_options:
+            print(mode, options)
             options = options.copy()
             if 'edges' in options:
                 edges = options.pop('edges')

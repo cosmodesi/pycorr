@@ -28,9 +28,9 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                 dpositions1, dpositions2 = dpositions2, dpositions1
                 dweights1, dweights2 = dweights2, dweights1
 
-        if self.mode in ['rppi']:
-            if self.los_type not in ['x', 'y', 'z', 'midpoint']:
-                raise TwoPointCounterError('Corrfunc only supports x / y / z / midpoint line-of-sight for mode {}'.format(self.mode))
+        # if self.mode in ['rppi']:
+        #     if self.los_type not in ['x', 'y', 'z', 'midpoint']:
+        #         raise TwoPointCounterError('Corrfunc only supports x / y / z / midpoint line-of-sight for mode {}'.format(self.mode))
 
         if self.mode == 'smu':
             edges = self.edges[1]
@@ -42,8 +42,15 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
 
         if self.mode == 'rppi':
             edges = self.edges[1]
-            if edges[0] != 0:
-                raise TwoPointCounterError('Corrfunc only supports pi starting at 0')
+            if edges[0] != - edges[-1]:
+                if np.allclose(edges[0], 0.):
+                    import warnings
+                    nedges = 2 * len(edges) - 1
+                    warnings.warn('pi edges starting at 0 is deprecated, please use symmetric binning; I am assuming np.linspace({:.4f}, {:.4f}, {:d})!'.format(-edges[-1], edges[-1], nedges))
+                    self.edges[1] = edges = np.linspace(-edges[-1], edges[-1], nedges)
+                    self._set_zeros()
+                else:
+                    raise TwoPointCounterError('Corrfunc only supports symmetric binning: pimin = -pimax')
             lin = np.linspace(edges[0], edges[-1], len(edges))
             if not np.allclose(edges, lin):
                 raise TwoPointCounterError('Corrfunc only supports linear pi binning')
@@ -180,7 +187,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                                            binfile=self.edges[0], pimax=self.edges[1][-1], npibins=len(self.edges[1]) - 1,
                                            X1=positions1[0], Y1=positions1[1], Z1=positions1[2],
                                            X2=positions2[0], Y2=positions2[1], Z2=positions2[2],
-                                           output_rpavg=self.compute_sepavg, **kwargs)
+                                           output_rpavg=self.compute_sepavg, los_type=los_type, **kwargs)
 
                 key_sep = 'rpavg'
 
@@ -219,7 +226,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                                            binfile=self.edges[0], pimax=pimax, npibins=1,
                                            X1=positions1[0], Y1=positions1[1], Z1=positions1[2],
                                            X2=positions2[0], Y2=positions2[1], Z2=positions2[2],
-                                           output_rpavg=self.compute_sepavg, **kwargs)
+                                           output_rpavg=self.compute_sepavg, los_type=los_type, **kwargs)
 
                 # sum over pi to keep only rp
                 result = {key: result[key] for key in ['npairs', 'weightavg', key_sep]}
@@ -254,7 +261,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
 
         if self.autocorr and self.edges[0][0] <= 0.:  # remove auto-pairs
             index_zero = 0
-            if self.mode == 'smu': index_zero = self.shape[1] // 2  # mu = 0 bin
+            if self.mode in ['smu', 'rppi']: index_zero = self.shape[1] // 2  # mu = 0 bin
             self.ncounts.flat[index_zero] -= self.size1
             autocounts = self._sum_auto_weights()
             if self.compute_sepavg:
@@ -267,7 +274,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
         if self.compute_sepavg:
             self.sep[self.ncounts == 0] = np.nan
 
-        if self.mode == 'smu' and self.los_type == 'endpoint':
+        if self.mode in ['smu', 'rppi'] and self.los_type == 'endpoint':
             # endpoint is 1 <-> 2 with firstpoint, and counts reversed
             for name in ['wcounts', 'ncounts']:
                 setattr(self, name, getattr(self, name)[:, ::-1])

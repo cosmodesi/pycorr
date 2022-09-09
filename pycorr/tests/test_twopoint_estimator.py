@@ -66,7 +66,7 @@ def test_estimator(mode='s'):
             list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'weights_one': ['D1', 'R2']})
             if mode not in ['theta', 'rp']:
                 list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': 'natural', 'boxsize': cboxsize, 'with_randoms': False})
-            for estimator in ['natural', 'landyszalay', 'davispeebles', 'weight', 'residual']:
+            for estimator in ['natural', 'landyszalay', 'davispeebles', 'weight', 'residual'][3:4]:
                 list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator})
                 if estimator not in ['weight']:
                     list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator})
@@ -77,7 +77,7 @@ def test_estimator(mode='s'):
                 # twopoint weights
                 list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'twopoint_weights': twopoint_weights})
                 # los
-                if mode == 'smu':
+                if mode in ['smu', 'rppi']:
                     list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'los': 'firstpoint', 'twopoint_weights': twopoint_weights})
                     list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'los': 'endpoint'})
 
@@ -95,12 +95,13 @@ def test_estimator(mode='s'):
     if mode == 'smu':
         edges = (edges, np.linspace(-1, 1, 21))
     elif mode == 'rppi':
-        edges = (edges, np.linspace(0, 20, 21))
+        edges = (edges, np.linspace(-20, 20, 41))
     elif mode == 'theta':
         edges = np.linspace(1e-5, 10, 11)  # below 1e-5, self pairs are counted by Corrfunc
 
     for engine in list_engine:
         for options in list_options:
+            print(mode, options)
             options = options.copy()
             weights_one = options.pop('weights_one', [])
             n_individual_weights = options.get('n_individual_weights', 1)
@@ -200,7 +201,12 @@ def test_estimator(mode='s'):
 
             def assert_allclose_estimators(res1, res2):
                 mask = np.isfinite(res2.corr)
+                assert np.all(mask == np.isfinite(res1.corr))
                 assert np.allclose(res1.corr[mask], res2.corr[mask])
+                mask2 = mask = np.isnan(res1.sep)
+                assert not np.any(res1.sep == 0.)
+                assert np.all(np.isnan(res2.sep) == np.isnan(res2.corr))
+                assert np.all(np.isfinite(res2.sep) == np.isfinite(res1.sep))
                 assert np.allclose(res1.sep[mask], res2.sep[mask], equal_nan=True)
 
             estimator_nojackknife = run_nojackknife()
@@ -281,6 +287,7 @@ def test_estimator(mode='s'):
                                        size1=estimator_jackknife.D1D2.size1, size2=None if estimator_jackknife.D1D2.autocorr else estimator_jackknife.D1D2.size2, los=options_counts['los'])
                 assert_allclose(R1R2, estimator_jackknife.R1R2)
 
+
             if estimator_jackknife.mode == 'smu':
                 sep, xiell = project_to_poles(estimator_nojackknife, ells=(0, 2, 4))
                 sep, xiell, cov = project_to_poles(estimator_jackknife, ells=(0, 2, 4))
@@ -293,7 +300,7 @@ def test_estimator(mode='s'):
                     if not estimator.XX.compute_sepavg:
                         return mid[0]
                     mask = mid[1] <= sepmax
-                    sep = estimator.seps[0]
+                    sep = estimator.seps[0].copy()
                     sep[np.isnan(sep)] = 0.
                     if getattr(estimator, 'R1R2', None) is not None:
                         wcounts = estimator.R1R2.wcounts
@@ -302,12 +309,20 @@ def test_estimator(mode='s'):
                     with np.errstate(divide='ignore', invalid='ignore'):
                         return np.sum(sep[:, mask] * wcounts[:, mask], axis=-1) / np.sum(wcounts[:, mask], axis=-1)
 
+                def ref_to_wp(estimator, pimax=40):
+                    mid = (estimator.edges[1][:-1] + estimator.edges[1][1:]) / 2.
+                    mask = (mid >= -pimax) & (mid <= pimax)
+                    dpi = np.diff(estimator.edges[1])
+                    return np.sum(estimator.corr[:, mask] * dpi[mask], axis=-1)
+
                 pimax = 40
                 sep, wp = project_to_wp(estimator_nojackknife, pimax=pimax)
                 assert np.allclose(sep, get_sepavg(estimator_nojackknife, pimax), equal_nan=True)
+                assert np.allclose(wp, ref_to_wp(estimator_nojackknife, pimax), equal_nan=True)
                 sep, wp, cov = project_to_wp(estimator_jackknife)
                 sep, wp, cov = project_to_wp(estimator_jackknife, pimax=pimax)
                 assert np.allclose(sep, get_sepavg(estimator_jackknife, pimax), equal_nan=True)
+                assert np.allclose(wp, ref_to_wp(estimator_jackknife, pimax), equal_nan=True)
                 assert cov.shape == (len(sep),) * 2 == (len(wp),) * 2
 
             with tempfile.TemporaryDirectory() as tmp_dir:
