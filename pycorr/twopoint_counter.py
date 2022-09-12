@@ -466,7 +466,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
 
     def _set_zeros(self):
         self._set_default_seps()
-        self.wcounts = np.zeros_like(self.sep)
+        self.wcounts = np.zeros_like(self.sep, dtype='f8')
         self.ncounts = np.zeros_like(self.sep, dtype='i8')
 
     def _set_compute_sepsavg(self, compute_sepsavg):

@@ -214,6 +214,7 @@ def test_twopoint_counter(mode='s'):
     from collections import namedtuple
     TwoPointWeight = namedtuple('TwoPointWeight', ['sep', 'weight'])
     twopoint_weights = TwoPointWeight(np.logspace(-4, 0, 40), np.linspace(4., 1., 40))
+    twopoint_weights2 = TwoPointWeight(np.linspace(1., 10., 40), np.linspace(4., 1., 40))
 
     list_options = []
     mpi = False
@@ -268,9 +269,10 @@ def test_twopoint_counter(mode='s'):
                     list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'boxsize': cboxsize, 'los': 'y', 'dtype': dtype, 'isa': isa})
                 # los
                 if mode in ['smu', 'rppi']:
-                    #list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'los': 'firstpoint', 'edges': edges, 'dtype': dtype, 'isa': isa})
-                    #list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'los': 'endpoint', 'edges': edges, 'dtype': dtype, 'isa': isa})
+                    list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'los': 'firstpoint', 'edges': edges, 'dtype': dtype, 'isa': isa})
+                    list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'los': 'endpoint', 'edges': edges, 'dtype': dtype, 'isa': isa})
                     if itemsize > 4:
+                        list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'los': 'endpoint', 'twopoint_weights': twopoint_weights2, 'dtype': dtype, 'isa': isa})
                         list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'los': 'endpoint', 'twopoint_weights': twopoint_weights, 'dtype': dtype, 'isa': isa})
 
                 # mpi

@@ -251,6 +251,9 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                 self.sep = result[key_sep]
             self.sep.shape = self.wcounts.shape = self.ncounts.shape = self.shape
 
+        self.wcounts = self.wcounts.astype('f8')
+        self.ncounts = self.ncounts.astype('i8')
+
         if self.with_mpi:
             wcounts = self.wcounts
             self.wcounts = self.mpicomm.allreduce(self.wcounts)
@@ -269,7 +272,6 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                     self.sep.flat[index_zero] *= self.wcounts.flat[index_zero] / (self.wcounts.flat[index_zero] - autocounts)
             self.wcounts.flat[index_zero] -= autocounts
 
-        self.ncounts = self.ncounts.astype('i8')
         self.wcounts[self.ncounts == 0] = 0.  # as above may create uncertainty
         if self.compute_sepavg:
             self.sep[self.ncounts == 0] = np.nan
