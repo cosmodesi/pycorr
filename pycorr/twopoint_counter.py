@@ -712,8 +712,8 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         if not self.weights1:
 
             if self.autocorr:
-                return self.size1 * (self.size1 - 1)
-            return self.size1 * self.size2
+                return 1. * self.size1 * (self.size1 - 1.)
+            return 1. * self.size1 * self.size2
 
         if self.n_bitwise_weights:
 
@@ -1134,6 +1134,9 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         # For backward-compatibility; to be removed soon!
         if hasattr(self, 'is_reversable'):
             self.is_reversible = self.is_reversable
+        # wnorm and wcounts were allowed to be int at some point...
+        self.wnorm = np.asarray(self.wnorm, dtype='f8')
+        self.wcounts = np.asarray(self.wcounts, dtype='f8')
         if self.mode == 'rppi' and self.is_reversible and np.all(self.edges[1] >= 0.):
             import warnings
             warnings.warn('Loaded pair count is assumed to have been produced with < 20220909 version; if so please save it again to disk to remove this warning;'
