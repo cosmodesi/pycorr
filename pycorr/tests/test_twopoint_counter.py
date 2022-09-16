@@ -556,6 +556,11 @@ def test_twopoint_counter(mode='s'):
                 assert np.allclose(test2.sep, sep, equal_nan=True)
                 assert np.allclose(test2.wnorm, norm_ref, **tol)
                 assert np.allclose(test2.size1, test.size1) and np.allclose(test2.size2, test.size2)
+                if twopoint_weights is None:
+                    assert test2.cos_twopoint_weights is None
+                else:
+                    assert np.allclose(test2.cos_twopoint_weights.sep, test.cos_twopoint_weights.sep, equal_nan=True)
+                    assert np.allclose(test2.cos_twopoint_weights.weight, test.cos_twopoint_weights.weight, equal_nan=True)
                 test3 = test2.copy()
                 test3.rebin((2, 3) if len(edges) == 2 else (2,))
                 assert np.allclose(np.sum(test3.wcounts), np.sum(wcounts_ref), **tol)

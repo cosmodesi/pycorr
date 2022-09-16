@@ -2,11 +2,15 @@
 
 import os
 import time
+from collections import namedtuple
 
 import numpy as np
 
 from .utils import BaseClass, get_mpi, _make_array, _make_array_like, _nan_to_zero
 from . import utils
+
+
+TwoPointWeight = namedtuple('TwoPointWeight', ['sep', 'weight'])
 
 
 class TwoPointCounterError(Exception):
@@ -621,8 +625,6 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         if twopoint_weights is not None:
             if self.periodic:
                 raise TwoPointCounterError('Cannot use angular weights in case of periodic boundary conditions (boxsize)')
-            from collections import namedtuple
-            TwoPointWeight = namedtuple('TwoPointWeight', ['sep', 'weight'])
             try:
                 sep = twopoint_weights.sep
                 weight = twopoint_weights.weight
@@ -1124,13 +1126,17 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
     def __getstate__(self):
         state = {}
         for name in ['name', 'autocorr', 'is_reversible', 'seps', 'ncounts', 'wcounts', 'wnorm', 'size1', 'size2', 'edges', 'mode', 'bin_type',
-                     'boxsize', 'los_type', 'compute_sepsavg', 'weight_attrs', 'dtype', 'attrs']:
+                     'boxsize', 'los_type', 'compute_sepsavg', 'weight_attrs', 'cos_twopoint_weights', 'dtype', 'attrs']:
             if hasattr(self, name):
                 state[name] = getattr(self, name)
+                if name == 'cos_twopoint_weights' and state[name] is not None:
+                    state[name] = tuple(state[name])
         return state
 
     def __setstate__(self, state):
         super(BaseTwoPointCounter, self).__setstate__(state=state)
+        if getattr(self, 'cos_twopoint_weights', None) is not None:
+            self.cos_twopoint_weights = TwoPointWeight(*self.cos_twopoint_weights)
         # For backward-compatibility; to be removed soon!
         if hasattr(self, 'is_reversable'):
             self.is_reversible = self.is_reversable
