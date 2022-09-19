@@ -470,7 +470,7 @@ def test_twopoint_counter(mode='s'):
                 assert test.is_reversible == autocorr or (los not in ['firstpoint', 'endpoint'])
             if test.is_reversible:
                 test_reversed = run(reverse=True, single_weight=len(data1) == len(data2) == 4)
-                ref_reversed = test.reversed()
+                ref_reversed = test.reverse()
                 if itemsize <= 4:
                     assert np.isclose(test_reversed.wcounts, ref_reversed.wcounts, **tol).sum() > 0.95 * ref_reversed.wcounts.size
                     for isep in range(test_reversed.ndim):
@@ -582,6 +582,15 @@ def test_twopoint_counter(mode='s'):
 
                 check_seps(test2)
                 check_seps(test3)
+
+                test2 = test.normalize(wnorm=1.)
+                assert np.allclose(test2.wnorm, 1.)
+
+                if mode in ['smu', 'rppi'] and len(test.edges[1]) % 2 == 1:
+                    test2 = test.wrap()
+                    assert np.all(test2.edges[1] >= 0.)
+                    assert np.all(test2.seps[1][~np.isnan(test2.seps[1])] >= 0.)
+                    assert np.allclose(test2.wcounts.sum(axis=1), test.wcounts.sum(axis=1))
 
             if mpicomm is not None:
 

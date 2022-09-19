@@ -219,20 +219,6 @@ def test_estimator(mode='s'):
             estimator_jackknife = JackknifeTwoPointEstimator.concatenate(*[run_jackknife(samples=samples) for samples in np.array_split(np.unique(data1[-1]), nsplits)])
             assert_allclose_estimators(estimator_jackknife, estimator_nojackknife)
 
-            for estimator in [estimator_nojackknife, estimator_jackknife]:
-                estimator_renormalized = estimator.normalize(1.)
-                for name in estimator_renormalized.count_names:
-                    assert np.allclose(getattr(estimator_renormalized, name).wnorm, 1.)
-                assert_allclose_estimators(estimator_renormalized, estimator_nojackknife)
-
-                estimator_renormalized = estimator.normalize()
-                for name in estimator_renormalized.count_names:
-                    assert np.allclose(getattr(estimator_renormalized, name).wnorm, estimator_nojackknife.XX.wnorm)
-                assert_allclose_estimators(estimator_renormalized, estimator_nojackknife)
-
-                estimator_renormalized2 = estimator.normalize() + estimator.normalize()
-                assert_allclose_estimators(estimator_renormalized2, estimator)
-
             ii = data1[-1][0]
             estimator_nojackknife_ii = run_nojackknife(ii=ii)
             estimator_jackknife_ii = estimator_jackknife.realization(ii, correction=None)
@@ -271,8 +257,8 @@ def test_estimator(mode='s'):
                 D1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:npos], positions2=tmp_randoms1[:npos] if autocorr else tmp_randoms2[:npos],
                                        weights1=data1[npos:-1], weights2=tmp_randoms1[npos:-1] if autocorr else tmp_randoms2[npos:-1], twopoint_weights=tmp_twopoint_weights, **options_counts)
                 assert_allclose(D1R2, estimator_jackknife.D1S2)
-                assert estimator_jackknife.with_reversed == ((not autocorr or los in ['firstpoint', 'endpoint']) and estimator in ['landyszalay'])
-                if estimator_jackknife.with_reversed:
+                #assert estimator_jackknife.with_reversed == ((not autocorr or los in ['firstpoint', 'endpoint']) and estimator in ['landyszalay'])
+                if (not autocorr or los in ['firstpoint', 'endpoint']) and estimator in ['landyszalay']:
                     R1D2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=tmp_randoms1[:npos], positions2=data1[:npos] if autocorr else data2[:npos],
                                            weights1=tmp_randoms1[npos:-1], weights2=data1[npos:-1] if autocorr else data2[npos:-1], twopoint_weights=tmp_twopoint_weights if autocorr else None, **options_counts)
                     assert_allclose(R1D2, estimator_jackknife.S1D2)
@@ -287,6 +273,25 @@ def test_estimator(mode='s'):
                                        size1=estimator_jackknife.D1D2.size1, size2=None if estimator_jackknife.D1D2.autocorr else estimator_jackknife.D1D2.size2, los=options_counts['los'])
                 assert_allclose(R1R2, estimator_jackknife.R1R2)
 
+            for estimator in [estimator_nojackknife, estimator_jackknife]:
+                estimator_renormalized = estimator.normalize(1.)
+                for name in estimator_renormalized.count_names:
+                    assert np.allclose(getattr(estimator_renormalized, name).wnorm, 1.)
+                assert_allclose_estimators(estimator_renormalized, estimator_nojackknife)
+
+                estimator_renormalized = estimator.normalize()
+                for name in estimator_renormalized.count_names:
+                    assert np.allclose(getattr(estimator_renormalized, name).wnorm, estimator_nojackknife.XX.wnorm)
+                assert_allclose_estimators(estimator_renormalized, estimator_nojackknife)
+
+                estimator_renormalized2 = estimator.normalize() + estimator.normalize()
+                assert_allclose_estimators(estimator_renormalized2, estimator)
+
+                if mode in ['smu', 'rppi'] and len(estimator.edges[1]) % 2 == 1:
+                    estimator_wrapped = estimator.wrap()
+                    assert np.all(estimator_wrapped.edges[1] >= 0.)
+                    assert np.all(estimator_wrapped.seps[1][~np.isnan(estimator_wrapped.seps[1])] >= 0.)
+                    assert np.allclose(np.nansum(estimator_wrapped.corr, axis=1), np.nansum(estimator_wrapped.corr, axis=1), equal_nan=True)
 
             if estimator_jackknife.mode == 'smu':
                 sep, xiell = project_to_poles(estimator_nojackknife, ells=(0, 2, 4))
@@ -456,7 +461,7 @@ def test_estimator(mode='s'):
                     test2 = TwoPointCorrelationFunction.load(fn)
                     assert test2.__class__ is test.__class__
                     assert test2.with_shifted is test.with_shifted
-                    assert test2.with_reversed is test.with_reversed
+                    #assert test2.with_reversed is test.with_reversed
                     test3 = test2.copy()
                     test3.rebin((2, 5) if len(edges) == 2 else (2,))
                     assert test3.shape[0] == test2.shape[0] // 2

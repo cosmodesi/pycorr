@@ -1019,17 +1019,47 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                 with np.errstate(divide='ignore', invalid='ignore'):
                     self.seps[idim] = utils.rebin(_nan_to_zero(sep) * normalized_wcounts, new_shape, statistic=np.sum) / rebinned_normalized_wcounts
 
-    def reversed(self):
+    def reverse(self):
         """Return counts for reversed positions1/weights1 and positions2/weights2."""
         if not self.is_reversible:
             raise TwoPointCounterError('These counts are not reversible')
         new = self.deepcopy()
         new.size1, new.size2 = new.size2, new.size1
         if new.mode in ['smu', 'rppi'] and not self.autocorr:
-            for name in ['wcounts', 'ncounts', 'sep']:
+            for name in ['wcounts', 'ncounts', 'wnorm', 'sep']:
                 if hasattr(new, name):
-                    setattr(new, name, getattr(new, name)[:, ::-1])
+                    tmp = getattr(self, name)
+                    if np.ndim(tmp):
+                        setattr(new, name, tmp[:, ::-1])
         return new
+
+    def wrap(self):
+        r"""Return new 'smu' or 'rppi' two-point counts with 2nd coordinate wrapped to positive values, :math:`\mu > 0` or :math:`\pi > 0`."""
+        if self.mode in ['smu', 'rppi']:
+            new = self.deepcopy()
+            if self.shape[1] % 2:
+                raise TwoPointCounterError('These counts cannot be wrapped as 2nd dimension is {} % 2 = 1'.format(self.shape[1]))
+            mid = self.shape[1] // 2
+            sl_neg, sl_pos = slice(mid - 1, None, -1), slice(mid, None, 1)
+            if not np.allclose(new.edges[1][mid:], - new.edges[1][mid::-1]):
+                raise TwoPointCounterError('These counts cannot be wrapped as 2nd dimension edges are not symmetric; {} != {}'.format(new.edges[1][mid:], - new.edges[1][mid::-1]))
+            new.edges[1] = new.edges[1][mid:]
+            for name in ['ncounts', 'wcounts']:
+                if hasattr(new, name):
+                    tmp = getattr(new, name)
+                    tmp = tmp[..., sl_neg] + tmp[..., sl_pos]
+                    setattr(new, name, tmp)
+            if np.ndim(self.wnorm):
+                new.wnorm = self.wnorm[..., sl_pos]
+            new._set_default_seps()
+            for idim, compute_sepavg in enumerate(new.compute_sepsavg):
+                if compute_sepavg:
+                    sep = _nan_to_zero(self.seps[idim])
+                    with np.errstate(divide='ignore', invalid='ignore'):
+                        new.seps[idim] = (sep[..., sl_neg] * self.wcounts[..., sl_neg] + sep[..., sl_pos] * self.wcounts[..., sl_pos]) / new.wcounts
+            return new
+        else:
+            raise TwoPointCounterError('These counts be wrapped')
 
     @classmethod
     def concatenate_x(cls, *others):
@@ -1137,6 +1167,10 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         super(BaseTwoPointCounter, self).__setstate__(state=state)
         if getattr(self, 'cos_twopoint_weights', None) is not None:
             self.cos_twopoint_weights = TwoPointWeight(*self.cos_twopoint_weights)
+
+    @classmethod
+    def load(cls, filename):
+        self = super(BaseTwoPointCounter, cls).load(filename)
         # For backward-compatibility; to be removed soon!
         if hasattr(self, 'is_reversable'):
             self.is_reversible = self.is_reversable
@@ -1156,6 +1190,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                     if np.ndim(tmp):
                         tmp = np.concatenate([tmp[..., ::-1], tmp], axis=-1)
                         setattr(self, name, tmp)
+        return self
 
     def save(self, filename):
         """Save two-point counts to ``filename``."""

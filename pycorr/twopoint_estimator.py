@@ -178,19 +178,21 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
             S1R2 two-point counts. Defaults to ``R1R2``.
         """
         self.with_shifted = S1S2 is not None or D1S2 is not None or S1D2 is not None or S1R2 is not None
-        self.with_reversed = R1D2 is not None or S1D2 is not None
-        for name in self.count_names:
+        with_reversed = R1D2 is not None or S1D2 is not None
+        for name in self.requires(with_reversed=with_reversed, with_shifted=self.with_shifted, join=''):
             counts = locals()[name]
             if locals()[name] is None:
                 raise TwoPointEstimatorError('Counts {} must be provided'.format(name))
             setattr(self, name, counts)
+        if not with_reversed:
+            for name in self.requires(with_reversed=True, with_shifted=self.with_shifted, join=''):
+                if not hasattr(self, name) and name in ['R1D2', 'S1D2']:
+                    rname = ''.join([{'1': '2', '2': '1'}.get(nn, nn) for nn in name])
+                    counts = getattr(self, rname[-2:] + rname[:2])
+                    setattr(self, name, counts.reverse())
         self.run()
 
     def __getattr__(self, name):
-        if name in ['R1D2', 'S1D2'] and not self.with_reversed:
-            name = ''.join([{'1': '2', '2': '1'}.get(nn, nn) for nn in name])
-            counts = getattr(self, name[-2:] + name[:2])
-            return counts.reversed()
         if name in ['S1S2', 'D1S2', 'S1D2', 'S1R2'] and not self.with_shifted:
             return getattr(self, name.replace('S', 'R'))
         raise AttributeError('Attribute {} does not exist'.format(name))
@@ -262,7 +264,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
     @property
     def count_names(self):
         """Return list of counts used in estimator."""
-        return self.requires(with_reversed=self.with_reversed, with_shifted=self.with_shifted, join='')
+        return self.requires(with_reversed=True, with_shifted=self.with_shifted, join='')
 
     @property
     def XX(self):
@@ -313,6 +315,14 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         new = others[0].copy()
         for name in new.count_names:
             setattr(new, name, getattr(new, name).concatenate_x(*[getattr(other, name) for other in others]))
+        new.run()
+        return new
+
+    def wrap(self):
+        r"""Return new 'smu' or 'rppi' two-point estimators with 2nd coordinate wrapped to positive values, :math:`\mu > 0` or :math:`\pi > 0`."""
+        new = self.copy()
+        for name in new.count_names:
+            setattr(new, name, getattr(new, name).wrap())
         new.run()
         return new
 

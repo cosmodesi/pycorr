@@ -589,7 +589,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
                 if is_root:
                     self.cross12[ii] = tmp
                 if self.autocorr and tmp.is_reversible:
-                    tmp = tmp.reversed()
+                    tmp = tmp.reverse()
                     if is_root:
                         self.cross21[ii] = tmp
                 else:
@@ -831,13 +831,20 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
             setattr(new, name, {ii: r.__copy__() for ii, r in getattr(self, name).items()})
         return new
 
-    def reversed(self):
-        new = super(JackknifeTwoPointCounter, self).reversed()  # a deepcopy with swapped size1, size2, and reversed counts
+    def reverse(self):
+        new = super(JackknifeTwoPointCounter, self).reverse()  # a deepcopy with swapped size1, size2, and reversed counts
         if not self.autocorr:
             for name in self._result_names:
-                setattr(new, name, {k: r.reversed() for k, r in getattr(self, name).items()})
+                setattr(new, name, {k: r.reverse() for k, r in getattr(self, name).items()})
             new.cross12, new.cross21 = new.cross21, new.cross12
             # new._set_sum()
+        return new
+
+    def wrap(self):
+        new = super(JackknifeTwoPointCounter, self).wrap()  # a deepcopy with counts
+        for name in self._result_names:
+            setattr(new, name, {k: r.wrap() for k, r in getattr(self, name).items()})
+        # new._set_sum()
         return new
 
     def __getstate__(self):
