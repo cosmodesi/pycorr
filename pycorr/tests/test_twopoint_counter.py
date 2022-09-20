@@ -286,10 +286,7 @@ def test_twopoint_counter(mode='s'):
             print(mode, options)
             options = options.copy()
             nthreads = options.pop('nthreads', None)
-            if 'edges' in options:
-                edges = options.pop('edges')
-            else:
-                edges = ref_edges
+            edges = options.pop('edges', ref_edges)
             weights_one = options.pop('weights_one', [])
             n_individual_weights = options.pop('n_individual_weights', 0)
             n_bitwise_weights = options.pop('n_bitwise_weights', 0)
@@ -916,12 +913,12 @@ def test_rebin():
     assert np.allclose(np.sum(test.wcounts), np.sum(ref.wcounts))
 
     mode = 'smu'
-    edges = (np.linspace(0, 10, 11), np.linspace(0, 1, 6))
+    edges = (np.linspace(0, 10, 11), np.linspace(-1, 1, 6))
     test = AnalyticTwoPointCounter(mode, edges, boxsize)
     ref = test.copy()
     test = test[::2, ::5]
     assert test.sep.shape == test.wcounts.shape == (5, 1)
-    refedges = [np.linspace(0., 10, 6), np.linspace(0, 1, 2)]
+    refedges = [np.linspace(0., 10, 6), np.linspace(-1, 1, 2)]
     for i in range(2):
         assert np.allclose(test.edges[i], refedges[i])
     assert np.allclose(np.sum(test.wcounts), np.sum(ref.wcounts))

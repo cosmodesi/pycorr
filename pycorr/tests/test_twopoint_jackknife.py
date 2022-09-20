@@ -174,10 +174,7 @@ def test_twopoint_counter(mode='s'):
         for options in list_options:
             print(mode, options)
             options = options.copy()
-            if 'edges' in options:
-                edges = options.pop('edges')
-            else:
-                edges = ref_edges
+            edges = options.pop('edges', ref_edges)
             twopoint_weights = options.get('twopoint_weights', None)
             n_individual_weights = options.pop('n_individual_weights', 0)
             n_bitwise_weights = options.pop('n_bitwise_weights', 0)

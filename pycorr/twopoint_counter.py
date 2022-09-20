@@ -493,6 +493,20 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         else:
             if not self.ndim == 1:
                 raise TwoPointCounterError('Only one edge array should be provided to two-point counter in mode {}'.format(self.mode))
+        if self.mode in ['smu', 'rppi']:
+            edges = self.edges[1]
+            if np.allclose(edges[0], 0.):
+                axis = {'smu': 'mu', 'rppi': 'pi'}[self.mode]
+                import warnings
+                nedges = 2 * len(edges) - 1
+                warnings.warn('{} edges starting at 0 is deprecated, please use symmetric binning; I am assuming np.linspace({:.4f}, {:.4f}, {:d})!'.format(axis, -edges[-1], edges[-1], nedges))
+                self.edges[1] = np.linspace(-edges[-1], edges[-1], nedges)
+        if np.any(self.edges[0] < 0.):
+            raise TwoPointCounterError('First edges must be >= 0')
+        if not all(np.all(np.diff(edges) > 0.) for edges in self.edges):
+            raise TwoPointCounterError('Edges must be strictly increasing')
+        if self.mode == 'smu' and not np.all((self.edges[1] >= -1.01) & (self.edges[1] <= 1.01)):
+            raise TwoPointCounterError('In mode smu, mu-edges must be in [-1, 1]')
         self._set_bin_type(bin_type)
 
     def _set_bin_type(self, bin_type):

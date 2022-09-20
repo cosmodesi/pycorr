@@ -32,28 +32,14 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
         #     if self.los_type not in ['x', 'y', 'z', 'midpoint']:
         #         raise TwoPointCounterError('Corrfunc only supports x / y / z / midpoint line-of-sight for mode {}'.format(self.mode))
 
-        if self.mode == 'smu':
+        if self.mode in ['smu', 'rppi']:
+            axis = {'smu': 'mu', 'rppi': 'pi'}[self.mode]
             edges = self.edges[1]
             if edges[0] != - edges[-1]:
-                raise TwoPointCounterError('Corrfunc only supports symmetric binning: mumin = -mumax')
+                raise TwoPointCounterError('Corrfunc only supports symmetric binning: {0}min = -{0}max'.format(axis))
             lin = np.linspace(-edges[-1], edges[-1], len(edges))
             if not np.allclose(edges, lin):
-                raise TwoPointCounterError('Corrfunc only supports linear mu binning')
-
-        if self.mode == 'rppi':
-            edges = self.edges[1]
-            if edges[0] != - edges[-1]:
-                if np.allclose(edges[0], 0.):
-                    import warnings
-                    nedges = 2 * len(edges) - 1
-                    warnings.warn('pi edges starting at 0 is deprecated, please use symmetric binning; I am assuming np.linspace({:.4f}, {:.4f}, {:d})!'.format(-edges[-1], edges[-1], nedges))
-                    self.edges[1] = edges = np.linspace(-edges[-1], edges[-1], nedges)
-                    self._set_zeros()
-                else:
-                    raise TwoPointCounterError('Corrfunc only supports symmetric binning: pimin = -pimax')
-            lin = np.linspace(edges[0], edges[-1], len(edges))
-            if not np.allclose(edges, lin):
-                raise TwoPointCounterError('Corrfunc only supports linear pi binning')
+                raise TwoPointCounterError('Corrfunc only supports linear {} binning'.format(axis))
 
         autocorr = self.autocorr and not self.with_mpi
 

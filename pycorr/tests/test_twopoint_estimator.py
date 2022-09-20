@@ -66,6 +66,10 @@ def test_estimator(mode='s'):
             list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'weights_one': ['D1', 'R2']})
             if mode not in ['theta', 'rp']:
                 list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': 'natural', 'boxsize': cboxsize, 'with_randoms': False})
+            if mode == 'rppi':
+                list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': 'natural', 'boxsize': cboxsize, 'with_randoms': False, 'edges': (np.linspace(0, 100, 21), np.linspace(0, 20, 21))})
+            if mode == 'smu':
+                list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': 'natural', 'boxsize': cboxsize, 'with_randoms': False, 'edges': (np.linspace(0, 100, 21), np.linspace(0, 1, 21))})
             for estimator in ['natural', 'landyszalay', 'davispeebles', 'weight', 'residual'][3:4]:
                 list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator})
                 if estimator not in ['weight']:
@@ -91,18 +95,19 @@ def test_estimator(mode='s'):
         list_options.append({'mpicomm': mpi.COMM_WORLD})
 
     # list_options.append({'weight_type':'inverse_bitwise','n_bitwise_weights':2})
-    edges = np.linspace(1e-9, 100, 11)
+    ref_edges = np.linspace(0, 100, 11)
     if mode == 'smu':
-        edges = (edges, np.linspace(-1, 1, 21))
+        ref_edges = (ref_edges, np.linspace(-1, 1, 21))
     elif mode == 'rppi':
-        edges = (edges, np.linspace(-20, 20, 41))
+        ref_edges = (ref_edges, np.linspace(-20, 20, 41))
     elif mode == 'theta':
-        edges = np.linspace(1e-5, 10, 11)  # below 1e-5, self pairs are counted by Corrfunc
+        ref_edges = np.linspace(1e-5, 10, 11)  # below 1e-5, self pairs are counted by Corrfunc
 
     for engine in list_engine:
         for options in list_options:
             print(mode, options)
             options = options.copy()
+            edges = options.pop('edges', ref_edges)
             weights_one = options.pop('weights_one', [])
             n_individual_weights = options.get('n_individual_weights', 1)
             n_bitwise_weights = options.get('n_bitwise_weights', 0)
@@ -403,6 +408,8 @@ def test_estimator(mode='s'):
                         assert np.allclose(tmp[0], test.sepavg(method='mid'))
                         tmp2 = test(return_sep=True, wedges=(0.1, 0.3, 0.8))
                         assert np.allclose(tmp[1:], np.concatenate([tmp2[0][None, :]] + tmp2[1:], axis=0), equal_nan=True)
+                        test.corr.flat[0] = zero
+                        assert np.allclose(test[:, :10].corr, test.corr[:, :10], equal_nan=True)
                     elif test.mode == 'rppi':
                         # rppi
                         arrays = test(sep, [0., 0.4]), test(sep[::-1], [0.4, 0.])
@@ -430,6 +437,8 @@ def test_estimator(mode='s'):
                         tmp = np.loadtxt(fn_txt, unpack=True)
                         assert np.allclose(tmp[0], test.sepavg(method='mid'))
                         assert np.allclose(tmp[1:], test(pimax=40., return_sep=True), equal_nan=True)
+                        test.corr.flat[0] = zero
+                        assert np.allclose(test[:, :10].corr, test.corr[:, :10], equal_nan=True)
                     else:
                         with pytest.raises(TwoPointEstimatorError):
                             test(5., ell=2)
@@ -443,7 +452,7 @@ def test_estimator(mode='s'):
                         tmp = np.loadtxt(fn_txt, unpack=True)
                         assert np.allclose(tmp[0], test.sepavg(method='mid'))
                         assert np.allclose(tmp[1:], test(return_sep=True), equal_nan=True)
-                    test.corr.flat[0] = zero
+                        test.corr.flat[0] = zero
                     test.save(fn)
                     if test.mode == 'smu':
                         test.plot(mode='wedges')
@@ -467,8 +476,11 @@ def test_estimator(mode='s'):
                     assert test3.shape[0] == test2.shape[0] // 2
                     test2 = test2[::2, ::5] if len(edges) == 2 else test2[::2]
                     assert_allclose_estimators(test2, test3)
-                    test3.select((0, 50.))
-                    assert np.all((test3.sepavg(axis=0) <= 50.) | np.isnan(test3.sepavg(axis=0)))
+                    test2 = test3.copy()
+                    sepmax = test2.edges[0][-1] / 2
+                    test3.select((0, sepmax))
+                    assert np.all(test3.sepavg(method='mid', axis=0) <= sepmax)
+                    assert np.all((test3.sepavg(axis=0) <= test2.edges[0][test2.edges[0] >= sepmax][0]) | np.isnan(test3.sepavg(axis=0)))
                     test2 = test + test
                     assert np.allclose(test2.corr, test.corr, equal_nan=True)
                     test2 = test.concatenate_x(test[:test.shape[0] // 2], test[test.shape[0] // 2:])
