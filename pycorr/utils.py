@@ -158,13 +158,13 @@ class BaseClass(object, metaclass=BaseMetaClass):
     def copy(self):
         return self.__copy__()
 
-    def __setstate__(self, state):
+    def __setstate__(self, state, load=False):
         self.__dict__.update(state)
 
     @classmethod
-    def from_state(cls, state):
+    def from_state(cls, state, load=False):
         new = cls.__new__(cls)
-        new.__setstate__(state)
+        new.__setstate__(state, load=load)
         return new
 
     def save(self, filename):
@@ -176,7 +176,7 @@ class BaseClass(object, metaclass=BaseMetaClass):
     def load(cls, filename):
         cls.log_info('Loading {}.'.format(filename))
         state = np.load(filename, allow_pickle=True)[()]
-        new = cls.from_state(state)
+        new = cls.from_state(state, load=True)
         return new
 
 

@@ -853,10 +853,10 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
             state[name] = {ii: r.__getstate__() for ii, r in getattr(self, name).items()}
         return state
 
-    def __setstate__(self, state):
-        super(JackknifeTwoPointCounter, self).__setstate__(state=state)
+    def __setstate__(self, state, load=False):
+        super(JackknifeTwoPointCounter, self).__setstate__(state=state, load=load)
         for name in self._result_names:
-            setattr(self, name, {ii: TwoPointCounter.from_state(s) for ii, s in getattr(self, name).items()})
+            setattr(self, name, {ii: TwoPointCounter.from_state(s, load=load) for ii, s in getattr(self, name).items()})
 
 
 class JackknifeTwoPointEstimator(BaseTwoPointEstimator):
@@ -932,15 +932,15 @@ class JackknifeTwoPointEstimator(BaseTwoPointEstimator):
         new = self.concatenate(self, other)
         self.__dict__.update(new.__dict__)
 
-    def __setstate__(self, state):
+    def __setstate__(self, state, load=False):
         kwargs = {}
         counts = set(self.requires(with_reversed=True, with_shifted=True, join='')) | set(self.requires(with_reversed=True, with_shifted=False, join=''))  # most general list
         for name in counts:
             if name in state:
                 if 'jackknife' in state[name].get('name', ''):
-                    kwargs[name] = JackknifeTwoPointCounter.from_state(state[name])
+                    kwargs[name] = JackknifeTwoPointCounter.from_state(state[name], load=load)
                 else:
-                    kwargs[name] = TwoPointCounter.from_state(state[name])
+                    kwargs[name] = TwoPointCounter.from_state(state[name], load=load)
         self.__init__(**kwargs)
 
 

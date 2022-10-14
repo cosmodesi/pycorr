@@ -85,12 +85,12 @@ class TwoPointCounter(BaseClass, metaclass=MetaTwoPointCounter):
     engine : BaseTwoPointCounter
     """
     @classmethod
-    def from_state(cls, state):
+    def from_state(cls, state, load=False):
         """Return new two-point counter based on state dictionary."""
         state = state.copy()
         cls = get_twopoint_counter(state.pop('name'))
         new = cls.__new__(cls)
-        new.__setstate__(state)
+        new.__setstate__(state, load=load)
         return new
 
 
@@ -1170,28 +1170,29 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                     state[name] = tuple(state[name])
         return state
 
-    def __setstate__(self, state):
-        super(BaseTwoPointCounter, self).__setstate__(state=state)
+    def __setstate__(self, state, load=False):
+        super(BaseTwoPointCounter, self).__setstate__(state=state, load=load)
         if getattr(self, 'cos_twopoint_weights', None) is not None:
             self.cos_twopoint_weights = TwoPointWeight(*self.cos_twopoint_weights)
-        if hasattr(self, 'is_reversable'):
-            self.is_reversible = self.is_reversable
-        # wnorm and wcounts were allowed to be int at some point...
-        self.wnorm = np.asarray(self.wnorm, dtype='f8')
-        self.wcounts = np.asarray(self.wcounts, dtype='f8')
-        if self.mode == 'rppi' and self.is_reversible and np.all(self.edges[1] >= 0.):
-            import warnings
-            warnings.warn('Loaded pair count is assumed to have been produced with < 20220909 version; if so please save it again to disk to remove this warning;'
-                           'else these must be sliced pair counts: in this case, sorry I removed the slicing, please do counts[:, counts.shape[1]:]!')
-            self.edges[1] = np.concatenate([-self.edges[1][:0:-1], self.edges[1]], axis=0)
-            self.seps[0] = np.concatenate([self.seps[0][...,::-1], self.seps[0]], axis=-1)
-            self.seps[1] = np.concatenate([-self.seps[1][...,::-1], self.seps[1]], axis=-1)
-            for name in ['ncounts', 'wcounts', 'wnorm']:
-                if hasattr(self, name):
-                    tmp = getattr(self, name)
-                    if np.ndim(tmp):
-                        tmp = np.concatenate([tmp[..., ::-1], tmp], axis=-1)
-                        setattr(self, name, tmp)
+        if load:
+            if hasattr(self, 'is_reversable'):
+                self.is_reversible = self.is_reversable
+            # wnorm and wcounts were allowed to be int at some point...
+            self.wnorm = np.asarray(self.wnorm, dtype='f8')
+            self.wcounts = np.asarray(self.wcounts, dtype='f8')
+            if self.mode == 'rppi' and self.is_reversible and np.all(self.edges[1] >= 0.):
+                import warnings
+                warnings.warn('Loaded pair count is assumed to have been produced with < 20220909 version; if so please save it again to disk to remove this warning;'
+                               'else these must be sliced pair counts: in this case, sorry I removed the slicing, please do counts[:, counts.shape[1]:]!')
+                self.edges[1] = np.concatenate([-self.edges[1][:0:-1], self.edges[1]], axis=0)
+                self.seps[0] = np.concatenate([self.seps[0][...,::-1], self.seps[0]], axis=-1)
+                self.seps[1] = np.concatenate([-self.seps[1][...,::-1], self.seps[1]], axis=-1)
+                for name in ['ncounts', 'wcounts', 'wnorm']:
+                    if hasattr(self, name):
+                        tmp = getattr(self, name)
+                        if np.ndim(tmp):
+                            tmp = np.concatenate([tmp[..., ::-1], tmp], axis=-1)
+                            setattr(self, name, tmp)
         return self
 
     def save(self, filename):

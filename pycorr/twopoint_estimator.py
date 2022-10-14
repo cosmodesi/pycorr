@@ -111,11 +111,11 @@ class TwoPointEstimator(BaseClass):
         Estimator instance.
     """
     @staticmethod
-    def from_state(state):
+    def from_state(state, load=False):
         """Return new estimator based on state dictionary."""
         cls = get_twopoint_estimator(state.pop('name'))
         new = cls.__new__(cls)
-        new.__setstate__(state)
+        new.__setstate__(state, load=load)
         return new
 
 
@@ -396,12 +396,12 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
             state[name] = getattr(self, name).__getstate__()
         return state
 
-    def __setstate__(self, state):
+    def __setstate__(self, state, load=False):
         kwargs = {}
         counts = set(self.requires(with_reversed=True, with_shifted=True, join='')) | set(self.requires(with_reversed=True, with_shifted=False, join=''))  # most general list
         for name in counts:
             if name in state:
-                kwargs[name] = TwoPointCounter.from_state(state[name])
+                kwargs[name] = TwoPointCounter.from_state(state[name], load=load)
         self.__init__(**kwargs)
 
     def save(self, filename):
