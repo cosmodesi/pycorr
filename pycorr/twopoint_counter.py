@@ -974,16 +974,9 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             raise IndexError('Too many indices: statistics is {:d}-dimensional, but {:d} were indexed'.format(self.ndim, len(slices)))
         slices, eslices, factor = [], [], []
         for iaxis, sl in enumerate(inslices):
-            start, stop, step = sl.start, sl.stop, sl.step
-            if start is None: start = 0
-            if step is None: step = 1
+            start, stop, step = sl.indices(self.wcounts.shape[iaxis])
             if step < 0:
                 raise IndexError('Positive slicing step only supported')
-            indices = np.arange(self.wcounts.shape[iaxis])[slice(start, stop, 1)]
-            if indices.size:
-                stop = indices[-1] + 1  # somewhat hacky, but correct!
-            else:
-                stop = 0
             slices.append(slice(start, stop, 1))
             eslices.append(slice(start, stop + 1, 1))
             factor.append(step)
@@ -1004,7 +997,6 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
     def rebin(self, factor=1):
         """
         Rebin two-point counts, by factor(s) ``factor``.
-        A tuple must be provided in case :attr:`ndim` is greater than 1.
         Input factors must divide :attr:`shape`.
 
         Warning
@@ -1014,10 +1006,11 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         """
         if np.ndim(factor) == 0:
             factor = (factor,)
-        if len(factor) != self.ndim:
-            raise TwoPointCounterError('Provide a rebinning factor for each dimension')
+        factor = list(factor) + [1] * (self.ndim - len(factor))
+        if len(factor) > self.ndim:
+            raise ValueError('Too many rebinning factors: statistics is {:d}-dimensional, but got {:d} factors'.format(self.ndim, len(factor)))
         if any(s % f for s, f in zip(self.shape, factor)):
-            raise TwoPointCounterError('Rebinning factor must divide shape {}'.format(self.shape))
+            raise ValueError('Rebinning factor must divide shape {}'.format(self.shape))
         new_shape = tuple(s // f for s, f in zip(self.shape, factor))
         normalized_wcounts = self.normalized_wcounts()
         rebinned_normalized_wcounts = utils.rebin(normalized_wcounts, new_shape, statistic=np.sum)
@@ -1181,11 +1174,6 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         super(BaseTwoPointCounter, self).__setstate__(state=state)
         if getattr(self, 'cos_twopoint_weights', None) is not None:
             self.cos_twopoint_weights = TwoPointWeight(*self.cos_twopoint_weights)
-
-    @classmethod
-    def load(cls, filename):
-        self = super(BaseTwoPointCounter, cls).load(filename)
-        # For backward-compatibility; to be removed soon!
         if hasattr(self, 'is_reversable'):
             self.is_reversible = self.is_reversable
         # wnorm and wcounts were allowed to be int at some point...

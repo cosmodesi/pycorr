@@ -516,9 +516,21 @@ def test_estimator(mode='s'):
                 assert_allclose_estimators(test_mpi, estimator_jackknife)
 
 
+def test_s():
+    boxsize = [1000.] * 3
+    edges = np.linspace(0., 50, 51)
+    positions = generate_catalogs(100000, boxsize=boxsize, n_individual_weights=0, n_bitwise_weights=0, seed=42)[0]
+    for i in range(100):
+        print(i)
+        result = TwoPointCorrelationFunction('s', edges, data_positions1=positions, engine='corrfunc', los='x', boxsize=boxsize, position_type='xyz', isa='fallback', nthreads=1)
+
+
+
 if __name__ == '__main__':
 
     setup_logging()
+
+    #test_s()
 
     test_multipoles()
     for mode in ['theta', 's', 'smu', 'rppi', 'rp']:
