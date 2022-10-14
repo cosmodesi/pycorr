@@ -748,12 +748,14 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
                 plot(sep, sep**2 * corr[ill], yerr=sep**2 * std[ill] if std is not None else None, label=r'$\ell = {:d}$'.format(ell))
             ax.set_xlabel(r'$s$ [$\mathrm{Mpc}/h$]')
             ax.set_ylabel(r'$s^{2} \xi_{\ell}(s)$ [$(\mathrm{Mpc}/h)^{2}$]')
+            ax.legend()
         elif mode == 'wedges':
             wedges = _format_wedges(kwargs.get('wedges', _default_wedges))[0]
             for iwedge, wedge in enumerate(wedges):
                 plot(sep, sep**2 * corr[iwedge], yerr=sep**2 * std[iwedge] if std is not None else None, label=r'${:.2f} < \mu < {:.2f}$'.format(*wedge))
             ax.set_xlabel(r'$s$ [$\mathrm{Mpc}/h$]')
             ax.set_ylabel(r'$s^{2} \xi(s, \mu)$ [$(\mathrm{Mpc}/h)^{2}$]')
+            ax.legend()
         elif mode in ['rp', 'wp']:
             plot(sep, sep * corr, yerr=sep * std if std is not None else None)
             ax.set_xscale('log')
@@ -769,7 +771,6 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
             ax.set_ylabel(r'$\theta w(\theta)$')
         else:
             raise ValueError('mode must be one of [poles, wedges, rp, s, theta]')
-        ax.legend()
         ax.grid(True)
         if not self.with_mpi or self.mpicomm.rank == 0:
             if fn is not None:
