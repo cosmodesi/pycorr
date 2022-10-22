@@ -12,8 +12,8 @@
 #
 import os
 import sys
-sys.path.insert(0,os.path.abspath('..'))
-sys.path.insert(0, os.path.abspath(os.path.join('..','pycorr')))
+sys.path.insert(0, os.path.abspath('..'))
+sys.path.insert(0, os.path.abspath(os.path.join('..', 'pycorr')))
 from _version import __version__
 
 # -- General configuration ------------------------------------------------

@@ -212,17 +212,17 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         or "brute_force_npy" (slower, using numpy only methods; both methods match within machine precision)
         loop over all pairs.
 
-        los : string, default='midpoint'
-            Line-of-sight to be used when ``mode`` is "smu", "rppi" or "rp"; one of:
+    los : string, default='midpoint'
+        Line-of-sight to be used when ``mode`` is "smu", "rppi" or "rp"; one of:
 
-                - "x", "y" or "z": Cartesian axis
-                - "midpoint": the mean position of the pair: :math:`\mathbf{\eta} = (\mathbf{r}_{1} + \mathbf{r}_{2})/2`
-                - "firstpoint": the first position of the pair: :math:`\mathbf{\eta} = \mathbf{r}_{1}`
-                - "endpoint": the second position of the pair: :math:`\mathbf{\eta} = \mathbf{r}_{2}`
+            - "x", "y" or "z": Cartesian axis
+            - "midpoint": the mean position of the pair: :math:`\mathbf{\eta} = (\mathbf{r}_{1} + \mathbf{r}_{2})/2`
+            - "firstpoint": the first position of the pair: :math:`\mathbf{\eta} = \mathbf{r}_{1}`
+            - "endpoint": the second position of the pair: :math:`\mathbf{\eta} = \mathbf{r}_{2}`
 
-            WARNING: "endpoint" is obtained by reversing "firstpoint" (which is the only line-of-sight implemented in the counter).
-            This means, if "s" or "rp" edges starts at 0, and the number of "mu" or "pi" bins is even,
-            zero separation pairs (due to duplicate objects) will be counted in ``counts[0, (counts.shape[1] - 1) // 2]`` instead of ``counts[0, counts.shape[1] // 2]``.
+        WARNING: "endpoint" is obtained by reversing "firstpoint" (which is the only line-of-sight implemented in the counter).
+        This means, if "s" or "rp" edges starts at 0, and the number of "mu" or "pi" bins is even,
+        zero separation pairs (due to duplicate objects) will be counted in ``counts[0, (counts.shape[1] - 1) // 2]`` instead of ``counts[0, counts.shape[1] // 2]``.
 
     boxsize : array, float, default=None
         For periodic wrapping, the side-length(s) of the periodic cube.
@@ -238,7 +238,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         Double precision is highly recommended in case ``mode`` is "theta",
         ``twopoint_weights`` is provided (due to cosine), or ``compute_sepsavg`` is ``True``.
 
-    nthreads : int
+    nthreads : int, default=None
         Number of OpenMP threads to use.
 
     mpicomm : MPI communicator, default=None
