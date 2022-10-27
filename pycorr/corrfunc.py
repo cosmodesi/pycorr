@@ -106,7 +106,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
         kwargs = {'weights1': weights1, 'weights2': weights2,
                   'bin_type': self.bin_type, 'weight_type': weight_type,
                   'pair_weights': pair_weights, 'sep_pair_weights': sep_pair_weights,
-                  'attrs_pair_weights': weight_attrs, 'verbose': False,
+                  'attrs_pair_weights': weight_attrs, 'verbose': self.attrs.get('verbose', False),
                   'isa': self.attrs.get('isa', 'fastest')}  # to be set to 'fastest' when bitwise weights included in all kernels
 
         positions1 = dpositions1
