@@ -611,8 +611,8 @@ def test_twopoint_counter(mode='s'):
                 assert np.allclose(test_mpi.wcounts[mask], test.wcounts[mask], **tol)
                 assert np.allclose(test_mpi.wnorm, test.wnorm, **tol)
                 assert np.allclose(run_normalization(mpicomm=mpicomm, pass_zero=mpicomm.rank > 0, mpiroot=0), test_mpi.wnorm, **tol)
-                data1 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data1]
-                data2 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data2]
+                data1 = [mpi.scatter(d, mpiroot=0, mpicomm=mpicomm) for d in data1]
+                data2 = [mpi.scatter(d, mpiroot=0, mpicomm=mpicomm) for d in data2]
                 test_mpi = run(mpicomm=mpicomm)
                 assert np.allclose(run_normalization(mpicomm=mpicomm), test_mpi.wnorm, **tol)
                 test_zero = run(mpicomm=mpicomm, pass_zero=True, mpiroot=None)

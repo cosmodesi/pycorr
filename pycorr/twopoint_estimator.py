@@ -312,6 +312,8 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         Concatenate input estimators along :attr:`sep` by concatenating their two-point counts;
         see :meth:`BaseTwoPointCounter.concatenate_x`.
         """
+        if len(others) == 1 and utils.is_sequence(others[0]):
+            others = others[0]
         new = others[0].copy()
         for name in new.count_names:
             setattr(new, name, getattr(new, name).concatenate_x(*[getattr(other, name) for other in others]))
@@ -360,6 +362,8 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         Input two-point estimators must have same edges for this operation to make sense
         (no checks performed).
         """
+        if len(others) == 1 and utils.is_sequence(others[0]):
+            others = others[0]
         new = others[0].copy()
         for name in new.count_names:
             setattr(new, name, getattr(new, name).sum(*[getattr(other, name) for other in others]))

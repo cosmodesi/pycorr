@@ -267,9 +267,9 @@ class KMeansSubsampler(BaseSubsampler):
         else:
             positions, weights = np.asarray(self.positions).T, self.weights
             if self.with_mpi:
-                positions = get_mpi().gather_array(positions, root=None, mpicomm=self.mpicomm)  # WARNING: bcast on all ranks
+                positions = get_mpi().gather(positions, mpiroot=None, mpicomm=self.mpicomm)  # WARNING: bcast on all ranks
                 if weights is not None:
-                    weights = get_mpi().gather_array(weights, root=None, mpicomm=self.mpicomm)
+                    weights = get_mpi().gather(weights, mpiroot=None, mpicomm=self.mpicomm)
         self.kmeans = cluster.KMeans(n_clusters=self.nsamples, random_state=self.random_state, **self.attrs)
         self.kmeans.fit(positions, sample_weight=weights)
 
@@ -488,7 +488,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
             if samples is not None:
                 samples = np.asarray(samples)
             if self.with_mpi and mpiroot is not None and self.mpicomm.bcast(samples is not None, root=mpiroot):
-                samples = get_mpi().scatter_array(samples, mpicomm=self.mpicomm, root=mpiroot)
+                samples = get_mpi().scatter(samples, mpicomm=self.mpicomm, mpiroot=mpiroot)
             return samples
 
         self.samples2 = self.samples1 = _format_samples(samples1)
@@ -528,7 +528,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
             if self.with_mpi:
                 if not self.autocorr:
                     samples = np.unique(np.concatenate([samples, self.samples2], axis=0))
-                samples = np.unique(get_mpi().gather_array(samples, root=None))
+                samples = np.unique(get_mpi().gather(samples, mpiroot=None))
         if np.ndim(samples) == 0:
             samples = [samples]
 
@@ -544,7 +544,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
                     mpiroot_workers = list(np.unique(self.mpicomm.allgather(mpiroot_worker))[1:])
 
                     def _gather_array(array):
-                        tmp = [get_mpi().gather_array(array, mpicomm=self.mpicomm, root=mpiroot) for mpiroot in mpiroot_workers]
+                        tmp = [get_mpi().gather(array, mpicomm=self.mpicomm, mpiroot=mpiroot) for mpiroot in mpiroot_workers]
                         if mpiroot_worker == -1:
                             return None
                         return tmp[mpiroot_workers.index(mpiroot_worker)]
@@ -755,6 +755,8 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         typically used when calculation has been split into different samples,
         see argument ``samples`` of :meth:`__init__`.
         """
+        if len(others) == 1 and utils.is_sequence(others[0]):
+            others = others[0]
         if not others:
             raise TwoPointCounterError('Provide at least one {} instance.'.format(cls.__name__))
         new = others[0].copy()
@@ -779,6 +781,8 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         Concatenate input two-point counts along :attr:`sep`;
         see :meth:`BaseTwoPointCounter.concatenate_x`.
         """
+        if len(others) == 1 and utils.is_sequence(others[0]):
+            others = others[0]
         # new = others[0].copy()
         new = super(JackknifeTwoPointCounter, cls).concatenate_x(*[other for other in others])
         for name in cls._result_names:
@@ -817,6 +821,8 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
     def sum(cls, *others):
         """Sum input two-point counts, see :meth:`BaseTwoPointCounter.sum`."""
         # new = self.copy()
+        if len(others) == 1 and utils.is_sequence(others[0]):
+            others = others[0]
         new = super(JackknifeTwoPointCounter, cls).sum(*others)
         for name in cls._result_names:
             tmp = getattr(new, name)
@@ -913,6 +919,8 @@ class JackknifeTwoPointEstimator(BaseTwoPointEstimator):
         typically used when calculation has been split into different samples,
         see argument ``samples`` of :meth:`JackknifeTwoPointCounter.__init__`.
         """
+        if len(others) == 1 and utils.is_sequence(others[0]):
+            others = others[0]
         if not others:
             raise TwoPointEstimatorError('Provide at least one {} instance.'.format(cls.__name__))
         kw = {}

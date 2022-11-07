@@ -14,6 +14,11 @@ lib_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'lib')
 logger = logging.getLogger('Utils')
 
 
+def is_sequence(item):
+    """Whether input item is a tuple or list."""
+    return isinstance(item, (list, tuple))
+
+
 def exception_handler(exc_type, exc_value, exc_traceback):
     """Print exception with a logger."""
     # Do not print traceback if the exception has been handled and logged

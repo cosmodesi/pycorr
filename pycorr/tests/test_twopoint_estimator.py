@@ -490,17 +490,16 @@ def test_estimator(mode='s'):
                         assert_allclose_estimators(test2, test)
 
             if mpicomm is not None:
-
                 test_mpi = run_jackknife(mpicomm=mpicomm, pass_none=mpicomm.rank != 0, mpiroot=0)
                 assert_allclose_estimators(test_mpi, estimator_jackknife)
 
                 test_mpi = run_jackknife(mpicomm=mpicomm, pass_zero=mpicomm.rank != 0, mpiroot=None)
                 assert_allclose_estimators(test_mpi, estimator_jackknife)
 
-                data1 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data1]
-                data2 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data2]
-                randoms1 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in randoms1]
-                randoms2 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in randoms2]
+                data1 = [mpi.scatter(d, mpiroot=0, mpicomm=mpicomm) for d in data1]
+                data2 = [mpi.scatter(d, mpiroot=0, mpicomm=mpicomm) for d in data2]
+                randoms1 = [mpi.scatter(d, mpiroot=0, mpicomm=mpicomm) for d in randoms1]
+                randoms2 = [mpi.scatter(d, mpiroot=0, mpicomm=mpicomm) for d in randoms2]
                 test_mpi = run_nojackknife(mpicomm=mpicomm)
 
                 with tempfile.TemporaryDirectory() as tmp_dir:

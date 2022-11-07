@@ -208,7 +208,7 @@ def _format_positions(positions, mode='auto', position_type='xyz', dtype=None, c
     if mpiroot is not None and mpicomm.bcast(positions is not None if mpicomm.rank == mpiroot else None, root=mpiroot):
         n = mpicomm.bcast(len(positions) if mpicomm.rank == mpiroot else None, root=mpiroot)
         if mpicomm.rank != mpiroot: positions = [None] * n
-        positions = [get_mpi().scatter_array(position, mpicomm=mpicomm, root=mpiroot) for position in positions]
+        positions = [get_mpi().scatter(position, mpicomm=mpicomm, mpiroot=mpiroot) for position in positions]
     return positions
 
 
@@ -252,7 +252,7 @@ def _format_weights(weights, weight_type='auto', size=None, dtype=None, copy=Tru
     else:
         n = mpicomm.bcast(len(weights) if mpicomm.rank == mpiroot else None, root=mpiroot)
         if mpicomm.rank != mpiroot: weights = [None] * n
-        weights = [get_mpi().scatter_array(weight, mpicomm=mpicomm, root=mpiroot) for weight in weights]
+        weights = [get_mpi().scatter(weight, mpicomm=mpicomm, mpiroot=mpiroot) for weight in weights]
         n_bitwise_weights = mpicomm.bcast(n_bitwise_weights, root=mpiroot)
 
     if size is not None:
@@ -767,7 +767,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                         return array[start:stop]
                     cumsize = np.cumsum([0] + self.mpicomm.allgather(len(array)))[self.mpicomm.rank]
                     start, stop = max(start - cumsize, 0), max(stop - cumsize, 0)
-                    return mpi.bcast_array(mpi.gather_array(array[start:stop], root=0), root=0, mpicomm=self.mpicomm)
+                    return mpi.gather(array[start:stop], mpiroot=None, mpicomm=self.mpicomm)
 
                 _slab_npairs_max = 1000 * 1000
                 if method.endswith('npy'):
@@ -808,8 +808,8 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                     if self.with_mpi:
                         sumw_cross = 0.
                         for irank in range(self.mpicomm.size):
-                            bw2 = mpi.bcast_array(bitweights2, root=irank, mpicomm=self.mpicomm)
-                            iw2 = mpi.bcast_array(indweights2, root=irank, mpicomm=self.mpicomm) if indweights1 is not None else None
+                            bw2 = mpi.bcast(bitweights2, mpiroot=irank, mpicomm=self.mpicomm)
+                            iw2 = mpi.bcast(indweights2, mpiroot=irank, mpicomm=self.mpicomm) if indweights1 is not None else None
                             sumw_cross += func(size1, self.mpicomm.bcast(size2, root=irank), indweights1, iw2, bitweights1, bw2, n_bitwise_weights, noffset, default_value / nrealizations)
                     else:
                         sumw_cross = func(size1, size2, indweights1, indweights2, bitweights1, bitweights2, n_bitwise_weights, noffset, default_value / nrealizations)
@@ -1080,6 +1080,8 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         -------
         :attr:`wnorm` is cast to a :attr:`ndim` array.
         """
+        if len(others) == 1 and utils.is_sequence(others[0]):
+            others = others[0]
         others = sorted(others, key=lambda other: np.mean(other.edges[0]))  # rank input counts by mean scale
         new = others[0].deepcopy()
         if len(others) > 1:
@@ -1132,6 +1134,8 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         Input two-point counts must have same edges for this operation to make sense
         (no checks performed).
         """
+        if len(others) == 1 and utils.is_sequence(others[0]):
+            others = others[0]
         new = others[0].deepcopy()
         if len(others) > 1:
             new.size1 = new.size2 = 0  # we do not know the total size

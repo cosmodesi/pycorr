@@ -59,7 +59,7 @@ def test_clustering(seed=42):
         if corrmode == 'smu':
             edges = (edges, np.linspace(-1, 1, 101))
         if corrmode == 'rppi':
-            edges = (edges, np.linspace(0, 40, 41))
+            edges = (edges, np.linspace(-40, 40, 41))
         result = TwoPointCorrelationFunction(corrmode, edges, data_positions1=data['Position'], data_weights1=data['Weight'],
                                              randoms_positions1=randoms['Position'], engine='corrfunc', position_type='pos',
                                              estimator='landyszalay', nthreads=4, mpicomm=data.mpicomm)

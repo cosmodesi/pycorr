@@ -264,7 +264,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     def is_none(array):
         if mpicomm is None or mpiroot is None:
             return array is None
-        return mpicomm.allgather(array is None)[mpiroot]
+        return mpicomm.bcast(array is None, root=mpiroot)
 
     with_randoms = not is_none(randoms_positions1)
     with_shifted = not is_none(shifted_positions1)

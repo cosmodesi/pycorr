@@ -58,7 +58,7 @@ def test_subsampler():
 
         test_mpi(mpicomm=mpicomm, mpiroot=None)
         test_mpi(mpicomm=mpicomm, mpiroot=0)
-        positions_mpi = [mpi.scatter_array(p, root=0, mpicomm=mpicomm) for p in positions]
+        positions_mpi = [mpi.scatter(p, mpiroot=0, mpicomm=mpicomm) for p in positions]
         test_mpi(mpicomm=mpicomm, mpiroot=None)
 
     for nside in [None, 512]:
@@ -82,7 +82,7 @@ def test_subsampler():
 
             test_mpi(mpicomm=mpicomm, mpiroot=None)
             test_mpi(mpicomm=mpicomm, mpiroot=0)
-            positions_mpi = [mpi.scatter_array(p, root=0, mpicomm=mpicomm) for p in positions]
+            positions_mpi = [mpi.scatter(p, mpiroot=0, mpicomm=mpicomm) for p in positions]
             test_mpi(mpicomm=mpicomm, mpiroot=None)
 
 
@@ -408,8 +408,8 @@ def test_twopoint_counter(mode='s'):
                 assert_allclose(test_mpi, test)
                 test_mpi = run(mpicomm=mpicomm, pass_zero=mpicomm.rank != 0, mpiroot=None, nprocs_per_real=2)
                 assert_allclose(test_mpi, test)
-                data1 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data1]
-                data2 = [mpi.scatter_array(d, root=0, mpicomm=mpicomm) for d in data2]
+                data1 = [mpi.scatter(d, mpiroot=0, mpicomm=mpicomm) for d in data1]
+                data2 = [mpi.scatter(d, mpiroot=0, mpicomm=mpicomm) for d in data2]
                 test_mpi = run(mpicomm=mpicomm)
 
                 with tempfile.TemporaryDirectory() as tmp_dir:
