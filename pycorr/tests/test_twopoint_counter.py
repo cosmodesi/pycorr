@@ -73,10 +73,21 @@ def ref_theta(edges, data1, data2=None, boxsize=None, los='midpoint', autocorr=F
     return counts, divide(sep, counts)
 
 
+def wrap(data, boxsize=None):
+    if boxsize is None:
+        return data
+    toret = [[], [], []]
+    for xyzw in zip(*data):
+        for i in range(3):
+            toret[i].append(xyzw[i] % boxsize[i])
+    return toret + data[3:]
+
+
 def ref_s(edges, data1, data2=None, boxsize=None, los='midpoint', autocorr=False, **kwargs):
     counts = np.zeros(len(edges) - 1, dtype='f8')
     sep = np.zeros(len(edges) - 1, dtype='f8')
     if data2 is None: data2 = data1
+    data1, data2 = wrap(data1, boxsize=boxsize), wrap(data2, boxsize=boxsize)
     for i1, xyzw1 in enumerate(zip(*data1)):
         for i2, xyzw2 in enumerate(zip(*data2)):
             if autocorr and i2 == i1: continue
@@ -104,6 +115,7 @@ def ref_smu(edges, data1, data2=None, boxsize=None, weight_type=None, los='midpo
     counts = np.zeros([len(e) - 1 for e in edges], dtype='f8')
     sep = np.zeros([len(e) - 1 for e in edges], dtype='f8')
     if data2 is None: data2 = data1
+    data1, data2 = wrap(data1, boxsize=boxsize), wrap(data2, boxsize=boxsize)
     for i1, xyzw1 in enumerate(zip(*data1)):
         for i2, xyzw2 in enumerate(zip(*data2)):
             if autocorr and i2 == i1: continue
@@ -147,6 +159,7 @@ def ref_rppi(edges, data1, data2=None, boxsize=None, weight_type=None, los='midp
     counts = np.zeros([len(e) - 1 for e in edges], dtype='f8')
     sep = np.zeros([len(e) - 1 for e in edges], dtype='f8')
     if data2 is None: data2 = data1
+    data1, data2 = wrap(data1, boxsize=boxsize), wrap(data2, boxsize=boxsize)
     for i1, xyzw1 in enumerate(zip(*data1)):
         for i2, xyzw2 in enumerate(zip(*data2)):
             if autocorr and i2 == i1: continue
@@ -235,6 +248,7 @@ def test_twopoint_counter(mode='s'):
         for dtype in (['f8'] if mode == 'theta' else ['f4', 'f8']):  # in theta mode, lots of rounding errors!
             itemsize = np.dtype(dtype).itemsize
             for isa in ['fallback', 'sse42', 'avx', 'fastest']:
+
                 # binning
                 edges = np.array([1, 8, 20, 42, 60])
                 if mode == 'smu':
@@ -261,12 +275,13 @@ def test_twopoint_counter(mode='s'):
                 if itemsize > 4:
                     list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'twopoint_weights': twopoint_weights, 'dtype': dtype, 'isa': isa})
                     list_options.append({'autocorr': autocorr, 'twopoint_weights': twopoint_weights, 'los': 'y', 'dtype': dtype, 'isa': isa, 'nthreads': nthreads})
+
                 # boxsize
                 if mode not in ['theta', 'rp']:
-                    list_options.append({'autocorr': autocorr, 'boxsize': cboxsize, 'dtype': dtype, 'isa': isa})
-                    list_options.append({'autocorr': autocorr, 'boxsize': cboxsize, 'dtype': dtype, 'isa': isa})
-                    list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'boxsize': cboxsize, 'los': 'x', 'dtype': dtype, 'isa': isa})
-                    list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'boxsize': cboxsize, 'los': 'y', 'dtype': dtype, 'isa': isa})
+                    for boxsize in [cboxsize, (201., 300., 300.)]:
+                        list_options.append({'autocorr': autocorr, 'boxsize': boxsize, 'dtype': dtype, 'isa': isa})
+                        for los in ['x', 'y']:
+                            list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'boxsize': boxsize, 'los': los, 'dtype': dtype, 'isa': isa})
                 # los
                 if mode in ['smu', 'rppi']:
                     list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'los': 'firstpoint', 'edges': edges, 'dtype': dtype, 'isa': isa})

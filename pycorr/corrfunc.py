@@ -45,17 +45,14 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
 
         def _get_boxsize():
             if self.periodic:
-                toret = self.boxsize[0]
-                if not np.all(self.boxsize == toret):
-                    raise TwoPointCounterError('Corrfunc does not support non-cubic box')
-                return toret
+                return self.boxsize
             return None
 
         def get_rotated_positions():
-            # TODO: when boxsize will be 3-vector, rotate boxsize!
             boxsize = _get_boxsize()
             # Rotating coordinates to put los along z
-            lz = boxsize if boxsize is not None else 0.
+            lz = boxsize[2] if boxsize is not None else 0.
+
             def rotate(positions):
                 toret = list(positions)
                 if self.los_type == 'x':
@@ -72,6 +69,8 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             positions2 = [None] * 3
             if not autocorr:
                 positions2 = rotate(dpositions2)
+            if boxsize is not None:
+                boxsize = rotate([boxsize[0], boxsize[1], 0.])
             return positions1, positions2, boxsize
 
         weight_type = None
