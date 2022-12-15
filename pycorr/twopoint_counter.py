@@ -784,37 +784,18 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                         if indweights1 is not None: tmp *= (indweights1[:, None] * slice_array(indweights2, start, stop))
                         sumw_cross += tmp.sum()
                 else:
-                    idtype, precision = {4: (np.int32, 'float'), 8: (np.int64, 'double')}[self.dtype.itemsize]
+                    from ._utils import sum_weights
+                    idtype = 'i{:d}'.format(self.dtype.itemsize)
                     bitweights1, bitweights2 = (np.column_stack(utils.reformat_bitarrays(*w[:self.n_bitwise_weights], dtype=idtype)) for w in [weights1, weights2])
-                    n_bitwise_weights = bitweights1.shape[-1]
-                    bitweights1, bitweights2 = bitweights1.ravel(), bitweights2.ravel()
-                    path_lib = os.path.join(utils.lib_dir, 'utils_{}.so'.format(precision))
-                    import ctypes
-                    from numpy import ctypeslib
-                    lib = ctypes.CDLL(path_lib, mode=ctypes.RTLD_LOCAL)
-                    func = lib.set_num_threads
-                    func.argtypes = (ctypes.c_int,)
-                    func(self.nthreads)
-                    func = lib.sum_weights
-                    cfdtype = ctypeslib.as_ctypes_type(self.dtype)
-                    cidtype = ctypeslib.as_ctypes_type(idtype)
-                    func.argtypes = (ctypes.c_size_t, ctypes.c_size_t,
-                                     ctypes.POINTER(cfdtype) if indweights1 is None else ctypeslib.ndpointer(dtype=cfdtype, flags='C'),
-                                     ctypes.POINTER(cfdtype) if indweights1 is None else ctypeslib.ndpointer(dtype=cfdtype, flags='C'),
-                                     ctypeslib.ndpointer(dtype=cidtype, flags='C'),
-                                     ctypeslib.ndpointer(dtype=cidtype, flags='C'),
-                                     ctypes.c_int, ctypes.c_int, cfdtype)
-                    func.restype = cfdtype
                     if self.with_mpi:
                         sumw_cross = 0.
                         for irank in range(self.mpicomm.size):
                             bw2 = mpi.bcast(bitweights2, mpiroot=irank, mpicomm=self.mpicomm)
                             iw2 = mpi.bcast(indweights2, mpiroot=irank, mpicomm=self.mpicomm) if indweights1 is not None else None
-                            sumw_cross += func(size1, self.mpicomm.bcast(size2, root=irank), indweights1, iw2, bitweights1, bw2, n_bitwise_weights, noffset, default_value / nrealizations)
+                            sumw_cross += sum_weights(indweights1, iw2, bitweights1, bw2, noffset, default_value / nrealizations, nthreads=self.nthreads)
                     else:
-                        sumw_cross = func(size1, size2, indweights1, indweights2, bitweights1, bitweights2, n_bitwise_weights, noffset, default_value / nrealizations)
+                        sumw_cross = sum_weights(indweights1, indweights2, bitweights1, bitweights2, noffset, default_value / nrealizations, nthreads=self.nthreads)
                     sumw_cross *= nrealizations
-
                 sumw = sumw_cross - sumw_auto
                 if self.with_mpi:
                     sumw = self.mpicomm.allreduce(sumw)

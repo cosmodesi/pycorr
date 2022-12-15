@@ -686,14 +686,27 @@ def format_pip_reference():
 
 def test_pip_normalization():
 
+    mpicomm = None
+    try:
+        from pycorr import mpi
+        print('Has MPI')
+    except ImportError:
+        pass
+    else:
+        mpicomm = mpi.COMM_WORLD
+
     edges = np.linspace(50, 100, 5)
     size = 10000
     boxsize = (1000,) * 3
     autocorr = False
-    data1, data2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=0, n_bitwise_weights=3)
+    cdata1, cdata2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=0, n_bitwise_weights=3)
+    data1, data2 = cdata1, cdata2
+    if mpicomm is not None:
+        data1 = [mpi.scatter(d, mpicomm=mpicomm, mpiroot=0) for d in cdata1]
+        data2 = [mpi.scatter(d, mpicomm=mpicomm, mpiroot=0) for d in cdata2]
     test = TwoPointCounter(mode='s', edges=edges, positions1=data1[:3], positions2=None if autocorr else data2[:3],
-                           weights1=data1[3:], weights2=None if autocorr else data2[3:], position_type='xyz')
-    wiip = test.weight_attrs['nrealizations'] / (test.weight_attrs['noffset'] + utils.popcount(*data1[3:]))
+                           weights1=data1[3:], weights2=None if autocorr else data2[3:], position_type='xyz', mpicomm=mpicomm, mpiroot=None)
+    wiip = test.weight_attrs['nrealizations'] / (test.weight_attrs['noffset'] + utils.popcount(*cdata1[3:]))
     ratio = abs(test.wnorm / sum(wiip)**2 - 1)
     assert ratio < 0.1
 
@@ -711,6 +724,8 @@ def test_pip_normalization():
         nbits = len([name for name in tmp.dtype.names if name.startswith('bit') and 'weight' not in name])
         for bitweights in [[tmp['bitweight0'], tmp['bitweight1']], utils.pack_bitarrays(*[tmp['bit{:d}'.format(ibit)] for ibit in range(nbits)])]:
             weights = [tmp['indweight']] + bitweights
+            if mpicomm is not None:
+                weights = [mpi.scatter(d, mpicomm=mpicomm, mpiroot=0) for d in weights]
             weights_iip = [weights[0], get_inverse_probability_weight(weights[1:], noffset=1, nrealizations=1 + nbits, default_value=0.)]
             if no_indweight:
                 weights = weights[1:]
@@ -718,7 +733,7 @@ def test_pip_normalization():
 
             positions = [np.zeros(len(weights[0]), dtype='f8')] * 3
             edges = np.linspace(50, 100, 5)
-            kwargs = dict(position_type='xyz', nthreads=4, dtype='f8')
+            kwargs = dict(position_type='xyz', nthreads=4, dtype='f8', mpicomm=mpicomm, mpiroot=None)
 
             if 'wiip' in truth:
                 counter = FakeTwoPointCounter(mode='s', edges=edges, positions1=positions, weights1=weights_iip, weight_attrs={'nrealizations': 1 + nbits}, **kwargs)

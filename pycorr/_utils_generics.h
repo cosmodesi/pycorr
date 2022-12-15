@@ -1,32 +1,14 @@
+#include <math.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <omp.h>
-#include "utils.h"
 
-
-void set_num_threads(int num_threads)
-{
-  if (num_threads>0) omp_set_num_threads(num_threads);
-}
-
-
-int get_num_threads()
-{
-  //Calculate number of threads
-  int num_threads=0;
-#pragma omp parallel
-  {
-#pragma omp atomic
-    num_threads++;
-  }
-  return num_threads;
-}
-
-
-FLOAT sum_weights(size_t size1, size_t size2, FLOAT *indweights1, FLOAT *indweights2, FLOAT *bitweights1, FLOAT *bitweights2, int n_bitwise_weights, int noffset, FLOAT default_value)
+FLOAT mkname(_sum_weights)(const size_t size1, const size_t size2, FLOAT *indweights1, FLOAT *indweights2,
+                           FLOAT *bitweights1, FLOAT *bitweights2, const int n_bitwise_weights, const int noffset, const FLOAT default_value, const int nthreads)
 {
   FLOAT sumw = 0.;
+#if defined(_OPENMP)
+  set_num_threads(nthreads);
   #pragma omp parallel for reduction(+:sumw)
+#endif
   for (size_t i1=0; i1<size1; i1++) {
     for (size_t i2=0; i2<size2; i2++) {
       FLOAT weight = 1.;

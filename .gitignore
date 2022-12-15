@@ -16,6 +16,8 @@ doc/_build/
 **/bak
 **/_tests
 **/lib
+**/*_utils.c
+**/*.so
 
 # Unit test / coverage reports
 **/.coverage
