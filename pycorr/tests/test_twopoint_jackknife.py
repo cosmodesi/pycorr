@@ -21,6 +21,7 @@ def generate_catalogs(size=200, boxsize=(1000,) * 3, offset=(1000, 0, 0), n_indi
 
 def test_subsampler():
 
+    import pytest
     mpi = False
     try:
         from pycorr import mpi
@@ -34,10 +35,19 @@ def test_subsampler():
     positions_bak = np.array(positions, copy=True)
     nsamples = 27
     subsampler = BoxSubsampler(boxsize=boxsize, boxcenter=boxcenter, nsamples=nsamples)
-    assert np.allclose(subsampler.boxsize, boxsize, rtol=1e-2)
+    assert np.allclose(subsampler.boxsize, boxsize)
     labels = subsampler.label(positions)
     assert np.max(labels) < nsamples
     assert np.allclose(positions, positions_bak)
+
+    subsampler = BoxSubsampler(boxsize=boxsize, boxcenter=boxcenter, nsamples=nsamples)
+    with pytest.raises(ValueError):
+        subsampler.label(np.array(boxsize)[:, None])
+    with pytest.raises(ValueError):
+        subsampler.label(np.array(positions) + 2000.)
+    subsampler = BoxSubsampler(boxsize=boxsize, boxcenter=boxcenter, nsamples=nsamples, wrap=True)
+    subsampler.label(np.array(boxsize)[:, None])
+    subsampler.label(np.array(positions) + 2000.)
 
     subsampler = BoxSubsampler(positions=positions, nsamples=nsamples)
     assert np.allclose(subsampler.boxsize, boxsize, rtol=1e-2)

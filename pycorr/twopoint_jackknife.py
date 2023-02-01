@@ -99,7 +99,7 @@ class BoxSubsampler(BaseSubsampler):
 
     """Basic subsampler, that divides a box into subboxes in 3D space."""
 
-    def __init__(self, positions=None, boxsize=None, boxcenter=None, nsamples=8, position_type='auto', dtype=None, mpicomm=None, mpiroot=None):
+    def __init__(self, positions=None, boxsize=None, boxcenter=None, nsamples=8, position_type='auto', wrap=False, dtype=None, mpicomm=None, mpiroot=None):
         """
         Initialize :class:`BoxSubsampler`.
 
@@ -129,6 +129,10 @@ class BoxSubsampler(BaseSubsampler):
                 - "xyz": Cartesian positions, shape (3, N)
                 - "pos": Cartesian positions, shape (N, 3).
 
+        wrap : bool, default=False
+            Whether to wrap input positions in [0, boxsize[?
+            If ``False`` and input positions do not fit in the the box size, raise a :class:`ValueError`.
+
         dtype : string, np.dtype, default=None
             Array type for positions and weights.
             If ``None``, defaults to type of ``positions`` array.
@@ -144,6 +148,7 @@ class BoxSubsampler(BaseSubsampler):
         self.mpicomm = mpicomm
         self.mode = '3d'
         self.position_type = position_type.lower()
+        self.wrap = bool(wrap)
         self.dtype = dtype
 
         if boxsize is None or boxcenter is None:
@@ -202,7 +207,9 @@ class BoxSubsampler(BaseSubsampler):
         """
         positions = self._format_positions(positions, position_type=position_type, copy=False, mpicomm=None, mpiroot=None)
         ii = []
-        for edge, p in zip(self.edges, positions):
+        offset = self.boxcenter - self.boxsize / 2.
+        for edge, o, b, p in zip(self.edges, offset, self.boxsize, positions):
+            if self.wrap: p = (p - o) % b + o
             tmp = np.searchsorted(edge, p, side='right', sorter=None) - 1
             if not np.all((tmp >= 0) & (tmp < len(edge) - 1)):
                 raise ValueError('Some input positions outside of bounding box')
