@@ -906,8 +906,6 @@ class WeightTwoPointEstimator(NaturalTwoPointEstimator):
         # init
         corr = np.ones_like(self.R1R2.wcounts, dtype='f8')
 
-        # the natural estimator
-        # (DD - RR) / RR
         DD = self.D1D2.normalized_wcounts()[nonzero]
         RR = self.R1R2.normalized_wcounts()[nonzero]
         tmp = RR / DD

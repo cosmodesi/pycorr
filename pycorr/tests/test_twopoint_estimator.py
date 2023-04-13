@@ -135,13 +135,17 @@ def test_estimator(mode='s'):
             shifted1.append(subsampler.label(shifted1[:npos]))
             shifted2.append(subsampler.label(shifted2[:npos]))
 
-            def run_nojackknife(ii=None, **kwargs):
+            def run_nojackknife(ii=None, same_shotnoise=False, **kwargs):
                 data_positions1, data_weights1, data_samples1 = data1[:npos], data1[npos:-1], data1[-1]
                 data_positions2, data_weights2, data_samples2 = data2[:npos], data2[npos:-1], data2[-1]
                 randoms_positions1, randoms_weights1, randoms_samples1 = randoms1[:npos], randoms1[npos:-1], randoms1[-1]
                 randoms_positions2, randoms_weights2, randoms_samples2 = randoms2[:npos], randoms2[npos:-1], randoms2[-1]
                 shifted_positions1, shifted_weights1, shifted_samples1 = shifted1[:npos], shifted1[npos:-1], shifted1[-1]
                 shifted_positions2, shifted_weights2, shifted_samples2 = shifted2[:npos], shifted2[npos:-1], shifted2[-1]
+                if same_shotnoise:
+                    data_weights2 = data_weights1
+                    randoms_weights2 = randoms_weights1
+                    shifted_weights2 = shifted_weights1
                 if ii is not None:
                     mask = data_samples1 == ii
                     data_positions1, data_weights1 = [position[~mask] for position in data_positions1], [weight[~mask] for weight in data_weights1]
@@ -159,20 +163,24 @@ def test_estimator(mode='s'):
                     kwargs['D1D2_twopoint_weights'] = kwargs['D1R2_twopoint_weights'] = twopoint_weights
 
                 return TwoPointCorrelationFunction(mode=mode, edges=edges, engine=engine, data_positions1=data_positions1, data_positions2=None if autocorr else data_positions2,
-                                                   data_weights1=data_weights1, data_weights2=None if autocorr else data_weights2,
+                                                   data_weights1=data_weights1, data_weights2=None if autocorr and not same_shotnoise else data_weights2,
                                                    randoms_positions1=randoms_positions1 if with_randoms else None, randoms_positions2=None if autocorr or not with_randoms else randoms_positions2,
-                                                   randoms_weights1=randoms_weights1 if with_randoms else None, randoms_weights2=None if autocorr or not with_randoms else randoms_weights2,
+                                                   randoms_weights1=randoms_weights1 if with_randoms else None, randoms_weights2=None if autocorr and not same_shotnoise or not with_randoms else randoms_weights2,
                                                    shifted_positions1=shifted_positions1 if with_shifted else None, shifted_positions2=None if autocorr or not with_shifted else shifted_positions2,
-                                                   shifted_weights1=shifted_weights1 if with_shifted else None, shifted_weights2=None if autocorr or not with_shifted else shifted_weights2,
+                                                   shifted_weights1=shifted_weights1 if with_shifted else None, shifted_weights2=None if autocorr and not same_shotnoise or not with_shifted else shifted_weights2,
                                                    **options, **kwargs)
 
-            def run_jackknife(pass_none=False, pass_zero=False, **kwargs):
+            def run_jackknife(pass_none=False, pass_zero=False, same_shotnoise=False, **kwargs):
                 data_positions1, data_weights1, data_samples1 = data1[:npos], data1[npos:-1], data1[-1]
                 data_positions2, data_weights2, data_samples2 = data2[:npos], data2[npos:-1], data2[-1]
                 randoms_positions1, randoms_weights1, randoms_samples1 = randoms1[:npos], randoms1[npos:-1], randoms1[-1]
                 randoms_positions2, randoms_weights2, randoms_samples2 = randoms2[:npos], randoms2[npos:-1], randoms2[-1]
                 shifted_positions1, shifted_weights1, shifted_samples1 = shifted1[:npos], shifted1[npos:-1], shifted1[-1]
                 shifted_positions2, shifted_weights2, shifted_samples2 = shifted2[:npos], shifted2[npos:-1], shifted2[-1]
+                if same_shotnoise:
+                    data_weights2 = data_weights1
+                    randoms_weights2 = randoms_weights1
+                    shifted_weights2 = shifted_weights1
 
                 def get_zero(arrays):
                     return [array[:0] for array in arrays]
@@ -189,11 +197,11 @@ def test_estimator(mode='s'):
                     kwargs['D1D2_twopoint_weights'] = kwargs['D1R2_twopoint_weights'] = twopoint_weights
 
                 return TwoPointCorrelationFunction(mode=mode, edges=edges, engine=engine, data_positions1=None if pass_none else data_positions1, data_positions2=None if pass_none or autocorr else data_positions2,
-                                                   data_weights1=None if pass_none else data_weights1, data_weights2=None if pass_none or autocorr else data_weights2,
+                                                   data_weights1=None if pass_none else data_weights1, data_weights2=None if pass_none or autocorr and not same_shotnoise else data_weights2,
                                                    randoms_positions1=randoms_positions1 if with_randoms and not pass_none else None, randoms_positions2=None if pass_none or autocorr else randoms_positions2,
-                                                   randoms_weights1=randoms_weights1 if with_randoms and not pass_none else None, randoms_weights2=None if pass_none or autocorr else randoms_weights2,
+                                                   randoms_weights1=randoms_weights1 if with_randoms and not pass_none else None, randoms_weights2=None if pass_none and not same_shotnoise or autocorr else randoms_weights2,
                                                    shifted_positions1=shifted_positions1 if with_shifted and not pass_none else None, shifted_positions2=None if pass_none or autocorr else shifted_positions2,
-                                                   shifted_weights1=shifted_weights1 if with_shifted and not pass_none else None, shifted_weights2=None if pass_none or autocorr else shifted_weights2,
+                                                   shifted_weights1=shifted_weights1 if with_shifted and not pass_none else None, shifted_weights2=None if pass_none or autocorr and not same_shotnoise else shifted_weights2,
                                                    data_samples1=None if pass_none else data_samples1, data_samples2=None if pass_none else data_samples2,
                                                    randoms_samples1=None if pass_none else randoms_samples1, randoms_samples2=None if pass_none else randoms_samples2,
                                                    shifted_samples1=None if pass_none else shifted_samples1, shifted_samples2=None if pass_none else shifted_samples2,
@@ -208,7 +216,7 @@ def test_estimator(mode='s'):
                 mask = np.isfinite(res2.corr)
                 assert np.all(mask == np.isfinite(res1.corr))
                 assert np.allclose(res1.corr[mask], res2.corr[mask])
-                mask2 = mask = np.isnan(res1.sep)
+                mask = np.isnan(res1.sep)
                 assert not np.any(res1.sep == 0.)
                 assert np.all(np.isnan(res2.sep) == np.isnan(res2.corr))
                 assert np.all(np.isfinite(res2.sep) == np.isfinite(res1.sep))
@@ -217,6 +225,29 @@ def test_estimator(mode='s'):
             estimator_nojackknife = run_nojackknife()
             estimator_jackknife = run_jackknife()
             assert_allclose_estimators(estimator_jackknife, estimator_nojackknife)
+
+            if autocorr and (n_individual_weights or n_bitwise_weights):
+                estimator_same_shotnoise = run_nojackknife(same_shotnoise=True)
+                for label1, label2 in estimator_same_shotnoise.requires(with_reversed=True, with_shifted=estimator_same_shotnoise.with_shifted, join=None):
+                    if label1[:-1] == label2[:-1]:
+                        label12 = label1 + label2
+                        if getattr(estimator_same_shotnoise, label12).name != 'analytic':
+                            assert getattr(estimator_same_shotnoise, label12).same_shotnoise
+                            assert not getattr(estimator_same_shotnoise, label12).autocorr
+                #print(estimator_same_shotnoise.count_names, estimator_nojackknife.count_names)
+                #print(estimator_same_shotnoise.D1D2.wcounts / estimator_nojackknife.D1D2.wcounts, estimator_same_shotnoise.D1D2.wnorm, estimator_nojackknife.D1D2.wnorm)
+                #print(estimator_same_shotnoise.D1S2.wcounts / estimator_nojackknife.D1S2.wcounts, estimator_same_shotnoise.D1S2.wnorm, estimator_nojackknife.D1S2.wnorm)
+                #print(estimator_same_shotnoise.R1R2.wcounts / estimator_nojackknife.R1R2.wcounts, estimator_same_shotnoise.R1R2.wnorm, estimator_nojackknife.R1R2.wnorm)
+                assert_allclose_estimators(estimator_same_shotnoise, estimator_nojackknife)
+                estimator_same_shotnoise = run_jackknife(same_shotnoise=True)
+                for label1, label2 in estimator_same_shotnoise.requires(with_reversed=True, with_shifted=estimator_same_shotnoise.with_shifted, join=None):
+                    if label1[:-1] == label2[:-1]:
+                        label12 = label1 + label2
+                        if getattr(estimator_same_shotnoise, label12).name != 'analytic':
+                            assert getattr(estimator_same_shotnoise, label12).same_shotnoise
+                            assert not getattr(estimator_same_shotnoise, label12).autocorr
+                assert_allclose_estimators(estimator_same_shotnoise, estimator_jackknife)
+
             if mode in ['theta', 'rp']:
                 assert estimator_jackknife.cov().shape == (estimator_jackknife.shape[0],) * 2
 

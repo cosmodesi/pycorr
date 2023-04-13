@@ -499,7 +499,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
             return samples
 
         self.samples2 = self.samples1 = _format_samples(samples1)
-        if not self.autocorr:
+        if not self.autocorr and not self.same_shotnoise:
             self.samples2 = _format_samples(samples2)
             if self.samples2 is None:
                 raise ValueError('samples2 must be provided in case of cross-correlation')
@@ -586,6 +586,8 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
                 kwargs['los'] = self.los_type
                 kwargs['position_type'] = 'rd' if self.mode == 'theta' else 'xyz'
                 kwargs.update(self.attrs)
+                if self.same_shotnoise:
+                    spositions2 = None
                 tmp = TwoPointCounter(self.mode, edges=self.edges, positions1=spositions1, weights1=sweights1, positions2=spositions2, weights2=sweights2, mpicomm=tm.mpicomm, mpiroot=mpiroot, **kwargs)
                 if is_root:
                     self.auto[ii] = tmp

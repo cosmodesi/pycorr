@@ -247,7 +247,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                 with np.errstate(divide='ignore', invalid='ignore'):
                     self.sep = self.mpicomm.allreduce(self.sep * wcounts) / self.wcounts
 
-        if self.autocorr and self.edges[0][0] <= 0.:  # remove auto-pairs
+        if self.edges[0][0] <= 0.:  # remove auto-pairs
             index_zero = 0
             if self.mode in ['smu', 'rppi']: index_zero = self.shape[1] // 2  # mu = 0 bin
             self.ncounts.flat[index_zero] -= self.size1

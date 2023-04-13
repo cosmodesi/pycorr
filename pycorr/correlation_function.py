@@ -266,6 +266,11 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
             return array is None
         return mpicomm.bcast(array is None, root=mpiroot)
 
+    def is_same(array1, array2):
+        if mpicomm is None or mpiroot is None:
+            return array1 is array2
+        return mpicomm.bcast(array1 is array2, root=mpiroot)
+
     with_randoms = not is_none(randoms_positions1)
     with_shifted = not is_none(shifted_positions1)
     with_jackknife = not is_none(data_samples1)
@@ -280,12 +285,23 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     weight_type = {'D1D2': D1D2_weight_type, 'D1R2': D1R2_weight_type, 'R1D2': R1D2_weight_type, 'R1R2': R1R2_weight_type,
                    'S1S2': S1S2_weight_type, 'D1S2': D1S2_weight_type, 'S1D2': S1D2_weight_type, 'S1R2': S1R2_weight_type, 'R1S2': S1R2_weight_type}  # RS and SR only used by 'residual' estimator
 
-    autocorr = False
+    autocorr, same_shotnoise = False, False
     precomputed = {}
     for ilabel, (label1, label2) in enumerate(Estimator.requires(with_reversed=True, with_shifted=with_shifted)):
         label12 = label1 + label2
-        if ilabel == 0 and is_none(positions[label2]): autocorr = True
+        if ilabel == 0 and is_none(positions[label2]):
+            same_shotnoise = not is_none(weights[label2])
+            autocorr = not same_shotnoise
         precomputed[label12] = kwargs.pop(label12, None)
+
+    if log: logger.info('Running {}-correlation.'.format('auto' if autocorr else 'cross'))
+
+    if same_shotnoise:
+        for name in ['D', 'R', 'S']:
+            if is_none(positions[name + '2']): positions[name + '2'] = positions[name + '1']
+            if is_none(weights[name + '2']): weights[name + '2'] = weights[name + '1']
+            if is_none(samples[name + '2']): samples[name + '2'] = weights[name + '1']
+        if log: logger.info('Assuming same shot noise.')
 
     counts = {}
     for label1, label2 in Estimator.requires(with_reversed=True, with_shifted=with_shifted):
@@ -302,7 +318,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
             if log: logger.info('Analytically computing two-point counts {}.'.format(label12))
             size1 = counts['D1D2'].size1
             size2 = None
-            if not autocorr:
+            if not autocorr and not same_shotnoise:
                 size2 = counts['D1D2'].size2
             if boxsize is None:
                 raise ValueError('boxsize must be provided for analytic two-point counts {}.'.format(label12))
@@ -316,9 +332,11 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
             else:
                 # label12 is D1R2, but we only have R1, so switch label2 to R1; same for D1S2
                 label2 = label2.replace('2', '1')
-                # In case of autocorrelation, los = firstpoint or endpoint, R1D2 = R1D1 should get the same angular weight as D1R2 = D2R1
-                for name in ['twopoint_weights', 'weight_type']:
-                    if twopoint_weights_kwargs[name] is None: twopoint_weights_kwargs[name] = locals()[name][label21]
+        # In case of autocorrelation, los = firstpoint or endpoint, R1D2 = R1D1 should get the same angular weight as D1R2 = D2R1
+        if (autocorr and label2 is not None) or (same_shotnoise and label2[:-1] != label1[:-1]):
+            for name in twopoint_weights_kwargs:
+                if twopoint_weights_kwargs[name] is None: twopoint_weights_kwargs[name] = locals()[name][label21]
+
         jackknife_kwargs = {}
         with_jackknife = not is_none(samples[label1])
         if with_jackknife:
@@ -331,7 +349,11 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         for label in [label1] + ([label2] if label2 is not None else []):
             if is_none(positions[label]): raise ValueError('{} must be provided'.format(label))
 
-        counts[label12] = Counter(mode, edges, positions[label1], positions2=positions[label2] if label2 is not None else None,
+        positions2 = positions[label2] if label2 is not None else None
+        if same_shotnoise and label2[:-1] == label1[:-1] and is_same(positions2, positions[label1]):  # D2 = D1, R2 = R1 positions, but different weights; this is to remove the correct amount of auto-pairs at s = 0
+            positions2 = None
+
+        counts[label12] = Counter(mode, edges, positions[label1], positions2=positions2,
                                   weights1=weights[label1], weights2=weights[label2] if label2 is not None else None,
                                   boxsize=boxsize, mpicomm=mpicomm, mpiroot=mpiroot,
                                   **jackknife_kwargs, **twopoint_weights_kwargs, **kwargs)

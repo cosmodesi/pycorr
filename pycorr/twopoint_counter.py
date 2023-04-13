@@ -589,6 +589,13 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                     nrealizations = n_bitwise_weights * 8 + 1
                 return nrealizations
 
+            self.weights2, n_bitwise_weights2 = _format_weights(weights2, weight_type=self.weight_type, size=self._size2, dtype=self.dtype, copy=copy, mpicomm=self.mpicomm, mpiroot=mpiroot)
+            self.same_shotnoise = self.autocorr and bool(self.weights2)
+
+            if self.same_shotnoise:
+                self.positions2 = self.positions1
+                self.autocorr = False
+
             if self.autocorr:
 
                 nrealizations = get_nrealizations(n_bitwise_weights1)
@@ -597,8 +604,6 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                 self.n_bitwise_weights = n_bitwise_weights1
 
             else:
-                self.weights2, n_bitwise_weights2 = _format_weights(weights2, weight_type=self.weight_type, size=self._size2, dtype=self.dtype, copy=copy, mpicomm=self.mpicomm, mpiroot=mpiroot)
-
                 if n_bitwise_weights2 == n_bitwise_weights1:
 
                     nrealizations = get_nrealizations(n_bitwise_weights1)
@@ -691,7 +696,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
 
     def _sum_auto_weights(self):
         """Return auto-counts, that are pairs of same objects."""
-        if not self.autocorr:
+        if not self.autocorr and not self.same_shotnoise:
             return 0.
         weights = 1.
         if self.cos_twopoint_weights is not None:
@@ -700,10 +705,10 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             return self.size1 * weights
         # up to now weights is scalar
         if self.n_bitwise_weights:
-            weights *= get_inverse_probability_weight(self.weights1[:self.n_bitwise_weights], self.weights1[:self.n_bitwise_weights], nrealizations=self.weight_attrs['nrealizations'],
+            weights *= get_inverse_probability_weight(self.weights1[:self.n_bitwise_weights], self.weights2[:self.n_bitwise_weights], nrealizations=self.weight_attrs['nrealizations'],
                                                       noffset=self.weight_attrs['noffset'], default_value=self.weight_attrs['default_value'], dtype=self.dtype)
         for ii in range(self.n_bitwise_weights, len(self.weights1)):
-            weights *= self.weights1[ii]**2
+            weights *= self.weights1[ii] * self.weights2[ii]
         # assert weights.size == len(self.positions1[0])
         weights = np.sum(weights)
         if self.with_mpi:
@@ -727,7 +732,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         """
         if not self.weights1:
 
-            if self.autocorr:
+            if self.autocorr or self.same_shotnoise:
                 return 1. * self.size1 * (self.size1 - 1.)
             return 1. * self.size1 * self.size2
 
@@ -751,14 +756,13 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                     from . import mpi
 
                 weights1, weights2 = self.weights1, self.weights2
-                if self.autocorr: weights2 = self.weights1
                 size1, size2 = len(weights1[0]), len(weights2[0])
                 indweights1, indweights2 = (get_individual_weights(w) for w in [weights1, weights2])
                 bitweights1, bitweights2 = (utils.reformat_bitarrays(*w[:self.n_bitwise_weights], dtype='i8') for w in [weights1, weights2])
                 sumw_auto = 0.
-                if self.autocorr:
-                    tmp = get_inverse_probability_weight(bitweights1, bitweights1, nrealizations=nrealizations, noffset=noffset, default_value=default_value, dtype=self.dtype)
-                    if indweights1 is not None: tmp *= indweights1 ** 2
+                if self.autocorr or self.same_shotnoise:
+                    tmp = get_inverse_probability_weight(bitweights1, bitweights2, nrealizations=nrealizations, noffset=noffset, default_value=default_value, dtype=self.dtype)
+                    if indweights1 is not None: tmp *= indweights1 * indweights2
                     sumw_auto = tmp.sum()
 
                 def slice_array(array, start, stop):
@@ -801,10 +805,13 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                     sumw = self.mpicomm.allreduce(sumw)
                 return sumw
 
-            def binned_weights(weights, pow=1):
+            def binned_weights(weights, weights2=None):
                 indweights = get_individual_weights(weights)
-                if indweights is not None: indweights **= pow
-                w = np.bincount(utils.popcount(*weights[:self.n_bitwise_weights]),
+                bitweights = weights[:self.n_bitwise_weights]
+                if weights2 is not None:
+                    indweights *= get_individual_weights(weights2)
+                    bitweights = [w1 & w2 for w1, w2 in zip(bitweights, weights2[:self.n_bitwise_weights])]
+                w = np.bincount(utils.popcount(*bitweights),
                                 weights=indweights, minlength=self.n_bitwise_weights * 8 + 1)
                 if self.with_mpi:
                     w = self.mpicomm.allreduce(w)
@@ -823,22 +830,23 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                 for c2_, w2_ in zip(c2, w2):
                     sumw_cross += w1_ * w2_ * (joint[c1_ - nalways][c2_ - nalways] if c2_ <= c1_ else joint[c2_ - nalways][c1_ - nalways])
             sumw_auto = 0
-            if self.autocorr:
-                w1sq, c1sq = binned_weights(self.weights1, pow=2)
-                for c1sq_, w1sq_ in zip(c1sq, w1sq):
-                    sumw_auto += joint[c1sq_ - nalways][c1sq_ - nalways] * w1sq_
+            if self.autocorr or self.same_shotnoise:
+                wsq, csq = binned_weights(self.weights1, self.weights2)
+                for csq_, wsq_ in zip(csq, wsq):
+                    sumw_auto += joint[csq_ - nalways][csq_ - nalways] * wsq_
             return sumw_cross - sumw_auto
 
         # individual_weights
-        if self.autocorr:
-            sumw_cross, sumw_auto = self.weights1[0].sum(), (self.weights1[0]**2).sum()
+        sumw_auto = 0.
+        if self.autocorr or self.same_shotnoise:
+            sumw_auto = np.sum(self.weights1[0] * self.weights2[0])
             if self.with_mpi:
-                sumw_cross, sumw_auto = self.mpicomm.allreduce(sumw_cross), self.mpicomm.allreduce(sumw_auto)
-            return sumw_cross**2 - sumw_auto
+                sumw_auto = self.mpicomm.allreduce(sumw_auto)
         sumw1, sumw2 = self.weights1[0].sum(), self.weights2[0].sum()
         if self.with_mpi:
             sumw1, sumw2 = self.mpicomm.allreduce(sumw1), self.mpicomm.allreduce(sumw2)
-        return sumw1 * sumw2
+        sumw_cross = sumw1 * sumw2
+        return sumw_cross - sumw_auto
 
     @property
     def sep(self):
