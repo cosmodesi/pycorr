@@ -16,6 +16,14 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     r"""
     Compute two-point counts and correlation function estimation, optionally with jackknife realizations.
 
+    Note
+    ----
+    To compute the cross-correlation of samples 1 and 2, provide ``data_positions2``
+    (and optionally ``randoms_positions2``, ``shifted_positions2`` for the selection function / shifted random catalogs of population 2).
+    To compute (with the correct normalization estimate) the auto-correlation of sample 1, but with 2 weights, provide ``data_positions1``
+    (but no ``data_positions2``, nor ``randoms_positions2`` and ``shifted_positions2``), ``data_weights1`` and ``data_weights2``;
+    ``randoms_weights2`` and ``shited_weights2`` default to ``randoms_weights1`` and ``shited_weights1``, resp.
+
     Parameters
     ----------
     mode : string

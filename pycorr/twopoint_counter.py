@@ -809,7 +809,8 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                 indweights = get_individual_weights(weights)
                 bitweights = weights[:self.n_bitwise_weights]
                 if weights2 is not None:
-                    indweights *= get_individual_weights(weights2)
+                    if indweights is not None:
+                        indweights *= get_individual_weights(weights2)
                     bitweights = [w1 & w2 for w1, w2 in zip(bitweights, weights2[:self.n_bitwise_weights])]
                 w = np.bincount(utils.popcount(*bitweights),
                                 weights=indweights, minlength=self.n_bitwise_weights * 8 + 1)
@@ -825,15 +826,15 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                 w2, c2 = binned_weights(self.weights2)
             max_occurences = noffset + max(c.max() if c.size else 0 for c in (c1, c2))
             joint = utils.joint_occurences(nrealizations, max_occurences=max_occurences, noffset=noffset + nalways, default_value=default_value)
-            sumw_cross = 0
-            for c1_, w1_ in zip(c1, w1):
-                for c2_, w2_ in zip(c2, w2):
-                    sumw_cross += w1_ * w2_ * (joint[c1_ - nalways][c2_ - nalways] if c2_ <= c1_ else joint[c2_ - nalways][c1_ - nalways])
             sumw_auto = 0
             if self.autocorr or self.same_shotnoise:
                 wsq, csq = binned_weights(self.weights1, self.weights2)
                 for csq_, wsq_ in zip(csq, wsq):
                     sumw_auto += joint[csq_ - nalways][csq_ - nalways] * wsq_
+            sumw_cross = 0
+            for c1_, w1_ in zip(c1, w1):
+                for c2_, w2_ in zip(c2, w2):
+                    sumw_cross += w1_ * w2_ * (joint[c1_ - nalways][c2_ - nalways] if c2_ <= c1_ else joint[c2_ - nalways][c1_ - nalways])
             return sumw_cross - sumw_auto
 
         # individual_weights
@@ -1319,7 +1320,7 @@ def normalization(weights1, weights2=None, weight_type='auto', weight_attrs=None
     if self.mpicomm is None and mpiroot is not None:
         raise TwoPointCounterError('mpiroot is not None, but no mpicomm provided')
     self._set_nthreads(nthreads)
-    self.dtype = np.dtype(dtype) if dtype is not None else dtype
+    self.dtype = None if dtype is None else np.dtype(dtype)
     self._size1 = self._size2 = None
     self.autocorr = weights2 is None or isinstance(weights2, (tuple, list)) and not weights2
     if self.with_mpi:
@@ -1346,11 +1347,12 @@ def normalization(weights1, weights2=None, weight_type='auto', weight_attrs=None
         weights2 = None
 
     self._set_weights(weights1, weights2, weight_type=weight_type, weight_attrs=weight_attrs, copy=False, mpiroot=mpiroot)
-    if self.weights1[self.n_bitwise_weights:]:
-        self.dtype = self.weights1[-1].dtype
-    else:
-        self.dtype = 'f8'
-    self.dtype = np.dtype(self.dtype)
+    if self.dtype is None:
+        if self.weights1[self.n_bitwise_weights:]:
+            self.dtype = self.weights1[-1].dtype
+        else:
+            self.dtype = 'f8'
+        self.dtype = np.dtype(self.dtype)
     return self.normalization()
 
 

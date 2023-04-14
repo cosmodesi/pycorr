@@ -215,7 +215,7 @@ def test_twopoint_counter(mode='s'):
     ref_edges = np.linspace(0., 100., 41)
     #ref_edges = np.linspace(0., 100., 11)
     if mode == 'theta':
-        ref_edges = np.linspace(1e-1, 10., 11) # below 1e-5 for float64 (1e-1 for float32), self-pairs are counted by Corrfunc
+        ref_edges = np.linspace(1e-1, 10., 11)  # below 1e-5 for float64 (1e-1 for float32), self-pairs are counted by Corrfunc
         # ref_edges = np.linspace(0., 80., 41)
     elif mode == 'smu':
         ref_edges = (ref_edges, np.linspace(-1., 1., 61))
@@ -507,6 +507,7 @@ def test_twopoint_counter(mode='s'):
                         norm_ref = np.sum(w1)**2 - np.sum(w1**2)
                     else:
                         norm_ref = np.sum(w1) * np.sum(w2)
+                    norm_ref = np.asarray(norm_ref).astype(dtype)
             else:
                 norm_ref = test.wnorm  # too lazy to recode
 
@@ -518,6 +519,7 @@ def test_twopoint_counter(mode='s'):
 
             for wattrs in [None, {'normalization': 'brute_force'}, {'normalization': 'brute_force_npy'}]:
                 assert np.allclose(run_normalization(pass_zero=True, weight_attrs=wattrs), 0.)
+                #print(run_normalization(weight_attrs=wattrs) / norm_ref - 1., wattrs)
                 assert np.allclose(run_normalization(weight_attrs=wattrs), norm_ref, rtol=1e-1 if wattrs is not None else 1e-10)
             assert np.allclose(run_normalization(weight_attrs={'normalization': 'brute_force'}), run_normalization(weight_attrs={'normalization': 'brute_force_npy'}),
                                rtol=1e-4 if itemsize <= 4 else 1e-9)
