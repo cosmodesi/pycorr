@@ -165,7 +165,7 @@ def _format_positions(positions, mode='auto', position_type='xyz', dtype=None, c
             pt = 'xyz'
         # Array of shape (3, N)
         for ip, p in enumerate(positions):
-            # Cast to the input dtype if exists (may be set by previous weights)
+            # Cast to the input dtype if exists (may be set by previous positions)
             positions[ip] = np.array(p, dtype=dtype, copy=copy)
 
         size = len(positions[0])

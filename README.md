@@ -38,7 +38,7 @@ Strict requirements are:
 
 To use Corrfunc as two-point-counting engine (only engine linked so far):
 
-  - git+https://github.com/adematti/Corrfunc@desi
+  - https://github.com/adematti/Corrfunc (desi branch)
 
 To run with MPI:
 
@@ -58,4 +58,5 @@ See [pycorr docs](https://py2pcf.readthedocs.io/en/latest/user/building.html).
 - Lehman Garrison and Manodeep Sinha for advice when implementing linear binning, and PIP and angular weights into Corrfunc.
 - Davide Bianchi for cross-checks of two-point counts with PIP weights.
 - Svyatoslav Trusov for script to compute jackknife covariance estimates based on https://arxiv.org/pdf/2109.07071.pdf: https://github.com/theonefromnowhere/JK_pycorr/blob/main/CF_JK_ST_conf.py.
-- Enrique Paillas & Seshadri Nadathur for suggestions about reconstructed 2pcf measurements 
+- Enrique Paillas & Seshadri Nadathur for suggestions about reconstructed 2pcf measurements
+- Craig Warner and James Lasker for spotting typos
