@@ -12,7 +12,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
                                 data_samples1=None, data_samples2=None, randoms_samples1=None, randoms_samples2=None, shifted_samples1=None, shifted_samples2=None,
                                 D1D2_weight_type='auto', D1R2_weight_type='auto', R1D2_weight_type='auto', R1R2_weight_type='auto', S1S2_weight_type='auto', D1S2_weight_type='auto', S1D2_weight_type='auto', S1R2_weight_type='auto',
                                 D1D2_twopoint_weights=None, D1R2_twopoint_weights=None, R1D2_twopoint_weights=None, R1R2_twopoint_weights=None, S1S2_twopoint_weights=None, D1S2_twopoint_weights=None, S1D2_twopoint_weights=None, S1R2_twopoint_weights=None,
-                                estimator='auto', boxsize=None, mpicomm=None, mpiroot=None, **kwargs):
+                                estimator='auto', boxsize=None, selection_attrs=None, mpicomm=None, mpiroot=None, **kwargs):
     r"""
     Compute two-point counts and correlation function estimation, optionally with jackknife realizations.
 
@@ -220,6 +220,13 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         or "brute_force_npy" (slower, using numpy only methods; both methods match within machine precision)
         loop over all pairs.
 
+    selection_attrs : dict, default=None
+        To select pairs to be counted, provide mapping between the quantity (string)
+        and the interval (tuple of floats),
+        e.g. ``{'rp': (0., 20.)}`` to select pairs with 'rp' between 0 and 20.
+        One can additionally provide e.g. 'counts': ['D1D2', 'D1R2'] to specify counts for which the selection is to be applied,
+        except analytic counts; defaults to all counts.
+
     los : string, default='midpoint'
         Line-of-sight to be used when ``mode`` is "smu", "rppi" or "rp"; one of:
 
@@ -292,6 +299,14 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
                         'S1S2': S1S2_twopoint_weights, 'D1S2': D1S2_twopoint_weights, 'S1D2': S1D2_twopoint_weights, 'S1R2': S1R2_twopoint_weights, 'R1S2': S1R2_twopoint_weights}
     weight_type = {'D1D2': D1D2_weight_type, 'D1R2': D1R2_weight_type, 'R1D2': R1D2_weight_type, 'R1R2': R1R2_weight_type,
                    'S1S2': S1S2_weight_type, 'D1S2': D1S2_weight_type, 'S1D2': S1D2_weight_type, 'S1R2': S1R2_weight_type, 'R1S2': S1R2_weight_type}  # RS and SR only used by 'residual' estimator
+    if selection_attrs is None:
+        selection_attrs = {name: None for name in twopoint_weights}
+    else:
+        selection_attrs = dict(selection_attrs)
+        counts = selection_attrs.pop('counts', None)
+        if counts is None:
+            counts = twopoint_weights.keys()
+        selection_attrs = {name: selection_attrs if name in counts else None for name in twopoint_weights}
 
     autocorr, same_shotnoise = False, False
     precomputed = {}
@@ -333,7 +348,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
             counts[label12] = AnalyticTwoPointCounter(mode, edges, boxsize, size1=size1, size2=size2)
             continue
         if log: logger.info('Computing two-point counts {}.'.format(label12))
-        twopoint_weights_kwargs = {'twopoint_weights': twopoint_weights[label12], 'weight_type': weight_type[label12]}
+        twopoint_kwargs = {'twopoint_weights': twopoint_weights[label12], 'weight_type': weight_type[label12], 'selection_attrs': selection_attrs[label12]}
         if autocorr:
             if label2[:-1] == label1[:-1]:
                 label2 = None
@@ -342,8 +357,8 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
                 label2 = label2.replace('2', '1')
         # In case of autocorrelation, los = firstpoint or endpoint, R1D2 = R1D1 should get the same angular weight as D1R2 = D2R1
         if (autocorr and label2 is not None) or (same_shotnoise and label2[:-1] != label1[:-1]):
-            for name in twopoint_weights_kwargs:
-                if twopoint_weights_kwargs[name] is None: twopoint_weights_kwargs[name] = locals()[name][label21]
+            for name in twopoint_kwargs:
+                if twopoint_kwargs[name] is None: twopoint_kwargs[name] = locals()[name][label21]
 
         jackknife_kwargs = {}
         with_jackknife = not is_none(samples[label1])
@@ -364,7 +379,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         counts[label12] = Counter(mode, edges, positions[label1], positions2=positions2,
                                   weights1=weights[label1], weights2=weights[label2] if label2 is not None else None,
                                   boxsize=boxsize, mpicomm=mpicomm, mpiroot=mpiroot,
-                                  **jackknife_kwargs, **twopoint_weights_kwargs, **kwargs)
+                                  **jackknife_kwargs, **twopoint_kwargs, **kwargs)
     return Estimator(**counts)
 
 

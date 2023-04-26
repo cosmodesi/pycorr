@@ -278,7 +278,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
 
     def __init__(self, mode, edges, positions1, positions2=None, weights1=None, weights2=None,
                  bin_type='auto', position_type='auto', weight_type='auto', weight_attrs=None,
-                 twopoint_weights=None, los='midpoint', boxsize=None, compute_sepsavg=True, dtype=None,
+                 twopoint_weights=None, selection_attrs=None, los='midpoint', boxsize=None, compute_sepsavg=True, dtype=None,
                  nthreads=None, mpicomm=None, mpiroot=None, **kwargs):
         r"""
         Initialize :class:`BaseTwoPointCounter`, and run actual two-point counts
@@ -384,7 +384,12 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             (separations) and ``weight`` (weight at given separation) as attributes
             (i.e. to be accessed through ``twopoint_weights.sep``, ``twopoint_weights.weight``)
             or as keys (i.e. ``twopoint_weights['sep']``, ``twopoint_weights['weight']``)
-            or as element (i.e. ``sep, weight = twopoint_weights``)
+            or as element (i.e. ``sep, weight = twopoint_weights``).
+
+        selection_attrs : dict, default=None
+            To select pairs to be counted, provide mapping between the quantity (string)
+            and the interval (tuple of floats),
+            e.g. ``{'rp': (0., 20.)}`` to select pairs with 'rp' between 0 and 20.
 
         los : string, default='midpoint'
             Line-of-sight to be used when ``mode`` is "smu", "rppi" or "rp"; one of:
@@ -437,6 +442,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         self._set_compute_sepsavg(compute_sepsavg)
         self._set_positions(positions1, positions2, position_type=position_type, dtype=dtype, copy=False, mpiroot=mpiroot)
         self._set_weights(weights1, weights2, weight_type=weight_type, twopoint_weights=twopoint_weights, weight_attrs=weight_attrs, copy=False, mpiroot=mpiroot)
+        self._set_selection(selection_attrs)
         self._set_zeros()
         self._set_reversible()
         self.wnorm = self.normalization()
@@ -657,6 +663,9 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             sep = np.cos(np.radians(np.array(sep, dtype=self.dtype)))
             argsort = np.argsort(sep)
             self.cos_twopoint_weights = TwoPointWeight(sep=np.array(sep[argsort], dtype=self.dtype), weight=np.array(weight[argsort], dtype=self.dtype))
+
+    def _set_selection(self, selection_attrs=None):
+        self.selection_attrs = {str(name): tuple(float(v) for v in value) for name, value in (selection_attrs or {}).items()}
 
     def _mpi_decompose(self):
         if self.with_mpi:
@@ -1157,7 +1166,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
     def __getstate__(self):
         state = {}
         for name in ['name', 'autocorr', 'is_reversible', 'seps', 'ncounts', 'wcounts', 'wnorm', 'size1', 'size2', 'edges', 'mode', 'bin_type',
-                     'boxsize', 'los_type', 'compute_sepsavg', 'weight_attrs', 'cos_twopoint_weights', 'dtype', 'attrs']:
+                     'boxsize', 'los_type', 'compute_sepsavg', 'weight_attrs', 'cos_twopoint_weights', 'selection_attrs', 'dtype', 'attrs']:
             if hasattr(self, name):
                 state[name] = getattr(self, name)
                 if name == 'cos_twopoint_weights' and state[name] is not None:
@@ -1169,6 +1178,8 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         if getattr(self, 'cos_twopoint_weights', None) is not None:
             self.cos_twopoint_weights = TwoPointWeight(*self.cos_twopoint_weights)
         if load:
+            if not hasattr(self, 'selection_attrs'):
+                self.selection_attrs = {}
             if hasattr(self, 'is_reversable'):
                 self.is_reversible = self.is_reversable
             # wnorm and wcounts were allowed to be int at some point...

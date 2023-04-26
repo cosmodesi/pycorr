@@ -69,7 +69,7 @@ def test_estimator(mode='s'):
             if mode == 'rppi':
                 list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': 'natural', 'boxsize': cboxsize, 'with_randoms': False, 'edges': (np.linspace(0, 100, 21), np.linspace(0, 20, 21))})
             if mode == 'smu':
-                list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': 'natural', 'boxsize': cboxsize, 'with_randoms': False, 'edges': (np.linspace(0, 100, 21), np.linspace(0, 1, 21))})
+                list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': 'natural', 'boxsize': cboxsize, 'with_randoms': False, 'edges': (np.linspace(0, 100, 21), np.linspace(0, 1, 21)), 'selection_attrs': {'rp': (0., 20.)}})
             for estimator in ['natural', 'landyszalay', 'davispeebles', 'weight', 'residual'][3:4]:
                 list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator})
                 if estimator not in ['weight']:

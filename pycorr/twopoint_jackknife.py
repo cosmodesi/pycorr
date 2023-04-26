@@ -321,7 +321,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
 
     def __init__(self, mode, edges, positions1, samples1, weights1=None, positions2=None, samples2=None, weights2=None,
                  bin_type='auto', position_type='auto', weight_type='auto', weight_attrs=None,
-                 twopoint_weights=None, los='midpoint', boxsize=None, compute_sepsavg=True, dtype=None,
+                 twopoint_weights=None, selection_attrs=None, los='midpoint', boxsize=None, compute_sepsavg=True, dtype=None,
                  nthreads=None, mpicomm=None, mpiroot=None, nprocs_per_real=1, samples=None, **kwargs):
         r"""
         Initialize :class:`JackknifeTwoPointCounter`.
@@ -428,6 +428,11 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
             or as keys (i.e. ``twopoint_weights['sep']``, ``twopoint_weights['weight']``)
             or as element (i.e. ``sep, weight = twopoint_weights``)
 
+        selection_attrs : dict, default=None
+            To select pairs to be counted, provide mapping between the quantity (string)
+            and the interval (tuple of floats),
+            e.g. ``{'rp': (0., 20.)}`` to select pairs with 'rp' between 0 and 20.
+
         los : string, default='midpoint'
             Line-of-sight to be used when ``mode`` is "smu", "rppi" or "rp"; one of:
 
@@ -482,6 +487,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         self._set_compute_sepsavg(compute_sepsavg)
         self._set_positions(positions1, positions2, position_type=position_type, dtype=dtype, copy=False, mpiroot=mpiroot)
         self._set_weights(weights1, weights2, weight_type=weight_type, twopoint_weights=twopoint_weights, weight_attrs=weight_attrs, copy=False, mpiroot=mpiroot)
+        self._set_selection(selection_attrs)
         self._set_samples(samples1, samples2, mpiroot=mpiroot)
         self._set_zeros()
         self._set_reversible()
@@ -582,7 +588,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
                         spositions2 = [position[mask2] for position in positions2]
                         sweights2 = [weight[mask2] for weight in weights2]
                 mpiroot = 0 if self.with_mpi else None
-                kwargs = {name: getattr(self, name) for name in ['bin_type', 'weight_attrs', 'twopoint_weights', 'boxsize', 'compute_sepsavg', 'nthreads']}
+                kwargs = {name: getattr(self, name) for name in ['bin_type', 'weight_attrs', 'twopoint_weights', 'selection_attrs', 'boxsize', 'compute_sepsavg', 'nthreads']}
                 kwargs['los'] = self.los_type
                 kwargs['position_type'] = 'rd' if self.mode == 'theta' else 'xyz'
                 kwargs.update(self.attrs)

@@ -54,7 +54,7 @@ def divide(sep, counts):
     return sep
 
 
-def ref_theta(edges, data1, data2=None, boxsize=None, los='midpoint', autocorr=False, **kwargs):
+def ref_theta(edges, data1, data2=None, boxsize=None, los='midpoint', autocorr=False, selection_attrs=None, **kwargs):
     counts = np.zeros(len(edges) - 1, dtype='f8')
     sep = np.zeros(len(edges) - 1, dtype='f8')
     if data2 is None: data2 = data1
@@ -83,7 +83,7 @@ def wrap(data, boxsize=None):
     return toret + data[3:]
 
 
-def ref_s(edges, data1, data2=None, boxsize=None, los='midpoint', autocorr=False, **kwargs):
+def ref_s(edges, data1, data2=None, boxsize=None, los='midpoint', autocorr=False, selection_attrs=None, **kwargs):
     counts = np.zeros(len(edges) - 1, dtype='f8')
     sep = np.zeros(len(edges) - 1, dtype='f8')
     if data2 is None: data2 = data1
@@ -107,7 +107,7 @@ def ref_s(edges, data1, data2=None, boxsize=None, los='midpoint', autocorr=False
     return counts, divide(sep, counts)
 
 
-def ref_smu(edges, data1, data2=None, boxsize=None, weight_type=None, los='midpoint', autocorr=False, **kwargs):
+def ref_smu(edges, data1, data2=None, boxsize=None, weight_type=None, los='midpoint', autocorr=False, selection_attrs=None, **kwargs):
     if los in ['midpoint', 'firstpoint', 'endpoint']:
         los = los[:1]
     else:
@@ -116,6 +116,8 @@ def ref_smu(edges, data1, data2=None, boxsize=None, weight_type=None, los='midpo
     sep = np.zeros([len(e) - 1 for e in edges], dtype='f8')
     if data2 is None: data2 = data1
     data1, data2 = wrap(data1, boxsize=boxsize), wrap(data2, boxsize=boxsize)
+    selection_attrs = dict(selection_attrs or {})
+    rp_limits = selection_attrs.get('rp', None)
     for i1, xyzw1 in enumerate(zip(*data1)):
         for i2, xyzw2 in enumerate(zip(*data2)):
             if autocorr and i2 == i1: continue
@@ -140,6 +142,9 @@ def ref_smu(edges, data1, data2=None, boxsize=None, weight_type=None, los='midpo
                     d = los
                 mu = dotproduct_normalized(d, dxyz)
                 if dist == 0.: mu = 0.
+                if rp_limits is not None:
+                    rp2 = (1. - mu**2) * dist**2
+                    if rp2 < rp_limits[0]**2 or rp2 >= rp_limits[1]**2: continue
                 if edges[1][0] < mu < edges[1][-1]:
                     # print(dxyz, xyz1, xyz2, idxyz)
                     ind = np.searchsorted(edges[0], dist, side='right', sorter=None) - 1
@@ -151,7 +156,7 @@ def ref_smu(edges, data1, data2=None, boxsize=None, weight_type=None, los='midpo
     return counts, divide(sep, counts)
 
 
-def ref_rppi(edges, data1, data2=None, boxsize=None, weight_type=None, los='midpoint', autocorr=False, **kwargs):
+def ref_rppi(edges, data1, data2=None, boxsize=None, weight_type=None, los='midpoint', autocorr=False, selection_attrs=None, **kwargs):
     if los in ['midpoint', 'firstpoint', 'endpoint']:
         los = los[:1]
     else:
@@ -280,15 +285,22 @@ def test_twopoint_counter(mode='s'):
                 if mode not in ['theta', 'rp']:
                     for boxsize in [cboxsize, (201., 300., 300.)]:
                         list_options.append({'autocorr': autocorr, 'boxsize': boxsize, 'dtype': dtype, 'isa': isa})
-                        for los in ['x', 'y']:
-                            list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'boxsize': boxsize, 'los': los, 'dtype': dtype, 'isa': isa})
+                        list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'boxsize': boxsize, 'los': 'x', 'dtype': dtype, 'isa': isa})
+                        list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'boxsize': boxsize, 'los': 'y', 'dtype': dtype, 'isa': isa})
+
                 # los
                 if mode in ['smu', 'rppi']:
                     list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'los': 'firstpoint', 'edges': edges, 'dtype': dtype, 'isa': isa})
                     list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'los': 'endpoint', 'edges': edges, 'dtype': dtype, 'isa': isa})
                     if itemsize > 4:
-                        list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'los': 'endpoint', 'twopoint_weights': twopoint_weights2, 'dtype': dtype, 'isa': isa})
+                        list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'los': 'firstpoint', 'twopoint_weights': twopoint_weights2, 'dtype': dtype, 'isa': isa})
                         list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'los': 'endpoint', 'twopoint_weights': twopoint_weights, 'dtype': dtype, 'isa': isa})
+
+                # selection
+                if mode == 'smu':
+                    for los in ['firstpoint', 'endpoint', 'midpoint']:
+                        list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'dtype': dtype, 'isa': isa, 'los': los, 'selection_attrs': {'rp': (0., 10.)}})
+                    list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'boxsize': cboxsize, 'los': 'y', 'dtype': dtype, 'isa': isa, 'selection_attrs': {'rp': (0., 10.)}})
 
                 # mpi
                 if mpi:
@@ -319,6 +331,7 @@ def test_twopoint_counter(mode='s'):
             dtype = options.pop('dtype', None)
             options_ref = options.copy()
             weight_attrs = options_ref.pop('weight_attrs', {}).copy()
+            selection_attrs = options_ref.pop('selection_attrs', {}).copy()
             compute_sepavg = options_ref.pop('compute_sepsavg', True)
             options_ref.pop('isa', 'fallback')
 
@@ -369,7 +382,7 @@ def test_twopoint_counter(mode='s'):
             itemsize = np.dtype('f8' if dtype is None else dtype).itemsize
             tol = {'atol': 1e-5, 'rtol': 2e-1 if twopoint_weights is not None else 1e-2} if itemsize <= 4 else {'atol': 1e-8, 'rtol': 1e-6}
 
-            wcounts_ref, sep_ref = ref_func(edges, data1_ref, data2=data2_ref if not autocorr else None, n_bitwise_weights=n_bitwise_weights, twopoint_weights=twopoint_weights, autocorr=autocorr, **options_ref, **weight_attrs)
+            wcounts_ref, sep_ref = ref_func(edges, data1_ref, data2=data2_ref if not autocorr else None, n_bitwise_weights=n_bitwise_weights, twopoint_weights=twopoint_weights, autocorr=autocorr, selection_attrs=selection_attrs, **options_ref, **weight_attrs)
 
             if bitwise_type is not None and n_bitwise_weights > 0:
 
