@@ -108,10 +108,13 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                   'attrs_pair_weights': weight_attrs, 'verbose': self.attrs.get('verbose', False),
                   'isa': self.attrs.get('isa', 'fastest')}  # to be set to 'fastest' when bitwise weights included in all kernels
 
+        with_auto_pairs = self.edges[0][0] <= 0.
+
         if self.selection_attrs:
             if self.mode != 'smu':
                 raise NotImplementedError('selection only available for mode smu')
             kwargs['attrs_selection'] = self.selection_attrs
+            with_auto_pairs &= all(limits[0] <= 0. for limits in self.selection_attrs.values())
 
         positions1 = dpositions1
         positions2 = dpositions2
@@ -252,7 +255,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                 with np.errstate(divide='ignore', invalid='ignore'):
                     self.sep = self.mpicomm.allreduce(self.sep * wcounts) / self.wcounts
 
-        if self.edges[0][0] <= 0.:  # remove auto-pairs
+        if with_auto_pairs:  # remove auto-pairs
             index_zero = 0
             if self.mode in ['smu', 'rppi']: index_zero = self.shape[1] // 2  # mu = 0 bin
             self.ncounts.flat[index_zero] -= self.size1

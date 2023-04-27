@@ -298,8 +298,9 @@ def test_twopoint_counter(mode='s'):
 
                 # selection
                 if mode == 'smu':
-                    for los in ['firstpoint', 'endpoint', 'midpoint']:
-                        list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'dtype': dtype, 'isa': isa, 'los': los, 'selection_attrs': {'rp': (0., 10.)}})
+                    list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'dtype': dtype, 'isa': isa, 'los': 'firstpoint', 'selection_attrs': {'rp': (0., 10.)}})
+                    list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'dtype': dtype, 'isa': isa, 'los': 'endpoint', 'selection_attrs': {'rp': (10., np.inf)}})
+                    list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'dtype': dtype, 'isa': isa, 'los': 'midpoint', 'selection_attrs': {'rp': (40., 100.)}})
                     list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'boxsize': cboxsize, 'los': 'y', 'dtype': dtype, 'isa': isa, 'selection_attrs': {'rp': (0., 10.)}})
 
                 # mpi
@@ -972,7 +973,6 @@ def test_rebin():
 if __name__ == '__main__':
 
     setup_logging()
-
     test_mu1()
 
     for mode in ['theta', 's', 'smu', 'rppi', 'rp']:

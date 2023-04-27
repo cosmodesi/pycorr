@@ -481,8 +481,8 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         ----------
         seps : float, array, default=None
             Separations where to interpolate the correlation function.
-            Values outside :attr:`sepavg` are set to the first/last correlation function value;
-            outside :attr:`edges` to nan.
+            Values outside :attr:`sepavg` are linearly extrapolated;
+            outside :attr:`edges` are set to nan.
             Defaults to :attr:`sepavg` (no interpolation performed).
 
         return_sep : bool, default=False
@@ -555,11 +555,12 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         mask_seps = tuple((sep >= self.edges[idim][0]) & (sep <= self.edges[idim][-1]) for idim, sep in enumerate(seps))
         seps_masked = tuple(sep[mask] for sep, mask in zip(seps, mask_seps))
         indices = (Ellipsis, mask_seps[0]) if ndim == 1 else np.ix_(*mask_seps)
-        if all(sep_masked.size for sep_masked in seps_masked):
+
+        if all(sep_masked.size for sep_masked in seps_masked) and all(sepavg.size for sepavg in sepsavg):
             if ndim == 1:
 
                 def interp(array):
-                    return np.array([UnivariateSpline(sepsavg[0], arr, k=1, s=0, ext='const')(seps_masked[0]) for arr in array], dtype=array.dtype)
+                    return np.array([UnivariateSpline(sepsavg[0], arr, k=1, s=0, ext='extrapolate')(seps_masked[0]) for arr in array], dtype=array.dtype)
 
             else:
                 i_seps = tuple(np.argsort(sep) for sep in seps_masked)

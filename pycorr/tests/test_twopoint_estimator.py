@@ -51,7 +51,6 @@ def test_multipoles():
 def test_estimator(mode='s'):
 
     from pycorr import KMeansSubsampler
-
     list_engine = ['corrfunc']
     edges = np.linspace(1, 100, 10)
     size = 1000
@@ -61,29 +60,40 @@ def test_estimator(mode='s'):
     twopoint_weights = TwoPointWeight(np.logspace(-4, 0, 40), np.linspace(4., 1., 40))
 
     list_options = []
+
     for autocorr in [False, True]:
         for with_shifted in [False, True]:
+
             list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'weights_one': ['D1', 'R2']})
             if mode not in ['theta', 'rp']:
                 list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': 'natural', 'boxsize': cboxsize, 'with_randoms': False})
             if mode == 'rppi':
                 list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': 'natural', 'boxsize': cboxsize, 'with_randoms': False, 'edges': (np.linspace(0, 100, 21), np.linspace(0, 20, 21))})
-            if mode == 'smu':
-                list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': 'natural', 'boxsize': cboxsize, 'with_randoms': False, 'edges': (np.linspace(0, 100, 21), np.linspace(0, 1, 21)), 'selection_attrs': {'rp': (0., 20.)}})
-            for estimator in ['natural', 'landyszalay', 'davispeebles', 'weight', 'residual'][3:4]:
+
+            for estimator in ['natural', 'landyszalay', 'davispeebles', 'weight', 'residual']:
+
                 list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator})
                 if estimator not in ['weight']:
                     list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator})
+
                 # pip
                 list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 0})
                 list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 1, 'n_bitwise_weights': 1, 'compute_sepsavg': False})
                 list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 1, 'n_bitwise_weights': 1})
+
                 # twopoint weights
                 list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'twopoint_weights': twopoint_weights})
+
                 # los
                 if mode in ['smu', 'rppi']:
                     list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'los': 'firstpoint', 'twopoint_weights': twopoint_weights})
                     list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'los': 'endpoint'})
+
+                # selection
+                if mode == 'smu':
+                    list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'los': 'midpoint', 'selection_attrs': {'rp': (5., np.inf)}})
+                    if estimator == 'natural':
+                        list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'boxsize': cboxsize, 'with_randoms': False, 'selection_attrs': {'rp': (5., np.inf)}})
 
     mpi = False
     try:
@@ -199,12 +209,12 @@ def test_estimator(mode='s'):
                 return TwoPointCorrelationFunction(mode=mode, edges=edges, engine=engine, data_positions1=None if pass_none else data_positions1, data_positions2=None if pass_none or autocorr else data_positions2,
                                                    data_weights1=None if pass_none else data_weights1, data_weights2=None if pass_none or autocorr and not same_shotnoise else data_weights2,
                                                    randoms_positions1=randoms_positions1 if with_randoms and not pass_none else None, randoms_positions2=None if pass_none or autocorr else randoms_positions2,
-                                                   randoms_weights1=randoms_weights1 if with_randoms and not pass_none else None, randoms_weights2=None if pass_none and not same_shotnoise or autocorr else randoms_weights2,
+                                                   randoms_weights1=randoms_weights1 if with_randoms and not pass_none else None, randoms_weights2=None if (pass_none or autocorr) and not same_shotnoise or not with_randoms else randoms_weights2,
                                                    shifted_positions1=shifted_positions1 if with_shifted and not pass_none else None, shifted_positions2=None if pass_none or autocorr else shifted_positions2,
-                                                   shifted_weights1=shifted_weights1 if with_shifted and not pass_none else None, shifted_weights2=None if pass_none or autocorr and not same_shotnoise else shifted_weights2,
-                                                   data_samples1=None if pass_none else data_samples1, data_samples2=None if pass_none else data_samples2,
-                                                   randoms_samples1=None if pass_none else randoms_samples1, randoms_samples2=None if pass_none else randoms_samples2,
-                                                   shifted_samples1=None if pass_none else shifted_samples1, shifted_samples2=None if pass_none else shifted_samples2,
+                                                   shifted_weights1=shifted_weights1 if with_shifted and not pass_none else None, shifted_weights2=None if (pass_none or autocorr) and not same_shotnoise or not with_shifted else shifted_weights2,
+                                                   data_samples1=None if pass_none else data_samples1, data_samples2=None if pass_none or autocorr else data_samples2,
+                                                   randoms_samples1=None if pass_none else randoms_samples1, randoms_samples2=None if pass_none or autocorr else randoms_samples2,
+                                                   shifted_samples1=None if pass_none else shifted_samples1, shifted_samples2=None if pass_none or autocorr else shifted_samples2,
                                                    **options, **kwargs)
 
             def assert_allclose(res1, res2):
@@ -213,14 +223,9 @@ def test_estimator(mode='s'):
                 assert np.allclose(res2.wnorm, res1.wnorm, **tol)
 
             def assert_allclose_estimators(res1, res2):
-                mask = np.isfinite(res2.corr)
-                assert np.all(mask == np.isfinite(res1.corr))
-                assert np.allclose(res1.corr[mask], res2.corr[mask])
-                mask = np.isnan(res1.sep)
+                assert np.allclose(res2.corr, res1.corr, equal_nan=True)
+                assert np.allclose(res2.sep, res1.sep, equal_nan=True)
                 assert not np.any(res1.sep == 0.)
-                assert np.all(np.isnan(res2.sep) == np.isnan(res2.corr))
-                assert np.all(np.isfinite(res2.sep) == np.isfinite(res1.sep))
-                assert np.allclose(res1.sep[mask], res2.sep[mask], equal_nan=True)
 
             estimator_nojackknife = run_nojackknife()
             estimator_jackknife = run_jackknife()
@@ -239,6 +244,7 @@ def test_estimator(mode='s'):
                 #print(estimator_same_shotnoise.D1S2.wcounts / estimator_nojackknife.D1S2.wcounts, estimator_same_shotnoise.D1S2.wnorm, estimator_nojackknife.D1S2.wnorm)
                 #print(estimator_same_shotnoise.R1R2.wcounts / estimator_nojackknife.R1R2.wcounts, estimator_same_shotnoise.R1R2.wnorm, estimator_nojackknife.R1R2.wnorm)
                 assert_allclose_estimators(estimator_same_shotnoise, estimator_nojackknife)
+                estimator_same_shotnoise2 = estimator_same_shotnoise
                 estimator_same_shotnoise = run_jackknife(same_shotnoise=True)
                 for label1, label2 in estimator_same_shotnoise.requires(with_reversed=True, with_shifted=estimator_same_shotnoise.with_shifted, join=None):
                     if label1[:-1] == label2[:-1]:
@@ -246,6 +252,11 @@ def test_estimator(mode='s'):
                         if getattr(estimator_same_shotnoise, label12).name != 'analytic':
                             assert getattr(estimator_same_shotnoise, label12).same_shotnoise
                             assert not getattr(estimator_same_shotnoise, label12).autocorr
+                #for i in range(estimator_jackknife.nrealizations):
+                    #print(i, estimator_same_shotnoise.realization(i).R1R2.wcounts / estimator_jackknife.realization(i).R1R2.wcounts)
+                    #print(i, estimator_same_shotnoise.realization(i).D1R2.wcounts / estimator_jackknife.realization(i).D1R2.wcounts)
+                    #print(i, estimator_same_shotnoise.realization(i).D1R2.size2, estimator_jackknife.realization(i).D1R2.size2)
+                assert_allclose_estimators(estimator_same_shotnoise, estimator_same_shotnoise2)
                 assert_allclose_estimators(estimator_same_shotnoise, estimator_jackknife)
 
             if mode in ['theta', 'rp']:
@@ -266,7 +277,6 @@ def test_estimator(mode='s'):
             if estimator in ['landyszalay', 'davispeebles', 'natural', 'weight']:
                 D1D2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:npos], positions2=None if autocorr else data2[:npos],
                                        weights1=data1[npos:-1], weights2=None if autocorr else data2[npos:-1], twopoint_weights=twopoint_weights, **options_counts)
-
                 assert_allclose(D1D2, estimator_jackknife.D1D2)
             if estimator in ['residual']:
                 D1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=data1[:npos], positions2=randoms1[:npos] if autocorr else randoms2[:npos],
@@ -281,7 +291,7 @@ def test_estimator(mode='s'):
                     S1R2 = TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=shifted1[:npos], positions2=randoms1[:npos] if autocorr else randoms2[:npos],
                                            weights1=shifted1[npos:-1], weights2=randoms1[npos:-1] if autocorr else randoms2[npos:-1], **options_counts)
                     assert_allclose(S1R2, estimator_jackknife.S1R2)
-                # for following computation
+                # For following computation
                 tmp_randoms1 = shifted1
                 tmp_randoms2 = shifted2
                 tmp_twopoint_weights = None
@@ -383,7 +393,7 @@ def test_estimator(mode='s'):
                     sep = test.edges[0][isep:isep + 2]
                     arrays = test(sep), test(sep[::-1])
                     if not isjkn: arrays = [[array] for array in arrays]
-                    for array1, array2 in zip(*arrays): assert np.allclose(array1, array2[::-1], atol=0)
+                    for array1, array2 in zip(*arrays): assert np.allclose(array1, array2[::-1], atol=0, equal_nan=True)
                     zero = test.corr.flat[0]
                     test.corr.flat[0] = np.nan  # to test ignore_nan
                     test[::test.shape[0]].get_corr()
@@ -392,7 +402,7 @@ def test_estimator(mode='s'):
                         # smu
                         arrays = test(sep, [0., 0.4]), test(sep[::-1], [0.4, 0.])
                         if not isjkn: arrays = [[array] for array in arrays]
-                        for array1, array2 in zip(*arrays): assert np.allclose(array1, array2[::-1, ::-1], atol=0)
+                        for array1, array2 in zip(*arrays): assert np.allclose(array1, array2[::-1, ::-1], atol=0, equal_nan=True)
                         test.save_txt(fn_txt)
                         tmp = np.loadtxt(fn_txt, unpack=True)
                         mids = np.meshgrid(*[test.sepavg(axis=axis, method='mid') for axis in range(test.ndim)], indexing='ij')
@@ -402,7 +412,7 @@ def test_estimator(mode='s'):
                         if isjkn: assert test[::test.shape[0]].get_corr(ells=(0, 2), return_sep=False)[1].ndim == 2
                         assert np.isnan(test(ell=2)).any()
                         assert not np.isnan(test(ell=2, ignore_nan=True)).any()
-                        assert np.allclose(test(sep, ells=(0, 2, 4)), test(sep, mode='poles'), atol=0)
+                        assert np.allclose(test(sep, ells=(0, 2, 4)), test(sep, mode='poles'), atol=0, equal_nan=True)
                         arrays = test(5., ell=2), test([5.] * 3, ell=2), test([5.] * 4, ells=(0, 2, 4)), test([5.] * 4, [0.1, 0.2])  # corr, and std if jackknife
                         if not isjkn: arrays = [[array] for array in arrays]
                         for array in arrays[0]: assert array.shape == ()
@@ -411,8 +421,8 @@ def test_estimator(mode='s'):
                         for array in arrays[3]: assert array.shape == (4, 2)
                         arrays = test(sep, ell=2), test(sep[::-1], ell=2), test(sep, ell=[0, 2]), test(sep[::-1], ell=[2, 0]), test(sep, [0., 0.4]), test(sep[::-1], [0.4, 0.])
                         if not isjkn: arrays = [[array] for array in arrays]
-                        for array1, array2 in zip(*arrays[:2]): assert np.allclose(array1, array2[::-1], atol=0)
-                        for array1, array2 in zip(*arrays[2:4]): assert np.allclose(array1, array2[::-1, ::-1], atol=0)
+                        for array1, array2 in zip(*arrays[:2]): assert np.allclose(array1, array2[::-1], atol=0, equal_nan=True)
+                        for array1, array2 in zip(*arrays[2:4]): assert np.allclose(array1, array2[::-1, ::-1], atol=0, equal_nan=True)
                         test.save_txt(fn_txt, ells=(0, 2))
                         tmp = np.loadtxt(fn_txt, unpack=True)
                         assert np.allclose(tmp[0], test.sepavg(method='mid'))
@@ -429,11 +439,11 @@ def test_estimator(mode='s'):
                         for array in arrays[1]: assert array.shape == (3, )
                         for array in arrays[2]: assert array.shape == (2, 4)
                         for array in arrays[3]: assert array.shape == (2, 4)
-                        for array1, array2 in zip(*arrays[2:4]): assert np.allclose(array1, array2, atol=0)
+                        for array1, array2 in zip(*arrays[2:4]): assert np.allclose(array1, array2, atol=0, equal_nan=True)
                         arrays = test(sep, wedges=(-1., -0.8)), test(sep[::-1], wedges=(-1., -0.8)), test(sep, wedges=(0.1, 0.3, 0.8)), test(sep[::-1], wedges=((0.3, 0.8), (0.1, 0.3)))
                         if not isjkn: arrays = [[array] for array in arrays]
-                        for array1, array2 in zip(*arrays[:2]): assert np.allclose(array1, array2[::-1], atol=0)
-                        for array1, array2 in zip(*arrays[2:4]): assert np.allclose(array1, array2[::-1, ::-1], atol=0)
+                        for array1, array2 in zip(*arrays[:2]): assert np.allclose(array1, array2[::-1], atol=0, equal_nan=True)
+                        for array1, array2 in zip(*arrays[2:4]): assert np.allclose(array1, array2[::-1, ::-1], atol=0, equal_nan=True)
                         test.save_txt(fn_txt, wedges=(0.1, 0.3, 0.8))
                         tmp = np.loadtxt(fn_txt, unpack=True)
                         assert np.allclose(tmp[0], test.sepavg(method='mid'))
@@ -445,7 +455,7 @@ def test_estimator(mode='s'):
                         # rppi
                         arrays = test(sep, [0., 0.4]), test(sep[::-1], [0.4, 0.])
                         if not isjkn: arrays = [[array] for array in arrays]
-                        for array1, array2 in zip(*arrays): assert np.allclose(array1, array2[::-1, ::-1], atol=0)
+                        for array1, array2 in zip(*arrays): assert np.allclose(array1, array2[::-1, ::-1], atol=0, equal_nan=True)
                         test.save_txt(fn_txt)
                         tmp = np.loadtxt(fn_txt, unpack=True)
                         mids = np.meshgrid(*[test.sepavg(axis=axis, method='mid') for axis in range(test.ndim)], indexing='ij')
@@ -462,8 +472,8 @@ def test_estimator(mode='s'):
                         for array in arrays[2]: assert array.shape == (4, 2)
                         arrays = test(sep, pimax=60), test(sep[::-1], pimax=60)
                         if not isjkn: arrays = [[array] for array in arrays]
-                        for array1, array2 in zip(*arrays): assert np.allclose(array1, array2[::-1], atol=0)
-                        assert np.allclose(test(sep, pimax=40), test(sep, mode='wp'), atol=0)
+                        for array1, array2 in zip(*arrays): assert np.allclose(array1, array2[::-1], atol=0, equal_nan=True)
+                        assert np.allclose(test(sep, pimax=40), test(sep, mode='wp'), atol=0, equal_nan=True)
                         test.save_txt(fn_txt, pimax=40.)
                         tmp = np.loadtxt(fn_txt, unpack=True)
                         assert np.allclose(tmp[0], test.sepavg(method='mid'))
@@ -561,7 +571,6 @@ if __name__ == '__main__':
     setup_logging()
 
     #test_s()
-
     test_multipoles()
     for mode in ['theta', 's', 'smu', 'rppi', 'rp']:
         test_estimator(mode=mode)

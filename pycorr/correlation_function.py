@@ -323,7 +323,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         for name in ['D', 'R', 'S']:
             if is_none(positions[name + '2']): positions[name + '2'] = positions[name + '1']
             if is_none(weights[name + '2']): weights[name + '2'] = weights[name + '1']
-            if is_none(samples[name + '2']): samples[name + '2'] = weights[name + '1']
+            if is_none(samples[name + '2']): samples[name + '2'] = samples[name + '1']
         if log: logger.info('Assuming same shot noise.')
 
     counts = {}
