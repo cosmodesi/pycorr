@@ -108,6 +108,20 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                   'attrs_pair_weights': weight_attrs, 'verbose': self.attrs.get('verbose', False),
                   'isa': self.attrs.get('isa', 'fastest')}  # to be set to 'fastest' when bitwise weights included in all kernels
 
+        refine_factors = self.attrs.get('refine_factors', None)
+        if refine_factors is not None:
+            nfactors = 3 - int(self.mode == 'theta')
+            if not utils.is_sequence(refine_factors):
+                refine_factors = [refine_factors] * nfactors
+            if len(refine_factors) != nfactors:
+                raise TwoPointCounterError('Provide {:d} refine factors for mode {} (found {:d})'.format(nfactors, self.mode, len(refine_factors)))
+            refine_factors = [int(factor) for factor in refine_factors]
+            if self.mode == 'theta':
+                bases = ['ra', 'dec']
+            else:
+                bases = ['xbin', 'ybin', 'zbin']
+            for base, factor in zip(bases, refine_factors): kwargs[base + '_refine_factor'] = int(factor)
+
         with_auto_pairs = self.edges[0][0] <= 0.
 
         if self.selection_attrs:

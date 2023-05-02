@@ -355,18 +355,51 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         return new
 
     @classmethod
-    def sum(cls, *others):
+    def sum(cls, *others, exclude=None, uniques=True):
         """
         Sum input estimators (their two-point counts, actually).
         See e.g. https://arxiv.org/pdf/1905.01133.pdf for a use case.
         Input two-point estimators must have same edges for this operation to make sense
         (no checks performed).
+
+        Parameters
+        ----------
+        exclude : list, default=None
+            List of counts to exclude, e.g. ['D1D2'].
+
+        uniques : bool, default=True
+            If ``True``, sum only unique (in the sense of same :attr:`BaseTwoPointCounter.wcounts` and :attr:`BaseTwoPointCounter.wnorm`) count instances.
+
+        Returns
+        -------
+        new : BaseTwoPointEstimator
         """
         if len(others) == 1 and utils.is_sequence(others[0]):
             others = others[0]
+
+        def select(counts):
+            return counts
+
+        if uniques:
+
+            def eq(count1, count2):
+                return all(np.allclose(getattr(count2, name), getattr(count1, name), atol=0., rtol=0., equal_nan=True) for name in ['wcounts', 'wnorm'])
+
+            def select(counts):
+                toret = []
+                for count in counts:
+                    if not any(eq(count2, count) for count2 in toret):
+                        toret.append(count)
+                return toret
+
+            exclude = []
+
+        if not utils.is_sequence(exclude):
+            exclude = [exclude]
         new = others[0].copy()
         for name in new.count_names:
-            setattr(new, name, getattr(new, name).sum(*[getattr(other, name) for other in others]))
+            if name not in exclude:
+                setattr(new, name, getattr(new, name).sum(*select([getattr(other, name) for other in others])))
         new.run()
         return new
 

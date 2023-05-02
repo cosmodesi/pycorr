@@ -104,7 +104,7 @@ def test_estimator(mode='s'):
     if mpi:
         list_options.append({'mpicomm': mpi.COMM_WORLD})
 
-    # list_options.append({'weight_type':'inverse_bitwise','n_bitwise_weights':2})
+    # list_options.append({'weight_type':'inverse_bitwise', 'n_bitwise_weights':2})
     ref_edges = np.linspace(0, 100, 11)
     if mode == 'smu':
         ref_edges = (ref_edges, np.linspace(-1, 1, 21))
@@ -524,6 +524,14 @@ def test_estimator(mode='s'):
                     assert np.all((test3.sepavg(axis=0) <= test2.edges[0][test2.edges[0] >= sepmax][0]) | np.isnan(test3.sepavg(axis=0)))
                     test2 = test + test
                     assert np.allclose(test2.corr, test.corr, equal_nan=True)
+                    if hasattr(test, 'D1D2') and hasattr(test, 'R1R2'):
+                        test1 = test.deepcopy()
+                        test1.R1R2.wcounts += 1.
+                        test2 = test + test1
+                        assert np.allclose(test2.D1D2.wcounts, test.D1D2.wcounts)
+                        assert test2.D1D2.size1 > 0
+                        assert np.allclose(test2.R1R2.wcounts, 2 * test.R1R2.wcounts + 1.)
+                        assert test2.R1R2.size1 == 0
                     test2 = test.concatenate_x(test[:test.shape[0] // 2], test[test.shape[0] // 2:])
                     assert np.allclose(test2.corr, test.corr, equal_nan=True)
                     if 'davispeebles' not in test.name:
