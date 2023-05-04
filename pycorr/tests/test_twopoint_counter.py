@@ -279,7 +279,7 @@ def test_twopoint_counter(mode='s'):
                 # twopoint weights
                 if itemsize > 4:
                     list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'twopoint_weights': twopoint_weights, 'dtype': dtype, 'isa': isa})
-                    list_options.append({'autocorr': autocorr, 'twopoint_weights': twopoint_weights, 'los': 'y', 'dtype': dtype, 'isa': isa, 'nthreads': nthreads, 'refine_factors': (3, 3) if mode == 'theta' else (3, 3, 3)})
+                    list_options.append({'autocorr': autocorr, 'twopoint_weights': twopoint_weights, 'los': 'y', 'dtype': dtype, 'isa': isa, 'nthreads': nthreads, 'mesh_refine_factors': (3, 3) if mode == 'theta' else (3, 3, 3)})
 
                 # boxsize
                 if mode not in ['theta', 'rp']:
@@ -335,7 +335,7 @@ def test_twopoint_counter(mode='s'):
             selection_attrs = options_ref.pop('selection_attrs', {}).copy()
             compute_sepavg = options_ref.pop('compute_sepsavg', True)
             options_ref.pop('isa', 'fallback')
-            options_ref.pop('refine_factors', None)
+            options_ref.pop('mesh_refine_factors', None)
 
             def setdefaultnone(di, key, value):
                 if di.get(key, None) is None:
