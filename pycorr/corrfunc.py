@@ -108,6 +108,9 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                   'attrs_pair_weights': weight_attrs, 'verbose': self.attrs.get('verbose', False),
                   'isa': self.attrs.get('isa', 'fastest')}  # to be set to 'fastest' when bitwise weights included in all kernels
 
+        if self.attrs.get('gpu', False):
+            kwargs['gpu'] = True
+
         refine_factors = self.attrs.get('mesh_refine_factors', None)
         if refine_factors is not None:
             nfactors = 3 - int(self.mode == 'theta')
