@@ -952,7 +952,9 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             elif len(xlim) == 3:
                 factor = int(xlim[2] / np.diff(self.edges[iaxis]).mean() + 0.5)
                 if not np.allclose(np.diff(self.edges[iaxis][::factor]), xlim[2]):
-                    raise ValueError('Unable to match step {} with edges {}'.format(xlim[2], self.edges[iaxis]))
+                    import warnings
+                    with np.printoptions(threshold=40):
+                        warnings.warn('Unable to match step {} with edges {}'.format(xlim[2], self.edges[iaxis]))
                 slices.append(slice(0, (self.shape[iaxis] // factor) * factor, factor))
             elif len(xlim) != 2:
                 raise ValueError('Input limits must be a tuple (min, max) or (min, max, step)')
