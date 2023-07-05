@@ -524,6 +524,11 @@ def test_estimator(mode='s'):
                     assert np.all((test3.sepavg(axis=0) <= test2.edges[0][test2.edges[0] >= sepmax][0]) | np.isnan(test3.sepavg(axis=0)))
                     test2 = test + test
                     assert np.allclose(test2.corr, test.corr, equal_nan=True)
+                    if test2.ndim >= 2:
+                        diff = np.diff(test2.edges[1])
+                        if np.allclose(diff, diff[0]):
+                            test2.select(None, (-np.inf, np.inf, diff[0] * 2.))
+                            assert np.allclose(test2.edges[1], test.edges[1][::2])
                     if hasattr(test, 'D1D2') and hasattr(test, 'R1R2'):
                         test1 = test.deepcopy()
                         test1.R1R2.wcounts += 1.

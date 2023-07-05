@@ -938,12 +938,25 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
 
         .. code-block:: python
 
-            counts.select((0, 0.3)) # restrict first axis to (0, 0.3)
-            counts.select(None, (0, 0.2)) # restrict second axis to (0, 0.2)
+            counts.select((0, 0.3))  # restrict first axis to (0, 0.3)
+            counts.select(None, (0, 0.2))  # restrict second axis to (0, 0.2)
+            statistic.select((0, 30, 4))   # rebin to match step size of 4 and restrict to (0, 30)
 
         """
         if len(xlims) > self.ndim:
             raise IndexError('Too many limits: statistics is {:d}-dimensional, but {:d} were indexed'.format(self.ndim, len(xlims)))
+        slices = []
+        for iaxis, xlim in enumerate(xlims):
+            if xlim is None:
+                slices.append(slice(None))
+            elif len(xlim) == 3:
+                factor = int(xlim[2] / np.diff(self.edges[iaxis]).mean() + 0.5)
+                if not np.allclose(np.diff(self.edges[iaxis][::factor]), xlim[2]):
+                    raise ValueError('Unable to match step {} with edges {}'.format(xlim[2], self.edges[iaxis]))
+                slices.append(slice(0, (self.shape[iaxis] // factor) * factor, factor))
+            elif len(xlim) != 2:
+                raise ValueError('Input limits must be a tuple (min, max) or (min, max, step)')
+        self.slice(*slices)
         slices = []
         for iaxis, xlim in enumerate(xlims):
             if xlim is None:
@@ -956,6 +969,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                 else:
                     slices.append(slice(0))
         self.slice(*slices)
+        return self
 
     def slice(self, *slices):
         """
@@ -992,6 +1006,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         self.edges = [edges[eslice] for edges, eslice in zip(self.edges, eslices)]
         if not all(f == 1 for f in factor):
             self.rebin(factor=factor)
+        return self
 
     def rebin(self, factor=1):
         """
@@ -1024,6 +1039,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             if compute_sepavg:
                 with np.errstate(divide='ignore', invalid='ignore'):
                     self.seps[idim] = utils.rebin(_nan_to_zero(sep) * normalized_wcounts, new_shape, statistic=np.sum) / rebinned_normalized_wcounts
+        return self
 
     def reverse(self):
         """Return counts for reversed positions1/weights1 and positions2/weights2."""
@@ -1064,8 +1080,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                     with np.errstate(divide='ignore', invalid='ignore'):
                         new.seps[idim] = (sep[..., sl_neg] * self.wcounts[..., sl_neg] + sep[..., sl_pos] * self.wcounts[..., sl_pos]) / new.wcounts
             return new
-        else:
-            raise TwoPointCounterError('These counts be wrapped')
+        raise TwoPointCounterError('These counts be wrapped')
 
     @classmethod
     def concatenate_x(cls, *others):
@@ -1165,7 +1180,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
 
     def __getstate__(self):
         state = {}
-        for name in ['name', 'autocorr', 'is_reversible', 'seps', 'ncounts', 'wcounts', 'wnorm', 'size1', 'size2', 'edges', 'mode', 'bin_type',
+        for name in ['name', 'autocorr', 'is_reversible', 'seps', 'ncounts', 'wcounts', 'wnorm', 'size1', 'size2', 'mode', 'edges', 'bin_type',
                      'boxsize', 'los_type', 'compute_sepsavg', 'weight_attrs', 'cos_twopoint_weights', 'selection_attrs', 'dtype', 'attrs']:
             if hasattr(self, name):
                 state[name] = getattr(self, name)
@@ -1188,7 +1203,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             if self.mode == 'rppi' and self.is_reversible and np.all(self.edges[1] >= 0.):
                 import warnings
                 warnings.warn('Loaded pair count is assumed to have been produced with < 20220909 version; if so please save it again to disk to remove this warning;'
-                               'else these must be sliced pair counts: in this case, sorry I removed the slicing, please do counts[:, counts.shape[1]:]!')
+                              'else these must be sliced pair counts: in this case, sorry I removed the slicing, please do counts[:, counts.shape[1]:]!')
                 self.edges[1] = np.concatenate([-self.edges[1][:0:-1], self.edges[1]], axis=0)
                 self.seps[0] = np.concatenate([self.seps[0][...,::-1], self.seps[0]], axis=-1)
                 self.seps[1] = np.concatenate([-self.seps[1][...,::-1], self.seps[1]], axis=-1)

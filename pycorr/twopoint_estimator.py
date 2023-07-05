@@ -292,19 +292,21 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
             estimator.select(None, (0, 0.2)) # restrict second axis to (0, 0.2)
 
         """
-        BaseTwoPointCounter.select(self, *args, **kwargs)
+        return BaseTwoPointCounter.select(self, *args, **kwargs)
 
     def slice(self, *args, **kwargs):
         """Slice estimator, by rebinning all two-point counts. See :meth:`BaseTwoPointCounter.slice`."""
         for name in self.count_names:
             getattr(self, name).slice(*args, **kwargs)
         self.run()
+        return self
 
     def rebin(self, *args, **kwargs):
         """Rebin estimator, by rebinning all two-point counts. See :meth:`BaseTwoPointCounter.rebin`."""
         for name in self.count_names:
             getattr(self, name).rebin(*args, **kwargs)
         self.run()
+        return self
 
     @classmethod
     def concatenate_x(cls, *others):
