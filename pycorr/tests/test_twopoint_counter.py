@@ -1,4 +1,5 @@
 import os
+import time
 import tempfile
 
 import pytest
@@ -664,6 +665,71 @@ def test_twopoint_counter(mode='s'):
                 assert np.allclose(test_mpi.wnorm, test.wnorm, **tol)
 
 
+def test_gpu(mode='smu'):
+
+    ref_func = {'theta': ref_theta, 's': ref_s, 'smu': ref_smu, 'rppi': ref_rppi, 'rp': ref_rp}[mode]
+    list_engine = ['corrfunc']
+    ref_edges = np.linspace(0., 100., 41)
+    #ref_edges = np.linspace(0., 100., 11)
+    if mode == 'theta':
+        ref_edges = np.linspace(1e-1, 10., 11)  # below 1e-5 for float64 (1e-1 for float32), self-pairs are counted by Corrfunc
+        # ref_edges = np.linspace(0., 80., 41)
+    elif mode == 'smu':
+        ref_edges = (ref_edges, np.linspace(-1., 1., 61))
+    elif mode == 'rppi':
+        ref_edges = (ref_edges, np.linspace(-80., 80., 61))
+        #ref_edges = (ref_edges, np.linspace(-80., 80., 11))
+    size = int(1e6) # int(2e5)
+    cboxsize = (500,) * 3
+    edges = ref_edges
+    n_individual_weights, n_bitwise_weights = 1, 0
+    data1, data2 = generate_catalogs(size, boxsize=cboxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights)
+
+    mpi = False
+    try:
+        from pycorr import mpi
+        print('Has MPI')
+    except ImportError:
+        pass
+
+    for autocorr in [False, True]:
+        kwargs = dict(mode=mode, edges=edges, engine='corrfunc', positions1=data1[:3], positions2=None if autocorr else data2[:3],
+                      weights1=data1[3:], weights2=None if autocorr else data2[3:], position_type='xyz', verbose=False)
+        if mpi:
+            kwargs.update(mpicomm=mpi.COMM_WORLD, mpiroot=0)
+
+        TwoPointCounter(nthreads=128, **kwargs)  # imports, to remove them from time count
+        t0 = time.time()
+        #gpu = TwoPointCounter(**kwargs, gpu=True)
+        cpu = TwoPointCounter(nthreads=128, **kwargs)
+        dt_cpu, t0 = time.time() - t0, time.time()
+        gpu = TwoPointCounter(**kwargs, gpu=True, nthreads=4)
+        dt_gpu = time.time() - t0
+        print('autocorr is {}, GPU time is {:.4f} vs CPU time {:4f}'.format(autocorr, dt_gpu, dt_cpu))
+        assert np.allclose(gpu.wcounts, cpu.wcounts)
+        assert np.allclose(gpu.seps[0], cpu.seps[0], equal_nan=True)
+
+        with pytest.raises(NotImplementedError):
+            TwoPointCounter(**{**kwargs, 'mode': 'rppi'}, gpu=True)
+
+        with pytest.raises(NotImplementedError):
+            TwoPointCounter(**{**kwargs, 'los': 'x'}, gpu=True)
+
+        with pytest.raises(NotImplementedError):
+            TwoPointCounter(**{**kwargs, 'selection_attrs': {'rp': (0., 20.)}}, gpu=True)
+
+        with pytest.raises(NotImplementedError):
+            TwoPointCounter(**{**kwargs, 'twopoint_weights': (np.linspace(0.1, 1., 10), np.linspace(0.1, 1., 10)), gpu=True)
+
+        from pycorr import TwoPointCorrelationFunction
+        TwoPointCorrelationFunction(mode=mode, edges=edges, engine='corrfunc',
+                                    data_positions1=data1[:3], data_positions2=None if autocorr else data2[:3],
+                                    data_weights1=data1[3:], data_weights2=None if autocorr else data2[3:],
+                                    randoms_positions1=data1[:3], randoms_positions2=None if autocorr else data2[:3],
+                                    randoms_weights1=data1[3:], randoms_weights2=None if autocorr else data2[3:],
+                                    position_type='xyz', los='midpoint', gpu=True, nthreads=4, verbose=False)
+
+
 class FakeTwoPointCounter(BaseTwoPointCounter):
 
     def run(self):
@@ -974,7 +1040,9 @@ def test_rebin():
 if __name__ == '__main__':
 
     setup_logging()
+
     test_mu1()
+    test_gpu()
 
     for mode in ['theta', 's', 'smu', 'rppi', 'rp']:
         test_twopoint_counter(mode=mode)
