@@ -719,7 +719,7 @@ def test_gpu(mode='smu'):
             TwoPointCounter(**{**kwargs, 'selection_attrs': {'rp': (0., 20.)}}, gpu=True)
 
         with pytest.raises(NotImplementedError):
-            TwoPointCounter(**{**kwargs, 'twopoint_weights': (np.linspace(0.1, 1., 10), np.linspace(0.1, 1., 10)), gpu=True)
+            TwoPointCounter(**{**kwargs, 'twopoint_weights': (np.linspace(0.1, 1., 10), np.linspace(0.1, 1., 10))}, gpu=True)
 
         from pycorr import TwoPointCorrelationFunction
         TwoPointCorrelationFunction(mode=mode, edges=edges, engine='corrfunc',
@@ -1042,7 +1042,7 @@ if __name__ == '__main__':
     setup_logging()
 
     test_mu1()
-    test_gpu()
+    #test_gpu()
 
     for mode in ['theta', 's', 'smu', 'rppi', 'rp']:
         test_twopoint_counter(mode=mode)
