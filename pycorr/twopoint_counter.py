@@ -657,7 +657,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                 try:
                     sep = twopoint_weights['sep']
                     weight = twopoint_weights['weight']
-                except IndexError:
+                except (IndexError, TypeError):
                     sep, weight = twopoint_weights
             # just to make sure we use the correct dtype
             sep = np.cos(np.radians(np.array(sep, dtype=self.dtype)))
