@@ -692,9 +692,16 @@ def test_gpu(mode='smu'):
     except ImportError:
         pass
 
+    list_options = []
     for autocorr in [False, True]:
+        for los in ['midpoint', 'x']:
+            list_options.append({'autocorr': autocorr, 'los': los})
+            list_options.append({'autocorr': autocorr, 'los': los, 'selection_attrs': {'rp': (0., 20.)}})
+
+    for options in list_options:
+
         kwargs = dict(mode=mode, edges=edges, engine='corrfunc', positions1=data1[:3], positions2=None if autocorr else data2[:3],
-                      weights1=data1[3:], weights2=None if autocorr else data2[3:], position_type='xyz', verbose=False)
+                        weights1=data1[3:], weights2=None if autocorr else data2[3:], position_type='xyz', verbose=False, **options)
         if mpi:
             kwargs.update(mpicomm=mpi.COMM_WORLD, mpiroot=0)
 
@@ -710,13 +717,9 @@ def test_gpu(mode='smu'):
         assert np.allclose(gpu.seps[0], cpu.seps[0], equal_nan=True)
 
         with pytest.raises(NotImplementedError):
-            TwoPointCounter(**{**kwargs, 'mode': 'rppi'}, gpu=True)
-
-        with pytest.raises(NotImplementedError):
-            TwoPointCounter(**{**kwargs, 'los': 'x'}, gpu=True)
-
-        with pytest.raises(NotImplementedError):
-            TwoPointCounter(**{**kwargs, 'selection_attrs': {'rp': (0., 20.)}}, gpu=True)
+            kw = {**kwargs, 'mode': 'rppi'}
+            kw.pop('selection_attrs', None)
+            TwoPointCounter(**kw, gpu=True)
 
         with pytest.raises(NotImplementedError):
             TwoPointCounter(**{**kwargs, 'twopoint_weights': (np.linspace(0.1, 1., 10), np.linspace(0.1, 1., 10))}, gpu=True)
@@ -727,7 +730,7 @@ def test_gpu(mode='smu'):
                                     data_weights1=data1[3:], data_weights2=None if autocorr else data2[3:],
                                     randoms_positions1=data1[:3], randoms_positions2=None if autocorr else data2[:3],
                                     randoms_weights1=data1[3:], randoms_weights2=None if autocorr else data2[3:],
-                                    position_type='xyz', los='midpoint', gpu=True, nthreads=4, verbose=False)
+                                    position_type='xyz', gpu=True, nthreads=4, verbose=False, **options)
 
 
 class FakeTwoPointCounter(BaseTwoPointCounter):
@@ -1041,8 +1044,8 @@ if __name__ == '__main__':
 
     setup_logging()
 
+    test_gpu()
     test_mu1()
-    #test_gpu()
 
     for mode in ['theta', 's', 'smu', 'rppi', 'rp']:
         test_twopoint_counter(mode=mode)
