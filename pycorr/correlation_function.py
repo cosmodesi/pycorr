@@ -1,5 +1,6 @@
 """Implements high-level interface to estimate 2-point correlation function."""
 
+import time
 import logging
 
 from .twopoint_estimator import get_twopoint_estimator, TwoPointEstimator
@@ -279,6 +280,7 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
     """
     logger = logging.getLogger('TwoPointCorrelationFunction')
     log = mpicomm is None or mpicomm.rank == 0
+    t0 = time.time()
 
     def is_none(array):
         if mpicomm is None or mpiroot is None:
@@ -384,7 +386,10 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
                                   weights1=weights[label1], weights2=weights[label2] if label2 is not None else None,
                                   boxsize=boxsize, mpicomm=mpicomm, mpiroot=mpiroot,
                                   **jackknife_kwargs, **twopoint_kwargs, **kwargs)
-    return Estimator(**counts)
+
+    toret = Estimator(**counts)
+    if log: logger.info('Correlation function computed in elapsed time {:.2f} s.'.format(time.time() - t0))
+    return toret
 
 
 TwoPointCorrelationFunction.from_state = TwoPointEstimator.from_state
