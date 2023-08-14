@@ -164,6 +164,7 @@ def _format_positions(positions, mode='auto', position_type='xyz', dtype=None, c
             positions = positions.T
             pt = 'xyz'
         # Array of shape (3, N)
+        positions = list(positions)
         for ip, p in enumerate(positions):
             # Cast to the input dtype if exists (may be set by previous positions)
             positions[ip] = np.array(p, dtype=dtype, copy=copy)
@@ -184,7 +185,7 @@ def _format_positions(positions, mode='auto', position_type='xyz', dtype=None, c
             if pt == 'xyz':
                 positions = utils.cartesian_to_sky(positions, degree=True)[:2]
             elif pt in ['rdd', 'rdz']:
-                positions = list(positions)[:2]
+                positions = positions[:2]
             elif pt != 'rd':
                 return None, 'For mode = {}, position type should be one of ["xyz", "rdz", "rd"]'.format(mode)
         else:
@@ -192,7 +193,7 @@ def _format_positions(positions, mode='auto', position_type='xyz', dtype=None, c
                 positions = utils.sky_to_cartesian(positions, degree=True)
             elif pt != 'xyz':
                 return None, 'For mode = {}, position type should be one of ["pos", "xyz", "rdd"]'.format(mode)
-        return positions, None
+        return list(positions), None
 
     error = None
     if mpiroot is None or (mpicomm.rank == mpiroot):

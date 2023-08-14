@@ -441,6 +441,9 @@ def test_twopoint_counter(mode='s'):
                 if position_type == 'pos':
                     positions1 = np.array(positions1).T
                     positions2 = np.array(positions2).T
+                else:
+                    positions1 = tuple(positions1)  # to test tuple
+                    positions2 = list(positions2)
 
                 positions1_bak = np.array(positions1, copy=True)
                 positions2_bak = np.array(positions2, copy=True)
@@ -1044,7 +1047,7 @@ if __name__ == '__main__':
 
     setup_logging()
 
-    test_gpu()
+    #test_gpu()
     test_mu1()
 
     for mode in ['theta', 's', 'smu', 'rppi', 'rp']:
