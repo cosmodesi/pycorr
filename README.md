@@ -60,3 +60,45 @@ See [pycorr docs](https://py2pcf.readthedocs.io/en/latest/user/building.html).
 - Svyatoslav Trusov for script to compute jackknife covariance estimates based on https://arxiv.org/pdf/2109.07071.pdf: https://github.com/theonefromnowhere/JK_pycorr/blob/main/CF_JK_ST_conf.py.
 - Enrique Paillas & Seshadri Nadathur for suggestions about reconstructed 2pcf measurements
 - Craig Warner and James Lasker for spotting typos
+
+
+# Citations
+
+If you use ``pycorr`` with the ``Corrfunc`` engine (default one) for research, please cite the MNRAS ``Corrfunc`` code papers with the following
+bibtex entries:
+
+```
+@ARTICLE{2020MNRAS.491.3022S,
+    author = {{Sinha}, Manodeep and {Garrison}, Lehman H.},
+    title = "{CORRFUNC - a suite of blazing fast correlation functions on
+    the CPU}",
+    journal = {\mnras},
+    keywords = {methods: numerical, galaxies: general, galaxies:
+    haloes, dark matter, large-scale structure of Universe, cosmology:
+    theory},
+    year = "2020",
+    month = "Jan",
+    volume = {491},
+    number = {2},
+    pages = {3022-3041},
+    doi = {10.1093/mnras/stz3157},
+    adsurl =
+    {https://ui.adsabs.harvard.edu/abs/2020MNRAS.491.3022S},
+    adsnote = {Provided by the SAO/NASA
+    Astrophysics Data System}
+}
+
+
+@InProceedings{10.1007/978-981-13-7729-7_1,
+    author="Sinha, Manodeep and Garrison, Lehman",
+    editor="Majumdar, Amit and Arora, Ritu",
+    title="CORRFUNC: Blazing Fast Correlation Functions with AVX512F SIMD Intrinsics",
+    booktitle="Software Challenges to Exascale Computing",
+    year="2019",
+    publisher="Springer Singapore",
+    address="Singapore",
+    pages="3--20",
+    isbn="978-981-13-7729-7",
+    url={https://doi.org/10.1007/978-981-13-7729-7_1}
+}
+```
