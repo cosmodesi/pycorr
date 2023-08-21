@@ -682,11 +682,14 @@ def test_gpu(mode='smu'):
     elif mode == 'rppi':
         ref_edges = (ref_edges, np.linspace(-80., 80., 61))
         #ref_edges = (ref_edges, np.linspace(-80., 80., 11))
-    size = int(1e6) # int(2e5)
+    size = int(2e5)
     cboxsize = (500,) * 3
     edges = ref_edges
-    n_individual_weights, n_bitwise_weights = 1, 0
-    data1, data2 = generate_catalogs(size, boxsize=cboxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights)
+
+    from collections import namedtuple
+    TwoPointWeight = namedtuple('TwoPointWeight', ['sep', 'weight'])
+    twopoint_weights = TwoPointWeight(np.logspace(-4, 0, 40), np.linspace(4., 1., 40))
+    #twopoint_weights = None
 
     mpi = False
     try:
@@ -699,18 +702,24 @@ def test_gpu(mode='smu'):
     for autocorr in [False, True]:
         for los in ['midpoint', 'x']:
             list_options.append({'autocorr': autocorr, 'los': los})
-            list_options.append({'autocorr': autocorr, 'los': los, 'selection_attrs': {'rp': (0., 20.)}})
+            list_options.append({'autocorr': autocorr, 'los': los, 'n_individual_weights': 1})
+            list_options.append({'autocorr': autocorr, 'los': los, 'selection_attrs': {'rp': (0., 20.)}, 'n_individual_weights': 1, 'n_bitwise_weights': 2, 'twopoint_weights': twopoint_weights})
 
     for options in list_options:
+        print(options)
+        n_individual_weights = options.pop('n_individual_weights', 0)
+        n_bitwise_weights = options.pop('n_bitwise_weights', 0)
+        data1, data2 = generate_catalogs(size, boxsize=cboxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights)
+        twopoint_weights = options.pop('twopoint_weights', None)
 
         kwargs = dict(mode=mode, edges=edges, engine='corrfunc', positions1=data1[:3], positions2=None if autocorr else data2[:3],
-                        weights1=data1[3:], weights2=None if autocorr else data2[3:], position_type='xyz', verbose=False, **options)
+                      weights1=data1[3:], weights2=None if autocorr else data2[3:], position_type='xyz', verbose=False, twopoint_weights=twopoint_weights,
+                      **options)
         if mpi:
             kwargs.update(mpicomm=mpi.COMM_WORLD, mpiroot=0)
 
         TwoPointCounter(nthreads=128, **kwargs)  # imports, to remove them from time count
         t0 = time.time()
-        #gpu = TwoPointCounter(**kwargs, gpu=True)
         cpu = TwoPointCounter(nthreads=128, **kwargs)
         dt_cpu, t0 = time.time() - t0, time.time()
         gpu = TwoPointCounter(**kwargs, gpu=True, nthreads=4)
@@ -723,9 +732,6 @@ def test_gpu(mode='smu'):
             kw = {**kwargs, 'mode': 'rppi'}
             kw.pop('selection_attrs', None)
             TwoPointCounter(**kw, gpu=True)
-
-        with pytest.raises(NotImplementedError):
-            TwoPointCounter(**{**kwargs, 'twopoint_weights': (np.linspace(0.1, 1., 10), np.linspace(0.1, 1., 10))}, gpu=True)
 
         from pycorr import TwoPointCorrelationFunction
         TwoPointCorrelationFunction(mode=mode, edges=edges, engine='corrfunc',
