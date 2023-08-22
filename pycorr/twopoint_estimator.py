@@ -412,9 +412,14 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         if other == 0: return self.deepcopy()
         return self.__add__(other)
 
-    def __iadd__(self, other):
-        if other == 0: return self.deepcopy()
-        return self.__add__(other)
+    def __mul__(self, factor):
+        new = self.copy()
+        for name in new.count_names:
+            setattr(new, name, getattr(new, name) * factor)
+        return new
+
+    def __rmul__(self, factor):
+        return self.__mul__(factor)
 
     def deepcopy(self):
         import copy

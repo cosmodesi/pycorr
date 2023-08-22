@@ -618,6 +618,9 @@ def test_twopoint_counter(mode='s'):
 
                 test2 = test.normalize(wnorm=1.)
                 assert np.allclose(test2.wnorm, 1.)
+                test3 = test2 * 3
+                assert np.allclose(test3.wcounts, 3. * test2.wcounts, equal_nan=True)
+                assert np.allclose(test3.wnorm, 3.)
 
                 if mode in ['smu', 'rppi'] and len(test.edges[1]) % 2 == 1:
                     test2 = test.wrap()

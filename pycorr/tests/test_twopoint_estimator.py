@@ -529,6 +529,8 @@ def test_estimator(mode='s'):
                         if np.allclose(diff, diff[0]):
                             test2.select(None, (-np.inf, np.inf, diff[0] * 2.))
                             assert np.allclose(test2.edges[1], test.edges[1][::2])
+                    test3 = test * 3
+                    assert np.allclose(test3.corr, test.corr, equal_nan=True)
                     if hasattr(test, 'D1D2') and hasattr(test, 'R1R2'):
                         test1 = test.deepcopy()
                         test1.R1R2.wcounts += 1.
@@ -537,6 +539,7 @@ def test_estimator(mode='s'):
                         assert test2.D1D2.size1 > 0
                         assert np.allclose(test2.R1R2.wcounts, 2 * test.R1R2.wcounts + 1.)
                         assert test2.R1R2.size1 == 0
+                        assert np.allclose(test3.D1D2.wcounts, 3 * test.D1D2.wcounts)
                     test2 = test.concatenate_x(test[:test.shape[0] // 2], test[test.shape[0] // 2:])
                     assert np.allclose(test2.corr, test.corr, equal_nan=True)
                     if 'davispeebles' not in test.name:

@@ -832,6 +832,18 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         # new._set_sum()
         return new
 
+    def __mul__(self, factor):
+        new = super(JackknifeTwoPointCounter, self).__mul__(factor)
+        for name in self._result_names:
+            tmp = getattr(new, name)
+            for k in tmp:
+                tmp[k] = tmp[k] * factor
+        # new._set_sum()
+        return new
+
+    def __rmul__(self, factor):
+        return self.__mul__(factor)
+
     @classmethod
     def sum(cls, *others):
         """Sum input two-point counts, see :meth:`BaseTwoPointCounter.sum`."""

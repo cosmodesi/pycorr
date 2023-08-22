@@ -1133,11 +1133,8 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         new : BaseTwoPointCounter
             Normalized counts.
         """
-        new = self.deepcopy()
-        factor = wnorm / new.wnorm
-        for name in ['wcounts', 'wnorm']:
-            setattr(new, name, getattr(new, name) * factor)
-        return new
+        factor = wnorm / self.wnorm
+        return self * factor
 
     @classmethod
     def sum(cls, *others):
@@ -1173,9 +1170,14 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         if other == 0: return self.deepcopy()
         return self.__add__(other)
 
-    def __iadd__(self, other):
-        if other == 0: return self.deepcopy()
-        return self.__add__(other)
+    def __mul__(self, factor):
+        new = self.deepcopy()
+        for name in ['wcounts', 'wnorm']:
+            setattr(new, name, getattr(new, name) * factor)
+        return new
+
+    def __rmul__(self, factor):
+        return self.__mul__(factor)
 
     def deepcopy(self):
         import copy
