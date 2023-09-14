@@ -202,7 +202,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         """Array of separation values, if not set by :meth:`run`, taken from :attr:`R1R2` if provided, else :attr:`XX`."""
         if hasattr(self, '_seps'):
             return self._seps
-        if hasattr(self, 'R1R2'):
+        if hasattr(self, 'R1R2') and self.R1R2.compute_sepavg:
             return self.R1R2.seps
         return self.XX.seps
 
@@ -213,7 +213,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
 
     def sepavg(self, *args, **kwargs):
         """Return average of separation for input axis; this is an 1D array of size :attr:`shape[axis]`."""
-        if hasattr(self, 'R1R2'):
+        if hasattr(self, 'R1R2') and self.R1R2.compute_sepavg:
             return self.R1R2.sepavg(*args, **kwargs)
         return self.XX.sepavg(*args, **kwargs)
 

@@ -117,6 +117,7 @@ def test_estimator(mode='s'):
         for options in list_options:
             print(mode, options)
             options = options.copy()
+            compute_sepsavg = options.get('compute_sepsavg', True)
             edges = options.pop('edges', ref_edges)
             weights_one = options.pop('weights_one', [])
             n_individual_weights = options.get('n_individual_weights', 1)
@@ -229,6 +230,8 @@ def test_estimator(mode='s'):
 
             estimator_nojackknife = run_nojackknife()
             estimator_jackknife = run_jackknife()
+            if compute_sepsavg:
+                assert not np.allclose(estimator_nojackknife.sepavg(), estimator_nojackknife.sepavg(method='mid'), equal_nan=True)
             assert_allclose_estimators(estimator_jackknife, estimator_nojackknife)
 
             if autocorr and (n_individual_weights or n_bitwise_weights):
@@ -353,7 +356,7 @@ def test_estimator(mode='s'):
                     mask = mid[1] <= sepmax
                     sep = estimator.seps[0].copy()
                     sep[np.isnan(sep)] = 0.
-                    if getattr(estimator, 'R1R2', None) is not None:
+                    if getattr(estimator, 'R1R2', None) is not None and estimator.R1R2.compute_sepavg:
                         wcounts = estimator.R1R2.wcounts
                     else:
                         wcounts = estimator.XX.wcounts
@@ -480,7 +483,7 @@ def test_estimator(mode='s'):
                         assert np.allclose(tmp[1:], test(pimax=40., return_sep=True), equal_nan=True)
                         test.corr.flat[0] = zero
                         assert np.allclose(test[:, :10].corr, test.corr[:, :10], equal_nan=True)
-                    else:
+                    else: # theta, s, wp
                         with pytest.raises(TwoPointEstimatorError):
                             test(5., ell=2)
                         with pytest.raises(TwoPointEstimatorError):
