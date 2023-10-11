@@ -53,14 +53,14 @@ See [pycorr docs](https://py2pcf.readthedocs.io/en/latest/user/building.html).
 
 **pycorr** is free software distributed under a BSD3 license. For details see the [LICENSE](https://github.com/cosmodesi/pycorr/blob/main/LICENSE).
 
-## Credits
+## Acknowledgments
 
 - Lehman Garrison and Manodeep Sinha for advice when implementing linear binning, and PIP and angular weights into Corrfunc.
 - Davide Bianchi for cross-checks of two-point counts with PIP weights.
 - Svyatoslav Trusov for script to compute jackknife covariance estimates based on https://arxiv.org/pdf/2109.07071.pdf: https://github.com/theonefromnowhere/JK_pycorr/blob/main/CF_JK_ST_conf.py.
-- Enrique Paillas & Seshadri Nadathur for suggestions about reconstructed 2pcf measurements
-- Craig Warner and James Lasker for spotting typos
-
+- Enrique Paillas and Seshadri Nadathur for suggestions about reconstructed 2pcf measurements
+- Craig Warner for GPU-izing Corrfunc 'smu' counts
+- Craig Warner, James Lasker and Edmond Chaussidon for spotting typos / bug reports
 
 # Citations
 

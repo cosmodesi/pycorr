@@ -807,31 +807,6 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
         # new._set_sum()
         return new
 
-    def normalize(self, wnorm):
-        """
-        Rescale both :attr:`wcounts` and :attr:`wnorm` such that new :attr:`wnorm` matches ``wnorm``.
-        This is useful when combining counts in various regions.
-
-        Parameters
-        ----------
-        wnorm : float
-            New normalization :attr:`wnorm`.
-
-        Returns
-        -------
-        new : JackknifeTwoPointCounter
-            Normalized counts.
-        """
-        new = super(JackknifeTwoPointCounter, self).normalize(wnorm)
-        factor = wnorm / self.wnorm
-        for name in self._result_names:
-            tmp = getattr(new, name)
-            for k in tmp:
-                # tmp[k] = tmp[k].normalize(wnorm)
-                tmp[k] = tmp[k].normalize(factor * tmp[k].wnorm)
-        # new._set_sum()
-        return new
-
     def __mul__(self, factor):
         new = super(JackknifeTwoPointCounter, self).__mul__(factor)
         for name in self._result_names:
