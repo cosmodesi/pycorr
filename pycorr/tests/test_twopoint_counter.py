@@ -711,7 +711,9 @@ def test_gpu(mode='smu'):
 
     for options in list_options:
         print(options)
+        options = options.copy()
         size = options.pop('size', csize)
+        autocorr = options.pop('autocorr', False)
         n_individual_weights = options.pop('n_individual_weights', 0)
         n_bitwise_weights = options.pop('n_bitwise_weights', 0)
         data1, data2 = generate_catalogs(size, boxsize=cboxsize, n_individual_weights=n_individual_weights, n_bitwise_weights=n_bitwise_weights)
@@ -1060,8 +1062,7 @@ if __name__ == '__main__':
 
     setup_logging()
 
-    test_gpu()
-    exit()
+    #test_gpu()
     test_mu1()
 
     for mode in ['theta', 's', 'smu', 'rppi', 'rp']:

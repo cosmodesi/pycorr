@@ -185,6 +185,7 @@ def test_twopoint_counter(mode='s'):
             print(mode, options)
             options = options.copy()
             edges = options.pop('edges', ref_edges)
+            weights_one = options.pop('weights_one', [])
             twopoint_weights = options.get('twopoint_weights', None)
             n_individual_weights = options.pop('n_individual_weights', 0)
             n_bitwise_weights = options.pop('n_bitwise_weights', 0)
@@ -278,6 +279,10 @@ def test_twopoint_counter(mode='s'):
                 return TwoPointCounter(mode=mode, edges=edges, engine=engine, positions1=positions1, positions2=None if autocorr else positions2,
                                        weights1=weights1, weights2=None if autocorr else weights2, position_type=position_type, bin_type=bin_type,
                                        dtype=dtype, **kwargs, **options)
+
+            for label, catalog in zip([1, 2], [data1, data2]):
+                if label in weights_one:
+                    catalog.insert(-1, np.ones_like(catalog[0], dtype='f8'))
 
             def run(pass_none=False, pass_zero=False, reverse=False, **kwargs):
                 tmpdata1, tmpdata2 = data1, data2

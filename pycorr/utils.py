@@ -220,7 +220,7 @@ def _get_box(*positions):
     return pos_min, pos_max
 
 
-def cartesian_to_sky(positions, wrap=True, degree=True):
+def cartesian_to_sky(positions, wrap=True, degree=True, dtype=None):
     r"""
     Transform cartesian coordinates into distance, RA, Dec.
 
@@ -245,7 +245,7 @@ def cartesian_to_sky(positions, wrap=True, degree=True):
     if wrap: ra %= 2. * np.pi
     dec = np.arcsin(positions[2] / dist)
     conversion = np.pi / 180. if degree else 1.
-    return [ra / conversion, dec / conversion, dist]
+    return [np.asarray(xx, dtype=dtype) for xx in [ra / conversion, dec / conversion, dist]]
 
 
 def sky_to_cartesian(rdd, degree=True, dtype=None):
@@ -272,7 +272,7 @@ def sky_to_cartesian(rdd, degree=True, dtype=None):
     x = dist * cos_dec * np.cos(ra * conversion)
     y = dist * cos_dec * np.sin(ra * conversion)
     z = dist * np.sin(dec * conversion)
-    return [x, y, z]
+    return [np.asarray(xx, dtype=dtype) for xx in [x, y, z]]
 
 
 def rebin(array, new_shape, statistic=np.sum):

@@ -101,17 +101,18 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             weight_type = 'inverse_bitwise'
             pair_weights = self.cos_twopoint_weights.weight
             sep_pair_weights = self.cos_twopoint_weights.sep
+        attrs = dict(self.attrs)
 
         kwargs = {'weights1': weights1, 'weights2': weights2,
                   'bin_type': self.bin_type, 'weight_type': weight_type,
                   'pair_weights': pair_weights, 'sep_pair_weights': sep_pair_weights,
-                  'attrs_pair_weights': weight_attrs, 'verbose': self.attrs.get('verbose', False),
-                  'isa': self.attrs.get('isa', 'fastest')}  # to be set to 'fastest' when bitwise weights included in all kernels
+                  'attrs_pair_weights': weight_attrs, 'verbose': attrs.pop('verbose', False),
+                  'isa': attrs.pop('isa', 'fastest')}  # to be set to 'fastest' when bitwise weights included in all kernels
 
-        if self.attrs.get('gpu', False):
+        if attrs.pop('gpu', False):
             kwargs['gpu'] = True
 
-        refine_factors = self.attrs.get('mesh_refine_factors', None)
+        refine_factors = attrs.pop('mesh_refine_factors', None)
         if refine_factors is not None:
             nfactors = 3 - int(self.mode == 'theta')
             if not utils.is_sequence(refine_factors):
@@ -138,6 +139,13 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
         if autocorr:
             positions2 = [None] * 3
 
+        if self.mode == 'theta':
+            fast_acos = attrs.pop('fast_acos', False)
+
+        if attrs:
+            import warnings
+            warnings.warn('These arguments are not read: {}'.format(attrs))
+
         def call_corrfunc(method, *args, **kwargs):
             try:
                 return method(*args, **kwargs)
@@ -155,7 +163,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                     raise TwoPointCounterError('Corrfunc does not provide periodic boundary conditions for the angular correlation function')
                 result = call_corrfunc(mocks.DDtheta_mocks, autocorr, nthreads=self.nthreads, binfile=self.edges[0],
                                        RA1=positions1[0], DEC1=positions1[1], RA2=positions2[0], DEC2=positions2[1],
-                                       output_thetaavg=self.compute_sepavg, fast_acos=self.attrs.get('fast_acos', False), **kwargs)
+                                       output_thetaavg=self.compute_sepavg, fast_acos=fast_acos, **kwargs)
                 key_sep = 'thetaavg'
 
             elif self.mode == 's':
