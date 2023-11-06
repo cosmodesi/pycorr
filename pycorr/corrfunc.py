@@ -69,7 +69,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             positions2 = [None] * 3
             if not autocorr:
                 positions2 = rotate(dpositions2)
-            if boxsize is not None:
+            if boxsize is not None and self.los_type != 'z':
                 boxsize = rotate([boxsize[0], boxsize[1], 0.])
             return positions1, positions2, boxsize
 
