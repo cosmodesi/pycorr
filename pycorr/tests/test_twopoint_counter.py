@@ -287,7 +287,7 @@ def test_twopoint_counter(mode='s'):
                     for boxsize in [cboxsize, (201., 300., 300.)]:
                         list_options.append({'autocorr': autocorr, 'boxsize': boxsize, 'dtype': dtype, 'isa': isa})
                         list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'boxsize': boxsize, 'los': 'x', 'dtype': dtype, 'isa': isa})
-                        list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'boxsize': boxsize, 'los': 'y', 'dtype': dtype, 'isa': isa})
+                        list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'boxsize': boxsize, 'los': 'z', 'dtype': dtype, 'isa': isa})
 
                 # los
                 if mode in ['smu', 'rppi']:

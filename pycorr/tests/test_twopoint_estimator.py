@@ -454,6 +454,7 @@ def test_estimator(mode='s'):
                         assert np.allclose(tmp[1:], np.concatenate([tmp2[0][None, :]] + tmp2[1:], axis=0), equal_nan=True)
                         test.corr.flat[0] = zero
                         assert np.allclose(test[:, :10].corr, test.corr[:, :10], equal_nan=True)
+                        test(return_sep=True, ells=(0, 2), rp=(10., np.inf))
                     elif test.mode == 'rppi':
                         # rppi
                         arrays = test(sep, [0., 0.4]), test(sep[::-1], [0.4, 0.])

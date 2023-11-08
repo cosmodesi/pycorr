@@ -1003,7 +1003,7 @@ class ResidualTwoPointEstimator(BaseTwoPointEstimator):
         return toret
 
 
-def project_to_poles(estimator, ells=_default_ells, return_sep=True, return_cov=None, ignore_nan=False, **kwargs):
+def project_to_poles(estimator, ells=_default_ells, return_sep=True, return_cov=None, ignore_nan=False, rp=None, **kwargs):
     r"""
     Project :math:`(s, \mu)` correlation function estimation onto Legendre polynomials.
 
@@ -1025,7 +1025,10 @@ def project_to_poles(estimator, ells=_default_ells, return_sep=True, return_cov=
         raise :class:`TwoPointEstimatorError`.
 
     ignore_nan : bool, default=False
-        If ``True``, ignore NaN values of the correlation functions in the integration.
+        If ``True``, ignore NaN values of the correlation function in the integration.
+
+    rp : tuple, default=None
+        Optionally, tuple of min and max values for a :math:`r_{p} = s \sqrt(1 - \mu^{2})` cut.
 
     kwargs : dict
         Optional arguments for :meth:`JackknifeTwoPointEstimator.realization`, when relevant.
@@ -1052,10 +1055,18 @@ def project_to_poles(estimator, ells=_default_ells, return_sep=True, return_cov=
         # \sum_{i} \xi_{i} \int_{\mu_{i}}^{\mu_{i+1}} L_{\ell}(\mu^{\prime}) d\mu^{\prime}
         poly = special.legendre(ell).integ()(muedges)
         legendre = (2 * ell + 1) * (poly[1:] - poly[:-1])
-        if ignore_nan:
+        if ignore_nan or rp:
             correll = np.empty(estimator.corr.shape[0], dtype=estimator.corr.dtype)
             for i_s, corr_s in enumerate(estimator.corr):
-                mask_s = ~np.isnan(corr_s)
+                mask_s = np.ones_like(corr_s, dtype='?')
+                if ignore_nan:
+                    mask_s &= ~np.isnan(corr_s)
+                if rp:
+                    se = estimator.edges[0][:-1]
+                    mue = np.abs(estimator.edges[1])
+                    mue = np.maximum(mue[:-1], mue[1:])  # take the most conservative limit
+                    rp_s = se[i_s] * np.sqrt(1. - mue**2)
+                    mask_s &= (rp_s >= rp[0]) & (rp_s < rp[-1])
                 correll[i_s] = np.sum(corr_s[mask_s] * legendre[mask_s], axis=-1) / np.sum(dmu[mask_s])
         else:
             correll = np.sum(estimator.corr * legendre, axis=-1) / np.sum(dmu)
@@ -1070,7 +1081,7 @@ def project_to_poles(estimator, ells=_default_ells, return_sep=True, return_cov=
         return toret if len(toret) > 1 else toret[0]
     try:
         realizations = [project_to_poles(estimator.realization(ii, **kwargs),
-                                         ells=ells, return_sep=False, return_cov=False, ignore_nan=ignore_nan).ravel()
+                                         ells=ells, return_sep=False, return_cov=False, ignore_nan=ignore_nan, rp=rp).ravel()
                         for ii in estimator.realizations]
         cov = (len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0)
         toret.append(np.atleast_2d(cov))
