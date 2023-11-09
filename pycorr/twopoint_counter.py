@@ -390,7 +390,8 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         selection_attrs : dict, default=None
             To select pairs to be counted, provide mapping between the quantity (string)
             and the interval (tuple of floats),
-            e.g. ``{'rp': (0., 20.)}`` to select pairs with 'rp' between 0 and 20.
+            e.g. ``{'rp': (0., 20.)}`` to select pairs with transverse separation 'rp' between 0 and 20,
+            `{'theta': (0., 20.)}`` to select pairs with separation angle 'theta' between 0 and 20 degrees.
 
         los : string, default='midpoint'
             Line-of-sight to be used when ``mode`` is "smu", "rppi" or "rp"; one of:

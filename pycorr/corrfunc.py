@@ -45,23 +45,22 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
 
         def _get_boxsize():
             if self.periodic:
-                return self.boxsize
+                return tuple(self.boxsize)
             return None
 
         def get_rotated_positions():
             boxsize = _get_boxsize()
             # Rotating coordinates to put los along z
-            lz = boxsize[2] if boxsize is not None else 0.
 
             def rotate(positions):
                 toret = list(positions)
                 if self.los_type == 'x':
                     # rotation around -y: x' = -z and z' = x
-                    toret[0] = lz - positions[2]
+                    toret[0] = - positions[2]
                     toret[2] = positions[0]
                 elif self.los_type == 'y':
                     # rotation around x: y' = -z and z' = y
-                    toret[1] = lz - positions[2]
+                    toret[1] = - positions[2]
                     toret[2] = positions[1]
                 return toret
 
@@ -69,8 +68,8 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             positions2 = [None] * 3
             if not autocorr:
                 positions2 = rotate(dpositions2)
-            if boxsize is not None and self.los_type != 'z':
-                boxsize = rotate([boxsize[0], boxsize[1], 0.])
+            if boxsize is not None:
+                boxsize = np.abs(rotate(boxsize))
             return positions1, positions2, boxsize
 
         weight_type = None
@@ -89,7 +88,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             weights1 = reformat_bitweights(dweights1)
             if not autocorr:
                 weights2 = reformat_bitweights(dweights2)
-            weight_attrs = (self.weight_attrs['noffset'], self.weight_attrs['default_value'] / self.weight_attrs['nrealizations'])
+            weight_attrs = {'noffset': self.weight_attrs['noffset'], 'default_value': self.weight_attrs['default_value'] / self.weight_attrs['nrealizations']}
 
         elif weights1:
             output_weightavg = True
