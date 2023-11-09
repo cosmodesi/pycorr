@@ -699,7 +699,7 @@ def test_gpu(mode='smu'):
     elif mode == 'rppi':
         ref_edges = (ref_edges, np.linspace(-80., 80., 61))
         #ref_edges = (ref_edges, np.linspace(-80., 80., 11))
-    csize = int(1e6)
+    csize = int(1e5)
     cboxsize = (500,) * 3
     edges = ref_edges
 
@@ -717,16 +717,19 @@ def test_gpu(mode='smu'):
 
     list_options = []
     for autocorr in [False, True]:
-        for los in ['midpoint', 'x', 'z']:
-            list_options.append({'autocorr': autocorr, 'los': los})
-            list_options.append({'autocorr': autocorr, 'los': los, 'n_individual_weights': 1})
-            list_options.append({'autocorr': autocorr, 'los': los, 'n_individual_weights': 1, 'size': 0})
-            list_options.append({'autocorr': autocorr, 'los': los, 'selection_attrs': {'rp': (0., 20.)}, 'n_individual_weights': 1, 'n_bitwise_weights': 2, 'twopoint_weights': twopoint_weights})
-            list_options.append({'autocorr': autocorr, 'los': los, 'selection_attrs': {'theta': (0., 5.)}, 'n_individual_weights': 1, 'n_bitwise_weights': 2, 'twopoint_weights': twopoint_weights})
+        for dtype in ['f4', 'f8']:
+            for los in ['midpoint', 'firstpoint', 'x', 'z']:
+                list_options.append({'autocorr': autocorr, 'los': los, 'dtype': dtype})
+                list_options.append({'autocorr': autocorr, 'los': los, 'n_individual_weights': 1, 'dtype': dtype})
+                list_options.append({'autocorr': autocorr, 'los': los, 'n_individual_weights': 1, 'size': 0, 'dtype': dtype})
+                list_options.append({'autocorr': autocorr, 'los': los, 'selection_attrs': {'rp': (0., 20.)}, 'n_individual_weights': 1, 'n_bitwise_weights': 2, 'twopoint_weights': twopoint_weights, 'dtype': dtype})
+                list_options.append({'autocorr': autocorr, 'los': los, 'selection_attrs': {'theta': (0., 5.)}, 'n_individual_weights': 1, 'n_bitwise_weights': 2, 'twopoint_weights': twopoint_weights, 'dtype': dtype})
 
     for options in list_options:
         print(options)
         options = options.copy()
+        dtype = options.get('dtype', None)
+        itemsize = np.dtype('f8' if dtype is None else dtype).itemsize
         size = options.pop('size', csize)
         autocorr = options.pop('autocorr', False)
         n_individual_weights = options.pop('n_individual_weights', 0)
@@ -747,8 +750,10 @@ def test_gpu(mode='smu'):
         gpu = TwoPointCounter(**kwargs, gpu=True, nthreads=4)
         dt_gpu = time.time() - t0
         print('autocorr is {}, GPU time is {:.4f} vs CPU time {:4f}'.format(autocorr, dt_gpu, dt_cpu))
-        assert np.allclose(gpu.wcounts, cpu.wcounts)
-        assert np.allclose(gpu.seps[0], cpu.seps[0], equal_nan=True)
+        #print(gpu.wcounts - cpu.wcounts)
+        tol = {'atol': 1e-5, 'rtol': 2e-1 if twopoint_weights is not None else 1e-2} if itemsize <= 4 else {'atol': 1e-8, 'rtol': 1e-6}
+        assert np.allclose(gpu.wcounts, cpu.wcounts, **tol)
+        assert np.allclose(gpu.seps[0], cpu.seps[0], equal_nan=True, **tol)
 
         if size:
             with pytest.raises(NotImplementedError):
