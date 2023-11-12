@@ -453,7 +453,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         if not self.with_mpi or self.mpicomm.rank == 0:
             super(BaseTwoPointEstimator, self).save(filename)
 
-    def get_corr(self, return_sep=False, return_cov=None, mode='auto', **kwargs):
+    def get_corr(self, return_sep=False, return_cov=None, return_mask=False, mode='auto', **kwargs):
         r"""
         Return correlation function, optionally its covariance estimate, if available.
 
@@ -467,6 +467,9 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
             return covariance estimate.
             If ``True`` and estimator does not have :meth:`cov`,
             raise :class:`TwoPointEstimatorError`.
+
+        return_mask : bool, default=False
+            Return mask of bins that are summed over along dimension 1, for each dimension 0 point.
 
         mode : str, default='auto'
             If 'poles', return multipoles.
@@ -494,23 +497,24 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
         """
         mode, kwargs = _get_project_mode(mode=mode, **kwargs)
         if mode == 'poles':
-            return project_to_poles(self, return_sep=return_sep, return_cov=return_cov, **kwargs)
+            return project_to_poles(self, return_sep=return_sep, return_cov=return_cov, return_mask=return_mask, **kwargs)
         if mode == 'wedges':
-            return project_to_wedges(self, return_sep=return_sep, return_cov=return_cov, **kwargs)
+            return project_to_wedges(self, return_sep=return_sep, return_cov=return_cov, return_mask=return_mask, **kwargs)
         if mode == 'wp':
-            return project_to_wp(self, return_sep=return_sep, return_cov=return_cov, **kwargs)
+            return project_to_wp(self, return_sep=return_sep, return_cov=return_cov, return_mask=return_mask, **kwargs)
         for name in ['ells', 'wedges', 'pimax']: kwargs.pop(name, None)
         toret = []
         if return_sep:
             for axis in range(self.ndim): toret.append(self.sepavg(axis=axis))
         toret.append(self.corr.copy())
-        if return_cov is False:
-            return toret if len(toret) > 1 else toret[0]
-        if hasattr(self, 'cov'):
-            cov = self.cov(**kwargs)
-            toret.append(cov)
-        elif return_cov is True:
-            raise TwoPointEstimatorError('Input estimator has no covariance')
+        if return_cov is not False:
+            if hasattr(self, 'cov'):
+                cov = self.cov(**kwargs)
+                toret.append(cov)
+            elif return_cov is True:
+                raise TwoPointEstimatorError('Input estimator has no covariance')
+        if return_mask:
+            toret.append(np.ones(self.shape, dtype='?'))
         return toret if len(toret) > 1 else toret[0]
 
     def __call__(self, *seps, return_sep=False, return_std=None, mode='auto', **kwargs):
@@ -557,7 +561,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
             Optionally, (optionally interpolated) standard deviation estimate, see ``return_std``.
         """
         return_std = return_std or return_std is None and hasattr(self, 'cov')
-        tmp = self.get_corr(return_sep=True, return_cov=return_std, mode=mode, **kwargs)
+        tmp = self.get_corr(return_sep=True, return_cov=return_std, return_mask=False, mode=mode, **kwargs)
         ndim = len(tmp) - int(return_std) - 1
         sepsavg = tmp[:ndim]
         corr_std = [tmp[ndim]]
@@ -1003,7 +1007,7 @@ class ResidualTwoPointEstimator(BaseTwoPointEstimator):
         return toret
 
 
-def project_to_poles(estimator, ells=_default_ells, return_sep=True, return_cov=None, ignore_nan=False, rp=None, **kwargs):
+def project_to_poles(estimator, ells=_default_ells, return_sep=True, return_cov=None, ignore_nan=False, rp=None, return_mask=False, **kwargs):
     r"""
     Project :math:`(s, \mu)` correlation function estimation onto Legendre polynomials.
 
@@ -1030,6 +1034,9 @@ def project_to_poles(estimator, ells=_default_ells, return_sep=True, return_cov=
     rp : tuple, default=None
         Optionally, tuple of min and max values for a :math:`r_{p} = s \sqrt(1 - \mu^{2})` cut.
 
+    return_mask : bool, default=False
+        Return mask of :math:`\mu`-bins that are summed over, for each :math:`s`; of shape ``estimator.shape``.
+
     kwargs : dict
         Optional arguments for :meth:`JackknifeTwoPointEstimator.realization`, when relevant.
 
@@ -1050,12 +1057,13 @@ def project_to_poles(estimator, ells=_default_ells, return_sep=True, return_cov=
     muedges = estimator.edges[1]
     dmu = np.diff(muedges)
     sep = estimator.sepavg(axis=0)
-    corr = []
+    corr, mask = [], []
     for ell in ells:
         # \sum_{i} \xi_{i} \int_{\mu_{i}}^{\mu_{i+1}} L_{\ell}(\mu^{\prime}) d\mu^{\prime}
         poly = special.legendre(ell).integ()(muedges)
         legendre = (2 * ell + 1) * (poly[1:] - poly[:-1])
         if ignore_nan or rp:
+            mask = []
             correll = np.empty(estimator.corr.shape[0], dtype=estimator.corr.dtype)
             for i_s, corr_s in enumerate(estimator.corr):
                 mask_s = np.ones_like(corr_s, dtype='?')
@@ -1067,6 +1075,7 @@ def project_to_poles(estimator, ells=_default_ells, return_sep=True, return_cov=
                     mue = np.maximum(mue[:-1], mue[1:])  # take the most conservative limit
                     rp_s = se[i_s] * np.sqrt(1. - mue**2)
                     mask_s &= (rp_s >= rp[0]) & (rp_s < rp[-1])
+                mask.append(mask_s)
                 correll[i_s] = np.sum(corr_s[mask_s] * legendre[mask_s], axis=-1) / np.sum(dmu[mask_s])
         else:
             correll = np.sum(estimator.corr * legendre, axis=-1) / np.sum(dmu)
@@ -1077,24 +1086,27 @@ def project_to_poles(estimator, ells=_default_ells, return_sep=True, return_cov=
     toret = []
     if return_sep: toret.append(sep)
     toret.append(corr)
-    if return_cov is False:
-        return toret if len(toret) > 1 else toret[0]
-    try:
-        realizations = [project_to_poles(estimator.realization(ii, **kwargs),
-                                         ells=ells, return_sep=False, return_cov=False, ignore_nan=ignore_nan, rp=rp).ravel()
-                        for ii in estimator.realizations]
-        cov = (len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0)
-        toret.append(np.atleast_2d(cov))
-    except AttributeError as exc:
-        if return_cov is True:
-            raise TwoPointEstimatorError('Input estimator has no jackknife realizations') from exc
+    if return_cov is not False:
+        try:
+            realizations = [project_to_poles(estimator.realization(ii, **kwargs),
+                            ells=ells, return_sep=False, return_cov=False, ignore_nan=ignore_nan, return_mask=False, rp=rp).ravel()
+                            for ii in estimator.realizations]
+            cov = (len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0)
+            toret.append(np.atleast_2d(cov))
+        except AttributeError as exc:
+            if return_cov is True:
+                raise TwoPointEstimatorError('Input estimator has no jackknife realizations') from exc
+    if return_mask:
+        if mask: mask = np.array(mask, dtype='?')
+        else: mask = np.ones(estimator.shape, dtype='?')
+        toret.append(mask)
     return toret if len(toret) > 1 else toret[0]
 
 
 project_to_multipoles = project_to_poles  # for backward-compatibility
 
 
-def project_to_wedges(estimator, wedges=_default_wedges, return_sep=True, return_cov=None, ignore_nan=False, **kwargs):
+def project_to_wedges(estimator, wedges=_default_wedges, return_sep=True, return_cov=None, ignore_nan=False, rp=None, return_mask=False, **kwargs):
     r"""
     Project :math:`(s, \mu)` correlation function estimation onto wedges (integrating over :math:`\mu`).
 
@@ -1120,6 +1132,13 @@ def project_to_wedges(estimator, wedges=_default_wedges, return_sep=True, return
     ignore_nan : bool, default=False
         If ``True``, ignore NaN values of the correlation functions in the integration.
 
+    rp : tuple, default=None
+        Optionally, tuple of min and max values for a :math:`r_{p} = s \sqrt(1 - \mu^{2})` cut.
+
+    return_mask : bool, default=False
+        Return mask of :math:`\mu`-bins that are summed over, for each :math:`s`; of shape ``(n,) + estimator.shape``,
+        with :math:`n` the number of wedges.
+
     kwargs : dict
         Optional arguments for :meth:`JackknifeTwoPointEstimator.realization`, when relevant.
 
@@ -1141,16 +1160,27 @@ def project_to_wedges(estimator, wedges=_default_wedges, return_sep=True, return
     mumid = (muedges[:-1] + muedges[1:]) / 2.
     dmu = np.diff(muedges)
     sep = estimator.sepavg(axis=0)
-    corr = []
+    corr, mask = [], []
     for wedge in wedges:
-        mask = (mumid >= wedge[0]) & (mumid < wedge[1])
-        if ignore_nan:
+        mask_w = (mumid >= wedge[0]) & (mumid < wedge[1])
+        mask_ws = []
+        if ignore_nan or rp:
             corrmu = np.empty(estimator.corr.shape[0], dtype=estimator.corr.dtype)
             for i_s, corr_s in enumerate(estimator.corr):
-                mask_s = mask & ~np.isnan(corr_s)
+                mask_s = mask_w.copy()
+                if ignore_nan:
+                    mask_s &= ~np.isnan(corr_s)
+                if rp:
+                    se = estimator.edges[0][:-1]
+                    mue = np.abs(estimator.edges[1])
+                    mue = np.maximum(mue[:-1], mue[1:])  # take the most conservative limit
+                    rp_s = se[i_s] * np.sqrt(1. - mue**2)
+                    mask_s &= (rp_s >= rp[0]) & (rp_s < rp[-1])
+                mask_ws.append(mask_s)
                 corrmu[i_s] = np.sum(corr_s[mask_s] * dmu[mask_s], axis=-1) / np.sum(dmu[mask_s])
+            mask.append(np.array(mask_ws, dtype='?'))
         else:
-            corrmu = np.sum(estimator.corr[:, mask] * dmu[mask], axis=-1) / np.sum(dmu[mask])
+            corrmu = np.sum(estimator.corr[:, mask_w] * dmu[mask_w], axis=-1) / np.sum(dmu[mask_w])
         corr.append(corrmu)
     if isscalar:
         corr = corr[0]
@@ -1158,21 +1188,24 @@ def project_to_wedges(estimator, wedges=_default_wedges, return_sep=True, return
     toret = []
     if return_sep: toret.append(sep)
     toret.append(corr)
-    if return_cov is False:
-        return toret if len(toret) > 1 else toret[0]
-    try:
-        realizations = [project_to_wedges(estimator.realization(ii, **kwargs),
-                                          wedges=wedges, return_sep=False, return_cov=False, ignore_nan=ignore_nan).ravel()
-                        for ii in estimator.realizations]
-        cov = (len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0)
-        toret.append(np.atleast_2d(cov))
-    except AttributeError as exc:
-        if return_cov is True:
-            raise TwoPointEstimatorError('Input estimator has no jackknife realizations') from exc
+    if return_cov is not False:
+        try:
+            realizations = [project_to_wedges(estimator.realization(ii, **kwargs),
+                                            wedges=wedges, return_sep=False, return_cov=False, ignore_nan=ignore_nan).ravel()
+                            for ii in estimator.realizations]
+            cov = (len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0)
+            toret.append(np.atleast_2d(cov))
+        except AttributeError as exc:
+            if return_cov is True:
+                raise TwoPointEstimatorError('Input estimator has no jackknife realizations') from exc
+    if return_mask:
+        if mask: mask = np.array(mask, dtype='?')
+        else: mask = np.ones(corr.shape[:-1] + estimator.shape, dtype='?')
+        toret.append(mask)
     return toret if len(toret) > 1 else toret[0]
 
 
-def project_to_wp(estimator, pimax=None, return_sep=True, return_cov=None, ignore_nan=False, **kwargs):
+def project_to_wp(estimator, pimax=None, return_sep=True, return_cov=None, ignore_nan=False, return_mask=False, **kwargs):
     r"""
     Integrate :math:`(r_{p}, \pi)` correlation function over :math:`\pi` to obtain :math:`w_{p}(r_{p})`.
 
@@ -1195,6 +1228,9 @@ def project_to_wp(estimator, pimax=None, return_sep=True, return_cov=None, ignor
 
     ignore_nan : bool, default=False
         If ``True``, ignore NaN values of the correlation functions in the integration.
+
+    return_mask : bool, default=False
+        Return mask of :math:`\pi`-bins that are summed over, for each :math:`r_{p}`; of shape ``estimator.shape``.
 
     kwargs : dict
         Optional arguments for :meth:`JackknifeTwoPointEstimator.realization`, when relevant.
@@ -1222,23 +1258,28 @@ def project_to_wp(estimator, pimax=None, return_sep=True, return_cov=None, ignor
 
     sep = estimator.sepavg(axis=0)
     dpi = np.diff(estimator.edges[1])
+    mask = []
     if ignore_nan:
         corr = np.empty(estimator.corr.shape[0], dtype=estimator.corr.dtype)
         for i_rp, corr_rp in enumerate(estimator.corr):
             mask_rp = ~np.isnan(corr_rp)
+            mask.append(mask_rp)
             corr[i_rp] = np.sum(corr_rp[mask_rp] * dpi[mask_rp], axis=-1) * np.sum(dpi) / np.sum(dpi[mask_rp])  # extra factor to correct for missing bins
     else:
         corr = np.sum(estimator.corr * dpi, axis=-1)
     toret = []
     if return_sep: toret.append(sep)
     toret.append(corr)
-    if return_cov is False:
-        return toret if len(toret) > 1 else toret[0]
-    try:
-        realizations = [project_to_wp(estimator.realization(ii, **kwargs), return_sep=False, return_cov=False, ignore_nan=ignore_nan) for ii in estimator.realizations]  # no need to provide pimax, as selection already performed
-        cov = (len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0)
-        toret.append(np.atleast_2d(cov))
-    except AttributeError as exc:
-        if return_cov is True:
-            raise TwoPointEstimatorError('Input estimator has no jackknife realizations') from exc
+    if return_cov is not False:
+        try:
+            realizations = [project_to_wp(estimator.realization(ii, **kwargs), return_sep=False, return_cov=False, ignore_nan=ignore_nan) for ii in estimator.realizations]  # no need to provide pimax, as selection already performed
+            cov = (len(realizations) - 1) * np.cov(realizations, rowvar=False, ddof=0)
+            toret.append(np.atleast_2d(cov))
+        except AttributeError as exc:
+            if return_cov is True:
+                raise TwoPointEstimatorError('Input estimator has no jackknife realizations') from exc
+    if return_mask:
+        if mask: mask = np.array(mask, dtype='?')
+        else: mask = np.ones(estimator.shape, dtype='?')
+        toret.append(mask)
     return toret if len(toret) > 1 else toret[0]

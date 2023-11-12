@@ -415,6 +415,8 @@ def test_estimator(mode='s'):
                         if isjkn: assert test[::test.shape[0]].get_corr(ells=(0, 2), return_sep=False)[1].ndim == 2
                         assert np.isnan(test(ell=2)).any()
                         assert not np.isnan(test(ell=2, ignore_nan=True)).any()
+                        _, mask = test.get_corr(ell=2, ignore_nan=True, return_mask=True, return_cov=False, return_sep=False)
+                        assert not mask.all()
                         assert np.allclose(test(sep, ells=(0, 2, 4)), test(sep, mode='poles'), atol=0, equal_nan=True)
                         arrays = test(5., ell=2), test([5.] * 3, ell=2), test([5.] * 4, ells=(0, 2, 4)), test([5.] * 4, [0.1, 0.2])  # corr, and std if jackknife
                         if not isjkn: arrays = [[array] for array in arrays]
@@ -435,6 +437,8 @@ def test_estimator(mode='s'):
                         if isjkn: assert test[::test.shape[0]].get_corr(wedges=(-1., -2. / 3, -1. / 3.), return_sep=False)[1].ndim == 2
                         assert np.isnan(test(wedges=(-1., 0.5))).any()
                         assert not np.isnan(test(wedges=(-1., 0.5), ignore_nan=True)).any()
+                        _, mask = test.get_corr(wedges=(-1., 0.5), ignore_nan=True, return_mask=True, return_cov=False, return_sep=False)
+                        assert not mask.all()
                         assert np.allclose(test(sep, wedges=(-1., -2. / 3, -1. / 3, 0., 1. / 3, 2. / 3, 1.)), test(sep, mode='wedges'), atol=0)
                         arrays = test(5., wedges=(-1., -0.8)), test([5.] * 3, wedges=(-1., -0.8)), test([sep[0]] * 4, wedges=(0.1, 0.3, 0.8)), test([sep[0]] * 4, wedges=((0.1, 0.3), (0.3, 0.8)))
                         if not isjkn: arrays = [[array] for array in arrays]
@@ -455,6 +459,7 @@ def test_estimator(mode='s'):
                         test.corr.flat[0] = zero
                         assert np.allclose(test[:, :10].corr, test.corr[:, :10], equal_nan=True)
                         test(return_sep=True, ells=(0, 2), rp=(10., np.inf))
+                        test(return_sep=True, wedges=(-1., -0.8), rp=(10., np.inf))
                     elif test.mode == 'rppi':
                         # rppi
                         arrays = test(sep, [0., 0.4]), test(sep[::-1], [0.4, 0.])
