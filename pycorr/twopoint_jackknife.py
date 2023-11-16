@@ -321,7 +321,7 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
 
     def __init__(self, mode, edges, positions1, samples1, weights1=None, positions2=None, samples2=None, weights2=None,
                  bin_type='auto', position_type='auto', weight_type='auto', weight_attrs=None,
-                 twopoint_weights=None, selection_attrs=None, los='midpoint', boxsize=None, compute_sepsavg=True, dtype=None,
+                 twopoint_weights=None, selection_attrs=None, los='midpoint', boxsize=None, compute_sepsavg=True, dtype='f8',
                  nthreads=None, mpicomm=None, mpiroot=None, nprocs_per_real=1, samples=None, **kwargs):
         r"""
         Initialize :class:`JackknifeTwoPointCounter`.
@@ -447,9 +447,11 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
             This can make the two-point counts faster if ``bin_type`` is "custom".
             In this case, :attr:`sep` will be set the midpoint of input edges.
 
-        dtype : string, np.dtype, default=None
+        dtype : string, np.dtype, default='f8'
             Array type for positions and weights.
             If ``None``, defaults to type of first ``positions1`` array.
+            Double precision is highly recommended in case ``mode`` is "theta",
+            ``twopoint_weights`` is provided (due to cosine), or ``compute_sepsavg`` is ``True``.
 
         nthreads : int, default=None
             Number of OpenMP threads to use.

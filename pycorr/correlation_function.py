@@ -249,11 +249,12 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         This can make the two-point counts faster if ``bin_type`` is "custom".
         In this case, :attr:`sep` will be set the midpoint of input edges.
 
-    dtype : string, np.dtype, default=None
+    dtype : string, np.dtype, default='f8'
         Array type for positions and weights.
         If ``None``, defaults to type of first array of positions.
         Double precision is highly recommended in case ``mode`` is "theta",
         ``twopoint_weights`` is provided (due to cosine), or ``compute_sepsavg`` is ``True``.
+        dtype='f8' highly recommended for ``mode = 'theta'`` or for :math:`\theta`-cut.
 
     nthreads : int, default=None
         Number of OpenMP threads to use.

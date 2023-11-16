@@ -279,7 +279,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
 
     def __init__(self, mode, edges, positions1, positions2=None, weights1=None, weights2=None,
                  bin_type='auto', position_type='auto', weight_type='auto', weight_attrs=None,
-                 twopoint_weights=None, selection_attrs=None, los='midpoint', boxsize=None, compute_sepsavg=True, dtype=None,
+                 twopoint_weights=None, selection_attrs=None, los='midpoint', boxsize=None, compute_sepsavg=True, dtype='f8',
                  nthreads=None, mpicomm=None, mpiroot=None, **kwargs):
         r"""
         Initialize :class:`BaseTwoPointCounter`, and run actual two-point counts
@@ -413,7 +413,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             This can make the two-point counts faster if ``bin_type`` is "custom".
             In this case, :attr:`sep` will be set the midpoint of input edges.
 
-        dtype : string, np.dtype, default=None
+        dtype : string, np.dtype, default='f8'
             Array type for positions and weights.
             If ``None``, defaults to type of first ``positions1`` array.
             Double precision is highly recommended in case ``mode`` is "theta",
@@ -1291,7 +1291,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                     file.write(delimiter.join(['{:<{width}}'.format(column[irow], width=width) for column, width in zip(columns, widths)]) + '\n')
 
 
-def normalization(weights1, weights2=None, weight_type='auto', weight_attrs=None, dtype=None,
+def normalization(weights1, weights2=None, weight_type='auto', weight_attrs=None, dtype='f8',
                   nthreads=None, mpicomm=None, mpiroot=None):
     r"""
     Initialize :class:`BaseTwoPointCounter`, and run actual two-point counts
@@ -1331,10 +1331,10 @@ def normalization(weights1, weights2=None, weight_type='auto', weight_attrs=None
         These will only impact the normalization factors.
         For example, for the "zero-truncated" estimator (arXiv:1912.08803), one would use noffset = 0, nalways = 1, nnever = 0.
 
-    dtype : string, np.dtype, default=None
+    dtype : string, np.dtype, default='f8'
         Array type for weights.
         If ``None``, defaults to type of first ``weights1`` array if a floating-point array is provided, else 'f8'.
-        Double precision is highly recommended .
+        Double precision is highly recommended.
 
     nthreads : int, default=None
         Number of OpenMP threads to use.
