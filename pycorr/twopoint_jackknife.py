@@ -277,7 +277,7 @@ class KMeansSubsampler(BaseSubsampler):
                 positions = get_mpi().gather(positions, mpiroot=None, mpicomm=self.mpicomm)  # WARNING: bcast on all ranks
                 if weights is not None:
                     weights = get_mpi().gather(weights, mpiroot=None, mpicomm=self.mpicomm)
-        self.kmeans = cluster.KMeans(n_clusters=self.nsamples, random_state=self.random_state, **self.attrs)
+        self.kmeans = cluster.KMeans(n_clusters=self.nsamples, random_state=self.random_state, n_init=10, **self.attrs)
         self.kmeans.fit(positions, sample_weight=weights)
 
     def label(self, positions, position_type=None):
