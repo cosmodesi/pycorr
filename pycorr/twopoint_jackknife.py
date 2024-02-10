@@ -174,7 +174,7 @@ class BoxSubsampler(BaseSubsampler):
             nsamples = int(nsamples)
             self.nsamples = (int(nsamples**(1. / ndim) + 0.5),) * ndim
             if nsamples != np.prod(self.nsamples):
-                raise ValueError('Number of regions must be an {:d}-th power'.format(ndim))
+                raise ValueError('Number of regions must be a {:d}-th power of an integer'.format(ndim))
 
         self.run()
 
