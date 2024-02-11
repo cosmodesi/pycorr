@@ -222,7 +222,7 @@ def _get_box(*positions):
 
 def cartesian_to_sky(positions, wrap=True, degree=True, dtype=None):
     r"""
-    Transform cartesian coordinates into distance, RA, Dec.
+    Transform cartesian coordinates into RA, Dec, distance.
 
     Parameters
     ----------
@@ -250,7 +250,7 @@ def cartesian_to_sky(positions, wrap=True, degree=True, dtype=None):
 
 def sky_to_cartesian(rdd, degree=True, dtype=None):
     """
-    Transform distance, RA, Dec into cartesian coordinates.
+    Transform RA, Dec, distance into cartesian coordinates.
 
     Parameters
     ----------
