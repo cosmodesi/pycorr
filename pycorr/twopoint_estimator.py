@@ -480,7 +480,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
             else if 'pimax' provided, return projected correlation function.
 
         kwargs : dict
-            Optionally arguments for :func:`project_to_poles` (if :attr:`mode` is 'smu'), e.g. ``ells``,
+            Optionally arguments for :func:`project_to_poles` (if :attr:`mode` is 'smu'), e.g. ``ell``,
             :func:`project_to_wedges` (if :attr:`mode` is 'smu'), e.g. ``wedges``,
             `project_to_wp` (if :attr:`mode` is 'rpppi'), e.g. ``pimax``, and :meth:`cov`.
 
@@ -502,7 +502,7 @@ class BaseTwoPointEstimator(BaseClass, metaclass=RegisteredTwoPointEstimator):
             return project_to_wedges(self, return_sep=return_sep, return_cov=return_cov, return_mask=return_mask, **kwargs)
         if mode == 'wp':
             return project_to_wp(self, return_sep=return_sep, return_cov=return_cov, return_mask=return_mask, **kwargs)
-        for name in ['ells', 'wedges', 'pimax']: kwargs.pop(name, None)
+        #for name in ['ell', 'ells', 'wedges', 'pimax']: kwargs.pop(name, None)
         toret = []
         if return_sep:
             for axis in range(self.ndim): toret.append(self.sepavg(axis=axis))

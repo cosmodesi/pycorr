@@ -72,7 +72,7 @@ class BaseSubsampler(BaseClass):
         self.weights = weights
         if weights is not None: self.weights = np.array(weights, dtype=self.dtype, copy=False)
         self.nsamples = nsamples
-        self.attrs = kwargs
+        self.attrs = dict(kwargs)
         self.run()
 
     @property
@@ -255,6 +255,7 @@ class KMeansSubsampler(BaseSubsampler):
             raise ValueError('Healpix (nside = {:d}) can only be used with mode == angular'.format(self.nside))
         self.nest = False
         self.random_state = random_state
+        kwargs.setdefault('n_init', 10)
         super(KMeansSubsampler, self).__init__(mode, positions, **kwargs)
 
     def run(self):
@@ -277,7 +278,8 @@ class KMeansSubsampler(BaseSubsampler):
                 positions = get_mpi().gather(positions, mpiroot=None, mpicomm=self.mpicomm)  # WARNING: bcast on all ranks
                 if weights is not None:
                     weights = get_mpi().gather(weights, mpiroot=None, mpicomm=self.mpicomm)
-        self.kmeans = cluster.KMeans(n_clusters=self.nsamples, random_state=self.random_state, n_init=10, **self.attrs)
+
+        self.kmeans = cluster.KMeans(n_clusters=self.nsamples, random_state=self.random_state, **self.attrs)
         self.kmeans.fit(positions, sample_weight=weights)
 
     def label(self, positions, position_type=None):
