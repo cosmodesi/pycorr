@@ -295,10 +295,20 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         return mpicomm.bcast(array1 is array2, root=mpiroot)
 
     with_randoms = not is_none(randoms_positions1)
-    with_shifted = not is_none(shifted_positions1)
+    with_shifted = not (is_none(shifted_positions1) and is_none(shifted_positions2))
     with_jackknife = not is_none(data_samples1)
     Estimator = get_twopoint_estimator(estimator, with_DR=with_randoms or with_shifted, with_jackknife=with_jackknife)
     if log: logger.info('Using estimator {}.'.format(Estimator))
+
+    if with_shifted:
+        # allow for pre- x post-recon, or just propagate missing properties from non-shifted randoms
+        if is_none(shifted_positions1): shifted_positions1 = randoms_positions1
+        if is_none(shifted_weights1): shifted_weights1 = randoms_weights1
+        if is_none(shifted_samples1): shifted_samples1 = randoms_samples1
+        # allow for post- x pre-recon, or just propagate missing properties from non-shifted randoms
+        if is_none(shifted_positions2): shifted_positions2 = randoms_positions2
+        if is_none(shifted_weights2): shifted_weights2 = randoms_weights2
+        if is_none(shifted_samples2): shifted_samples2 = randoms_samples2
 
     positions = {'D1': data_positions1, 'D2': data_positions2, 'R1': randoms_positions1, 'R2': randoms_positions2, 'S1': shifted_positions1, 'S2': shifted_positions2}
     weights = {'D1': data_weights1, 'D2': data_weights2, 'R1': randoms_weights1, 'R2': randoms_weights2, 'S1': shifted_weights1, 'S2': shifted_weights2}
