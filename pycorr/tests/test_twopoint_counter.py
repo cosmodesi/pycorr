@@ -742,6 +742,7 @@ def test_gpu(mode='smu'):
                 list_options.append({'autocorr': autocorr, 'los': los, 'n_individual_weights': 1, 'size': 0, 'dtype': dtype})
                 list_options.append({'autocorr': autocorr, 'los': los, 'selection_attrs': {'rp': (0., 20.)}, 'n_individual_weights': 1, 'n_bitwise_weights': 2, 'twopoint_weights': twopoint_weights, 'dtype': dtype})
                 list_options.append({'autocorr': autocorr, 'los': los, 'selection_attrs': {'theta': (0., 5.)}, 'n_individual_weights': 1, 'n_bitwise_weights': 2, 'twopoint_weights': twopoint_weights, 'dtype': dtype})
+                list_options.append({'autocorr': autocorr, 'los': los, 'n_individual_weights': 1, 'n_bitwise_weights': 2, 'twopoint_weights': twopoint_weights, 'weight_attrs': {'normalization': 'counter'}, 'dtype': dtype})
 
     for options in list_options:
         print(options)
@@ -1132,10 +1133,7 @@ if __name__ == '__main__':
 
     setup_logging()
 
-    test_twopoint_counter(mode='smu')
-    exit()
-    #test_pip_counts2()
-    #test_gpu()
+    test_gpu()
     test_mu1()
 
     for mode in ['theta', 's', 'smu', 'rppi', 'rp']:
@@ -1147,3 +1145,4 @@ if __name__ == '__main__':
     test_rebin()
     test_pip_normalization()
     test_pip_counts()
+    #test_pip_counts2()
