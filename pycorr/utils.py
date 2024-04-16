@@ -5,6 +5,7 @@ import sys
 import time
 import logging
 import traceback
+from functools import lru_cache
 
 import numpy as np
 
@@ -455,6 +456,7 @@ def pascal_triangle(n_rows):
     return toret
 
 
+@lru_cache(maxsize=10, typed=False)
 def joint_occurences(nrealizations=128, max_occurences=None, noffset=1, default_value=0):
     """
     Return expected value of inverse counts, i.e. eq. 21 of arXiv:1912.08803.

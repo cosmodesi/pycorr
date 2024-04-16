@@ -13,7 +13,7 @@ from . import utils
 TwoPointWeight = namedtuple('TwoPointWeight', ['sep', 'weight'])
 
 
-class TwoPointCounterError(Exception):
+class TwoPointCounterError(ValueError):
 
     """Exception raised when issue with two-point counting."""
 
@@ -35,7 +35,7 @@ def get_twopoint_counter(engine='corrfunc'):
     if isinstance(engine, str):
 
         if engine.lower() == 'corrfunc':
-            from . import corrfunc
+            from . import corrfunc  # adds counter to BaseTwoPointCounter._registry
 
         try:
             engine = BaseTwoPointCounter._registry[engine.lower()]
@@ -106,7 +106,7 @@ def get_default_nrealizations(weights):
     return 1 + 8 * sum(weight.dtype.itemsize for weight in weights)
 
 
-def get_inverse_probability_weight(*weights, noffset=1, nrealizations=None, default_value=0., dtype='f8'):
+def get_inverse_probability_weight(*weights, noffset=1, nrealizations=None, default_value=0., correction=None, dtype='f8'):
     r"""
     Return inverse probability weight given input bitwise weights.
     Inverse probability weight is computed as::math:`\mathrm{nrealizations}/(\mathrm{noffset} + \mathrm{popcount}(w_{1} \& w_{2} \& ...))`.
@@ -126,6 +126,9 @@ def get_inverse_probability_weight(*weights, noffset=1, nrealizations=None, defa
     default_value : float, default=0.
         Default weight value, if the denominator is zero (defaults to 0).
 
+    correction : 2D array, default=None
+        Optionally, divide weight by ``correction[nbits1, nbits2]`` with ``nbits1``, ``nbits2`` the number of non-zero bits in weights.
+
     dtype : string, np.dtype
         Type for output weight.
 
@@ -142,6 +145,9 @@ def get_inverse_probability_weight(*weights, noffset=1, nrealizations=None, defa
     denom[mask] = 1
     toret = np.empty_like(denom, dtype=dtype)
     toret[...] = nrealizations / denom
+    if correction is not None:
+        c = tuple(sum(utils.popcount(w) for w in weight) for weight in weights)
+        toret /= correction[c]
     toret[mask] = default_value
     return toret
 
@@ -370,14 +376,12 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             defaulting to the number of bits in input weights plus one);
             "noffset", the offset to be added to the bitwise counts in the denominator (defaulting to 1)
             and "default_value", the default value of pairwise weights if the denominator is zero (defaulting to 0).
-            One can also provide "nalways", stating the number of bits systematically set to 1 (defaulting to 0),
-            and "nnever", stating the number of bits systematically set to 0 (defaulting to 0).
-            These will only impact the normalization factors, if not computed with the brute-force approach.
-            For example, for the "zero-truncated" estimator (arXiv:1912.08803), one would use noffset = 0, nalways = 1, nnever = 0.
-            The method used to compute the normalization with PIP weights can be specified with the keyword "normalization": if ``None``,
-            normalization is given by eq. 22 of arXiv:1912.08803; "brute_force" (using OpenMP'ed C code)
-            or "brute_force_npy" (slower, using numpy only methods; both methods match within machine precision)
-            loop over all pairs.
+            The method used to compute the normalization with PIP weights can be specified with the keyword "normalization":
+            if ``None`` or "total", normalization is given by eq. 22 of arXiv:1912.08803; "brute_force" (using OpenMP'ed C code)
+            or "brute_force_npy" (slower, using numpy only methods; both methods match within machine precision) loop over all pairs;
+            "counter" to normalize each pair by eq. 19 of arXiv:1912.08803.
+            For normalizations "total" or "counter", "nalways" specifies the number of bits systematically set to 1 minus the number of bits systematically set to 0 (defaulting to 0).
+            For example, for the "zero-truncated" estimator (arXiv:1912.08803), one would use noffset = 0, nalways = 1.
 
         twopoint_weights : WeightTwoPointEstimator, default=None
             Weights to be applied to each pair of particles.
@@ -580,8 +584,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             self.weights1 = self.weights2 = []
 
         else:
-
-            self.weight_attrs.update(nalways=weight_attrs.get('nalways', 0), nnever=weight_attrs.get('nnever', 0), normalization=weight_attrs.get('normalization', None))
+            self.weight_attrs.update(nalways=weight_attrs.get('nalways', 0), normalization=weight_attrs.get('normalization', None), correction=weight_attrs.get('correction', None))
             noffset = weight_attrs.get('noffset', 1)
             if int(noffset) != noffset:
                 raise TwoPointCounterError('Only integer offset accepted')
@@ -645,7 +648,21 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         elif len(self.weights1) == len(self.weights2) - 1:
             self.weights1.append(np.ones(self._size1, dtype=self.dtype))
         elif len(self.weights1) != len(self.weights2):
-            raise ValueError('Something fishy happened with weights; number of weights1/weights2 is {:d}/{:d}'.format(len(self.weights1), len(self.weights2)))
+            raise TwoPointCounterError('Something fishy happened with weights; number of weights1/weights2 is {:d}/{:d}'.format(len(self.weights1), len(self.weights2)))
+
+        normalization = self.weight_attrs['normalization'] = self.weight_attrs.get('normalization', 'total') or 'total'
+        allowed_normalizations = ['total', 'brute_force', 'brute_force_npy', 'counter']
+        if normalization not in allowed_normalizations:
+            raise TwoPointCounterError('normalization should be one of {}'.format(allowed_normalizations))
+
+        if self.weight_attrs['normalization'] == 'counter' and self.weight_attrs['correction'] is None:
+            nrealizations, nalways = self.weight_attrs['nrealizations'], self.weight_attrs['nalways']
+            joint = utils.joint_occurences(nrealizations, noffset=self.weight_attrs['noffset'] + nalways, default_value=self.weight_attrs['default_value'])
+            correction = np.zeros((nrealizations,) * 2, dtype=self.dtype)
+            for c1 in range(correction.shape[0]):
+                for c2 in range(correction.shape[1]):
+                    correction[c1][c2] = joint[c1 - nalways][c2 - nalways] if c2 <= c1 else joint[c2 - nalways][c1 - nalways]
+            self.weight_attrs['correction'] = correction
 
         self.twopoint_weights = twopoint_weights
         self.cos_twopoint_weights = None
@@ -717,7 +734,8 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         # up to now weights is scalar
         if self.n_bitwise_weights:
             weights *= get_inverse_probability_weight(self.weights1[:self.n_bitwise_weights], self.weights2[:self.n_bitwise_weights], nrealizations=self.weight_attrs['nrealizations'],
-                                                      noffset=self.weight_attrs['noffset'], default_value=self.weight_attrs['default_value'], dtype=self.dtype)
+                                                      noffset=self.weight_attrs['noffset'], default_value=self.weight_attrs['default_value'], correction=self.weight_attrs['correction'],
+                                                      dtype=self.dtype)
         for ii in range(self.n_bitwise_weights, len(self.weights1)):
             weights *= self.weights1[ii] * self.weights2[ii]
         # assert weights.size == len(self.positions1[0])
@@ -741,25 +759,18 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             \left(\sum_{i=1}^{N_{1}} w_{1,i}\right)^{2} - \sum_{i=1}^{N_{1}} w_{1,i}^{2}
 
         """
-        if not self.weights1:
+        method = self.weight_attrs.get('normalization', 'total')
 
-            if self.autocorr or self.same_shotnoise:
-                return 1. * self.size1 * (self.size1 - 1.)
-            return 1. * self.size1 * self.size2
+        def get_individual_weights(weights):
+            indweights = weights[self.n_bitwise_weights:]
+            if indweights: return np.prod(indweights, axis=0)
 
-        if self.n_bitwise_weights:
+        if self.n_bitwise_weights and method != 'counter':
 
             noffset = self.weight_attrs['noffset']
             nrealizations = self.weight_attrs['nrealizations']
-            nalways = self.weight_attrs['nalways'] - self.weight_attrs['nnever']
+            nalways = self.weight_attrs['nalways']
             default_value = self.weight_attrs['default_value']
-
-            def get_individual_weights(weights):
-                indweights = weights[self.n_bitwise_weights:]
-                if indweights: return np.prod(indweights, axis=0)
-
-            method = self.weight_attrs.get('normalization', None)
-            method = method or ''
 
             if 'brute_force' in method:
 
@@ -772,7 +783,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                 bitweights1, bitweights2 = (utils.reformat_bitarrays(*w[:self.n_bitwise_weights], dtype='i8') for w in [weights1, weights2])
                 sumw_auto = 0.
                 if self.autocorr or self.same_shotnoise:
-                    tmp = get_inverse_probability_weight(bitweights1, bitweights2, nrealizations=nrealizations, noffset=noffset, default_value=default_value, dtype=self.dtype)
+                    tmp = get_inverse_probability_weight(bitweights1, bitweights2, nrealizations=nrealizations, noffset=noffset, default_value=default_value, correction=self.weight_attrs['correction'], dtype=self.dtype)
                     if indweights1 is not None: tmp *= indweights1 * indweights2
                     sumw_auto = tmp.sum()
 
@@ -795,7 +806,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                         start, stop = islab * csize2 // nslabs, (islab + 1) * csize2 // nslabs
                         bw1, bw2 = bitweights1, [slice_array(w, start, stop) for w in bitweights2]
                         bw1, bw2 = zip(*[np.meshgrid(ww1, ww2, indexing='ij') for ww1, ww2 in zip(bw1, bw2)])
-                        tmp = get_inverse_probability_weight(bw1, bw2, nrealizations=nrealizations, noffset=noffset, default_value=default_value, dtype=self.dtype)
+                        tmp = get_inverse_probability_weight(bw1, bw2, nrealizations=nrealizations, noffset=noffset, default_value=default_value, correction=self.weight_attrs['correction'], dtype=self.dtype)
                         if indweights1 is not None: tmp *= (indweights1[:, None] * slice_array(indweights2, start, stop))
                         sumw_cross += tmp.sum()
                 else:
@@ -835,8 +846,7 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                 w2, c2 = w1, c1
             else:
                 w2, c2 = binned_weights(self.weights2)
-            max_occurences = noffset + max(c.max() if c.size else 0 for c in (c1, c2))
-            joint = utils.joint_occurences(nrealizations, max_occurences=max_occurences, noffset=noffset + nalways, default_value=default_value)
+            joint = utils.joint_occurences(nrealizations, noffset=noffset + nalways, default_value=default_value)
             sumw_auto = 0
             if self.autocorr or self.same_shotnoise:
                 wsq, csq = binned_weights(self.weights1, self.weights2)
@@ -848,13 +858,21 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
                     sumw_cross += w1_ * w2_ * (joint[c1_ - nalways][c2_ - nalways] if c2_ <= c1_ else joint[c2_ - nalways][c1_ - nalways])
             return sumw_cross - sumw_auto
 
+        indweights1, indweights2 = get_individual_weights(self.weights1), get_individual_weights(self.weights2)
+
+        if indweights1 is None:
+
+            if self.autocorr or self.same_shotnoise:
+                return 1. * self.size1 * (self.size1 - 1.)
+            return 1. * self.size1 * self.size2
+
         # individual_weights
         sumw_auto = 0.
         if self.autocorr or self.same_shotnoise:
-            sumw_auto = np.sum(self.weights1[0] * self.weights2[0])
+            sumw_auto = np.sum(indweights1 * indweights2)
             if self.with_mpi:
                 sumw_auto = self.mpicomm.allreduce(sumw_auto)
-        sumw1, sumw2 = self.weights1[0].sum(), self.weights2[0].sum()
+        sumw1, sumw2 = indweights1.sum(), indweights2.sum()
         if self.with_mpi:
             sumw1, sumw2 = self.mpicomm.allreduce(sumw1), self.mpicomm.allreduce(sumw2)
         sumw_cross = sumw1 * sumw2
@@ -1326,10 +1344,13 @@ def normalization(weights1, weights2=None, weight_type='auto', weight_attrs=None
         defaulting to the number of bits in input weights plus one);
         "noffset", the offset to be added to the bitwise counts in the denominator (defaulting to 1)
         and "default_value", the default value of pairwise weights if the denominator is zero (defaulting to 0).
-        One can also provide "nalways", stating the number of bits systematically set to 1 (defaulting to 0),
-        and "nnever", stating the number of bits systematically set to 0 (defaulting to 0).
-        These will only impact the normalization factors.
-        For example, for the "zero-truncated" estimator (arXiv:1912.08803), one would use noffset = 0, nalways = 1, nnever = 0.
+        One can also provide "nalways", stating the number of bits systematically set to 1 minus the number of bits systematically set to 0 (defaulting to 0).
+        These will only impact the normalization factors, if not computed with the brute-force approach.
+        For example, for the "zero-truncated" estimator (arXiv:1912.08803), one would use noffset = 0, nalways = 1.
+        The method used to compute the normalization with PIP weights can be specified with the keyword "normalization":
+        if ``None``, normalization is given by eq. 22 of arXiv:1912.08803; "brute_force" (using OpenMP'ed C code)
+        or "brute_force_npy" (slower, using numpy only methods; both methods match within machine precision) loop over all pairs;
+        "counter" to normalize each pair by eq. 19 of arXiv:1912.08803.
 
     dtype : string, np.dtype, default='f8'
         Array type for weights.

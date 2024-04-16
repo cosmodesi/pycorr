@@ -212,14 +212,12 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         defaulting to the number of bits in input weights plus one);
         "noffset", the offset to be added to the bitwise counts in the denominator (defaulting to 1)
         and "default_value", the default value of pairwise weights if the denominator is zero (defaulting to 0).
-        One can also provide "nalways", stating the number of bits systematically set to 1 (defaulting to 0),
-        and "nnever", stating the number of bits systematically set to 0 (defaulting to 0).
-        These will only impact the normalization factors.
-        For example, for the "zero-truncated" estimator (arXiv:1912.08803), one would use noffset = 0, nalways = 1, nnever = 0.
-        The method used to compute the normalization with PIP weights can be specified with the keyword "normalization": if ``None``,
-        normalization is given by eq. 22 of arXiv:1912.08803; "brute_force" (using OpenMP'ed C code)
-        or "brute_force_npy" (slower, using numpy only methods; both methods match within machine precision)
-        loop over all pairs.
+        The method used to compute the normalization with PIP weights can be specified with the keyword "normalization":
+        if ``None`` or "total", normalization is given by eq. 22 of arXiv:1912.08803; "brute_force" (using OpenMP'ed C code)
+        or "brute_force_npy" (slower, using numpy only methods; both methods match within machine precision) loop over all pairs;
+        "counter" to normalize each pair by eq. 19 of arXiv:1912.08803.
+        For normalizations "total" or "counter", "nalways" specifies the number of bits systematically set to 1 minus the number of bits systematically set to 0 (defaulting to 0).
+        For example, for the "zero-truncated" estimator (arXiv:1912.08803), one would use noffset = 0, nalways = 1.
 
     selection_attrs : dict, default=None
         To select pairs to be counted, provide mapping between the quantity (string)

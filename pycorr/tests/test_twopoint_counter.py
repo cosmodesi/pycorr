@@ -29,12 +29,18 @@ def dotproduct_normalized(position1, position2):
     return dotproduct(position1, position2) / (norm(position1) * norm(position2))
 
 
-def get_weight(xyz1, xyz2, weights1, weights2, n_bitwise_weights=0, twopoint_weights=None, nrealizations=None, noffset=1, default_value=0.):
+def get_weight(xyz1, xyz2, weights1, weights2, n_bitwise_weights=0, twopoint_weights=None, nrealizations=None, noffset=1, default_value=0., correction=None):
     if nrealizations is None:
         weight = 1
     else:
         denom = noffset + sum(bin(w1 & w2).count('1') for w1, w2 in zip(weights1[:n_bitwise_weights], weights2[:n_bitwise_weights]))
-        weight = default_value if denom == 0 else nrealizations / denom
+        if denom == 0:
+            weight = default_value
+        else:
+            weight = nrealizations / denom
+            if correction is not None:
+                c = tuple(sum(bin(w).count('1') for w in weights[:n_bitwise_weights]) for weights in [weights1, weights2])
+                weight /= correction[c]
     for w1, w2 in zip(weights1[n_bitwise_weights:], weights2[n_bitwise_weights:]):
         weight *= w1 * w2
     if twopoint_weights is not None:
@@ -281,6 +287,7 @@ def test_twopoint_counter(mode='s'):
                 list_options.append({'autocorr': autocorr, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'weight_attrs': {'nrealizations': 129, 'noffset': 3}, 'dtype': dtype, 'isa': isa})
                 nthreads = int(os.getenv('OMP_NUM_THREADS', '4'))
                 list_options.append({'autocorr': autocorr, 'n_individual_weights': 1, 'n_bitwise_weights': 2, 'weight_attrs': {'noffset': 0, 'default_value': 0.8}, 'dtype': dtype, 'isa': isa, 'nthreads': nthreads})
+                list_options.append({'autocorr': autocorr, 'n_individual_weights': 1, 'n_bitwise_weights': 2, 'weight_attrs': {'normalization': 'counter'}, 'dtype': dtype, 'isa': isa, 'nthreads': nthreads})
 
                 # twopoint weights
                 if itemsize > 4:
@@ -393,10 +400,21 @@ def test_twopoint_counter(mode='s'):
             if twopoint_weights is not None:
                 twopoint_weights = TwoPointWeight(np.cos(np.radians(twopoint_weights.sep[::-1], dtype=dtype)), np.asarray(twopoint_weights.weight[::-1], dtype=dtype))
 
-            itemsize = np.dtype('f8' if dtype is None else dtype).itemsize
-            tol = {'atol': 1e-5, 'rtol': 2e-1 if twopoint_weights is not None else 1e-2} if itemsize <= 4 else {'atol': 1e-8, 'rtol': 1e-6}
+            if weight_attrs.get('normalization', None) == 'counter':
+                nalways = weight_attrs.get('nalways', 0)
+                nrealizations = weight_attrs['nrealizations']
+                joint = utils.joint_occurences(nrealizations, noffset=weight_attrs['noffset'] + nalways, default_value=weight_attrs['default_value'])
+                correction = np.zeros((nrealizations,) * 2, dtype='f8')
+                for c1 in range(correction.shape[0]):
+                    for c2 in range(correction.shape[1]):
+                        correction[c1][c2] = joint[c1 - nalways][c2 - nalways] if c2 <= c1 else joint[c2 - nalways][c1 - nalways]
+                weight_attrs['correction'] = correction
+            weight_attrs.pop('normalization', None)
 
             wcounts_ref, sep_ref = ref_func(edges, data1_ref, data2=data2_ref if not autocorr else None, n_bitwise_weights=n_bitwise_weights, twopoint_weights=twopoint_weights, autocorr=autocorr, selection_attrs=selection_attrs, **options_ref, **weight_attrs)
+
+            itemsize = np.dtype('f8' if dtype is None else dtype).itemsize
+            tol = {'atol': 1e-5, 'rtol': 2e-1 if twopoint_weights is not None else 1e-2} if itemsize <= 4 else {'atol': 1e-8, 'rtol': 1e-6}
 
             if bitwise_type is not None and n_bitwise_weights > 0:
 
@@ -497,7 +515,7 @@ def test_twopoint_counter(mode='s'):
                 if has_weights[1]: weights2_bak = np.array(weights2, copy=True)
                 else: weights2 = size2
                 toret = normalization(weights1=None if pass_none else weights1, weights2=None if pass_none or autocorr else weights2,
-                                      dtype=dtype, nthreads=nthreads, weight_attrs={**(weight_attrs or {}), **options.get('weight_attrs', {})}, **kwargs)
+                                      dtype=dtype, nthreads=nthreads, weight_attrs=options.get('weight_attrs', {}), **kwargs) #weight_attrs={**(weight_attrs or {}), **options.get('weight_attrs', {})}, **kwargs)
                 if has_weights[0]: assert np.allclose(weights1, weights1_bak)
                 if has_weights[1]: assert np.allclose(weights2, weights2_bak)
                 return toret
@@ -738,8 +756,7 @@ def test_gpu(mode='smu'):
         twopoint_weights = options.pop('twopoint_weights', None)
 
         kwargs = dict(mode=mode, edges=edges, engine='corrfunc', positions1=data1[:3], positions2=None if autocorr else data2[:3],
-                      weights1=data1[3:], weights2=None if autocorr else data2[3:], position_type='xyz', verbose=False, twopoint_weights=twopoint_weights,
-                      **options)
+                      weights1=data1[3:], weights2=None if autocorr else data2[3:], position_type='xyz', verbose=False, twopoint_weights=twopoint_weights, **options)
         if mpi:
             kwargs.update(mpicomm=mpi.COMM_WORLD, mpiroot=0)
 
@@ -1078,10 +1095,46 @@ def test_rebin():
     assert np.allclose(np.sum(test.wcounts), np.sum(ref.wcounts))
 
 
+def test_pip_counts2():
+
+    # format_pip_reference()
+    from pycorr import TwoPointCorrelationFunction
+    ref_dir = 'reference_pip'
+    for mode in ['uncorrelated', 'correlated', 'noweights'][1:2]:
+        ref_fn = os.path.join(ref_dir, '4Arnaud_{}.txt'.format(mode))
+        no_indweight = mode == 'noweights'
+        if no_indweight: mode = 'correlated'
+        fn = os.path.join(ref_dir, 'gal_w_{}.npy'.format(mode))
+        tmp = np.load(fn)
+        nbits = len([name for name in tmp.dtype.names if name.startswith('bit') and 'weight' not in name])
+        data_weights = [tmp['indweight']] + utils.pack_bitarrays(*[tmp['bit{:d}'.format(ibit)] for ibit in range(nbits)])
+        data_weights_iip = [data_weights[0], get_inverse_probability_weight(data_weights[1:], noffset=1, nrealizations=1 + nbits)]
+        if no_indweight:
+            data_weights = data_weights[1:]
+            data_weights_iip = data_weights_iip[1:]
+        data_positions = [tmp[axis] for axis in 'xyz']
+        fn = os.path.join(ref_dir, 'ran.npy')
+        tmp = np.load(fn)
+        randoms_positions = [tmp[axis] for axis in 'xyz']
+        edges = (np.linspace(0., 100., 101), np.linspace(-1., 1., 4))
+        ref = None
+        for isa in ['fallback', 'sse42', 'avx']:
+            result = TwoPointCorrelationFunction(mode='smu', edges=edges, data_positions1=data_positions, randoms_positions1=randoms_positions, los='midpoint',
+                                                 data_weights1=data_weights, weight_attrs={'nrealizations': 1 + nbits, 'normalization': 'counter'},
+                                                 isa=isa, position_type='xyz', nthreads=4)
+            if ref is not None:
+                assert np.allclose(result.D1D2.wcounts, ref)
+            else:
+                ref = result.D1D2.wcounts
+
+
 if __name__ == '__main__':
 
     setup_logging()
 
+    test_twopoint_counter(mode='smu')
+    exit()
+    #test_pip_counts2()
     #test_gpu()
     test_mu1()
 

@@ -89,6 +89,8 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             if not autocorr:
                 weights2 = reformat_bitweights(dweights2)
             weight_attrs = {'noffset': self.weight_attrs['noffset'], 'default_value': self.weight_attrs['default_value'] / self.weight_attrs['nrealizations']}
+            correction = self.weight_attrs.get('correction', None)
+            if correction is not None: weight_attrs['correction'] = correction
 
         elif weights1:
             output_weightavg = True
