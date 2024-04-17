@@ -211,7 +211,7 @@ def test_estimator(mode='s'):
                                                    data_weights1=None if pass_none else data_weights1, data_weights2=None if pass_none or autocorr and not same_shotnoise else data_weights2,
                                                    randoms_positions1=randoms_positions1 if with_randoms and not pass_none else None, randoms_positions2=None if pass_none or autocorr else randoms_positions2,
                                                    randoms_weights1=randoms_weights1 if with_randoms and not pass_none else None, randoms_weights2=None if (pass_none or autocorr) and not same_shotnoise or not with_randoms else randoms_weights2,
-                                                   shifted_positions1=shifted_positions1 if with_shifted and not pass_none else None, shifted_positions2=None if pass_none or autocorr else shifted_positions2,
+                                                   shifted_positions1=shifted_positions1 if with_shifted and not pass_none else None, shifted_positions2=None if pass_none or autocorr or not with_shifted else shifted_positions2,
                                                    shifted_weights1=shifted_weights1 if with_shifted and not pass_none else None, shifted_weights2=None if (pass_none or autocorr) and not same_shotnoise or not with_shifted else shifted_weights2,
                                                    data_samples1=None if pass_none else data_samples1, data_samples2=None if pass_none or autocorr else data_samples2,
                                                    randoms_samples1=None if pass_none else randoms_samples1, randoms_samples2=None if pass_none or autocorr else randoms_samples2,
