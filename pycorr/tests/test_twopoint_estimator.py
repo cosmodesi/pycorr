@@ -79,7 +79,7 @@ def test_estimator(mode='s'):
                 # pip
                 list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 0})
                 list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 1, 'n_bitwise_weights': 1, 'compute_sepsavg': False})
-                list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 1, 'n_bitwise_weights': 1})
+                list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 1, 'n_bitwise_weights': 1, 'weight_attrs': {'normalization': 'counter'}})
 
                 # twopoint weights
                 list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'twopoint_weights': twopoint_weights})

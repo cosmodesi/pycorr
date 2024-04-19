@@ -26,7 +26,7 @@ def test_popcount():
     a = np.array(256, dtype=np.uint32)
     assert np.all(utils.popcount(a) == 1)
     for dtype in [np.uint8, np.int8]:
-        a = np.array(255, dtype=dtype)
+        a = np.array(255).astype(dtype=dtype)
         assert np.all(utils.popcount(a) == 8)
 
     num = 8564071463
@@ -138,38 +138,40 @@ def test_normalization():
     assert prob(1, 1, 1) == 0.5
 
     base_dir = os.path.join(os.path.dirname(__file__), 'reference_pip')
-    nrealizations = 124
-    fn = os.path.join(base_dir, 'pc_analytic_nbits{:d}_con.dat'.format(nrealizations))
-    tmp = np.loadtxt(fn, usecols=3)
-    ii = 0
-    ref = np.zeros((nrealizations + 1, nrealizations + 1), dtype='f8')
-    for c1 in range(nrealizations + 1):
-        for c2 in range(c1, nrealizations + 1):
-            ref[c2, c1] = ref[c1, c2] = tmp[ii]
-            ii += 1
 
-    tmp = utils.joint_occurences(nrealizations=nrealizations, noffset=1, default_value=nrealizations)
+    for nrealizations in [62, 64, 124]:
 
-    for c1 in range(1, nrealizations):
-        for c2 in range(1, c1 + 1):
-            if c1 > 0 and c2 > 0:
-                assert np.allclose(tmp[c1 - 1][c2 - 1], ref[c1][c2])
+        fn = os.path.join(base_dir, 'pc_analytic_nbits{:d}_con.dat'.format(nrealizations))
+        tmp = np.loadtxt(fn, usecols=3)
+        ii = 0
+        ref = np.zeros((nrealizations + 1, nrealizations + 1), dtype='f8')
+        for c1 in range(nrealizations + 1):
+            for c2 in range(c1, nrealizations + 1):
+                ref[c2, c1] = ref[c1, c2] = tmp[ii]
+                ii += 1
 
-    fn = os.path.join(base_dir, 'pc_analytic_nbits{:d}_eff.dat'.format(nrealizations))
-    tmp = np.loadtxt(fn, usecols=3)
-    ii = 0
-    ref = np.zeros((nrealizations + 1, nrealizations + 1), dtype='f8')
-    for c1 in range(nrealizations + 1):
-        for c2 in range(c1, nrealizations + 1):
-            ref[c2, c1] = ref[c1, c2] = tmp[ii]
-            ii += 1
+        tmp = utils.joint_occurences(nrealizations=nrealizations, noffset=1, default_value=nrealizations)
 
-    tmp = utils.joint_occurences(nrealizations=nrealizations + 1, noffset=1, default_value=0)
+        for c1 in range(1, nrealizations):
+            for c2 in range(1, c1 + 1):
+                if c1 > 0 and c2 > 0:
+                    assert np.allclose(tmp[c1 - 1][c2 - 1], ref[c1][c2])
 
-    for c1 in range(1, nrealizations):
-        for c2 in range(1, c1 + 1):
-            if c1 > 0 and c2 > 0:
-                assert np.allclose(tmp[c1][c2], ref[c1][c2])
+        fn = os.path.join(base_dir, 'pc_analytic_nbits{:d}_eff.dat'.format(nrealizations))
+        tmp = np.loadtxt(fn, usecols=3)
+        ii = 0
+        ref = np.zeros((nrealizations + 1, nrealizations + 1), dtype='f8')
+        for c1 in range(nrealizations + 1):
+            for c2 in range(c1, nrealizations + 1):
+                ref[c2, c1] = ref[c1, c2] = tmp[ii]
+                ii += 1
+
+        tmp = utils.joint_occurences(nrealizations=nrealizations + 1, noffset=1, default_value=0)
+
+        for c1 in range(1, nrealizations):
+            for c2 in range(1, c1 + 1):
+                if c1 > 0 and c2 > 0:
+                    assert np.allclose(tmp[c1][c2], ref[c1][c2])
 
 
 def test_rebin():

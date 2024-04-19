@@ -655,13 +655,14 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
         if normalization not in allowed_normalizations:
             raise TwoPointCounterError('normalization should be one of {}'.format(allowed_normalizations))
 
-        if self.weight_attrs['normalization'] == 'counter' and self.weight_attrs['correction'] is None:
+        if self.n_bitwise_weights and self.weight_attrs['normalization'] == 'counter' and self.weight_attrs['correction'] is None:
             nrealizations, nalways = self.weight_attrs['nrealizations'], self.weight_attrs['nalways']
             joint = utils.joint_occurences(nrealizations, noffset=self.weight_attrs['noffset'] + nalways, default_value=self.weight_attrs['default_value'])
             correction = np.zeros((nrealizations,) * 2, dtype=self.dtype)
             for c1 in range(correction.shape[0]):
                 for c2 in range(correction.shape[1]):
                     correction[c1][c2] = joint[c1 - nalways][c2 - nalways] if c2 <= c1 else joint[c2 - nalways][c1 - nalways]
+                    correction[c1][c2] /= (nrealizations / (noffset + c1) * nrealizations / (noffset + c2))
             self.weight_attrs['correction'] = correction
 
         self.twopoint_weights = twopoint_weights
@@ -760,17 +761,16 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
 
         """
         method = self.weight_attrs.get('normalization', 'total')
+        noffset = self.weight_attrs['noffset']
+        nrealizations = self.weight_attrs['nrealizations']
+        nalways = self.weight_attrs['nalways']
+        default_value = self.weight_attrs['default_value']
 
         def get_individual_weights(weights):
             indweights = weights[self.n_bitwise_weights:]
             if indweights: return np.prod(indweights, axis=0)
 
         if self.n_bitwise_weights and method != 'counter':
-
-            noffset = self.weight_attrs['noffset']
-            nrealizations = self.weight_attrs['nrealizations']
-            nalways = self.weight_attrs['nalways']
-            default_value = self.weight_attrs['default_value']
 
             if 'brute_force' in method:
 
@@ -859,6 +859,13 @@ class BaseTwoPointCounter(BaseClass, metaclass=RegisteredTwoPointCounter):
             return sumw_cross - sumw_auto
 
         indweights1, indweights2 = get_individual_weights(self.weights1), get_individual_weights(self.weights2)
+        if self.n_bitwise_weights and method == 'counter':
+            wiip = get_inverse_probability_weight(self.weights1[:self.n_bitwise_weights], nrealizations=nrealizations,
+                                                  noffset=noffset, default_value=default_value, dtype=self.dtype)
+            indweights1 = wiip * (1 if indweights1 is None else indweights1)
+            wiip = get_inverse_probability_weight(self.weights2[:self.n_bitwise_weights], nrealizations=nrealizations,
+                                                  noffset=noffset, default_value=default_value, dtype=self.dtype)
+            indweights2 = wiip * (1 if indweights2 is None else indweights2)
 
         if indweights1 is None:
 

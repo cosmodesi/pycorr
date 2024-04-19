@@ -402,12 +402,14 @@ def test_twopoint_counter(mode='s'):
 
             if weight_attrs.get('normalization', None) == 'counter':
                 nalways = weight_attrs.get('nalways', 0)
+                noffset = weight_attrs.get('noffset', 1)
                 nrealizations = weight_attrs['nrealizations']
                 joint = utils.joint_occurences(nrealizations, noffset=weight_attrs['noffset'] + nalways, default_value=weight_attrs['default_value'])
                 correction = np.zeros((nrealizations,) * 2, dtype='f8')
                 for c1 in range(correction.shape[0]):
                     for c2 in range(correction.shape[1]):
                         correction[c1][c2] = joint[c1 - nalways][c2 - nalways] if c2 <= c1 else joint[c2 - nalways][c1 - nalways]
+                        correction[c1][c2] /= (nrealizations / (noffset + c1) * nrealizations / (noffset + c2))
                 weight_attrs['correction'] = correction
             weight_attrs.pop('normalization', None)
 
@@ -925,6 +927,54 @@ def test_pip_counts():
         assert np.allclose(result.corr, xi, rtol=1e-9, atol=1e-7)
 
 
+def test_pip_counts_correction():
+
+    # format_pip_reference()
+    from pycorr import TwoPointCorrelationFunction
+    ref_dir = 'reference_pip'
+    ref_fn = os.path.join(ref_dir, 'pctest_arnaud2_xi_lin.dat')
+    mode = 'correlated'
+    no_indweight = False
+    fn = os.path.join(ref_dir, 'gal_w_{}.npy'.format(mode))
+    tmp = np.load(fn)
+    nbits = len([name for name in tmp.dtype.names if name.startswith('bit') and 'weight' not in name])
+    data_weights = [tmp['indweight']] + utils.pack_bitarrays(*[tmp['bit{:d}'.format(ibit)] for ibit in range(nbits)])
+    data_weights_iip = [data_weights[0], get_inverse_probability_weight(data_weights[1:], noffset=1, nrealizations=1 + nbits)]
+    if no_indweight:
+        data_weights = data_weights[1:]
+        data_weights_iip = data_weights_iip[1:]
+    data_positions = [tmp[axis] for axis in 'xyz']
+    fn = os.path.join(ref_dir, 'ran.npy')
+    tmp = np.load(fn)
+    randoms_positions = [tmp[axis] for axis in 'xyz']
+    edges = np.linspace(0., 100., 101)
+    ref = None
+    for isa in ['fallback', 'sse42', 'avx']:
+        result = TwoPointCorrelationFunction(mode='s', edges=edges, data_positions1=data_positions, randoms_positions1=randoms_positions, los='midpoint',
+                                             data_weights1=data_weights, weight_attrs={'nrealizations': 1 + nbits, 'normalization': 'counter'},
+                                             isa=isa, position_type='xyz', nthreads=4)
+        result2 = TwoPointCorrelationFunction(mode='s', edges=edges, data_positions1=data_positions, randoms_positions1=randoms_positions, los='midpoint',
+                                              data_weights1=data_weights, weight_attrs={'nrealizations': 1 + nbits, 'normalization': None},
+                                              isa=isa, position_type='xyz', nthreads=4)
+        result3 = TwoPointCorrelationFunction(mode='s', edges=edges, data_positions1=data_positions, randoms_positions1=randoms_positions, los='midpoint',
+                                              data_weights1=data_weights_iip, weight_attrs={'nrealizations': 1 + nbits, 'normalization': None},
+                                              isa=isa, position_type='xyz', nthreads=4)
+        if ref is not None:
+            assert np.allclose(result.D1D2.wcounts, ref)
+        else:
+            ref = result.D1D2.wcounts
+        xi, DD, RR, DR = [XX[:result.shape[0]] for XX in np.loadtxt(ref_fn, unpack=True, usecols=range(1, 5))]
+        tol = {'rtol': 1e-9, 'atol': 0.}
+        print(result.D1D2.wcounts / 2. / DD)
+        print(result.D1D2.normalized_wcounts() / result2.D1D2.normalized_wcounts())
+        print(result.D1D2.normalized_wcounts() / result3.D1D2.normalized_wcounts())
+        #print(result.D1R2.wcounts / DR)
+        assert np.allclose(result.D1D2.wcounts / 2., DD, **tol)
+        assert np.allclose(result.D1R2.wcounts, DR, **tol)
+        assert np.allclose(result.R1R2.wcounts / 2., RR, **tol)
+        assert np.allclose(result.corr, xi, rtol=1e-9, atol=1e-7)
+
+
 def test_analytic_twopoint_counter(mode='s'):
     edges = np.linspace(50, 100, 5)
     size = 10000
@@ -1096,44 +1146,11 @@ def test_rebin():
     assert np.allclose(np.sum(test.wcounts), np.sum(ref.wcounts))
 
 
-def test_pip_counts2():
-
-    # format_pip_reference()
-    from pycorr import TwoPointCorrelationFunction
-    ref_dir = 'reference_pip'
-    for mode in ['uncorrelated', 'correlated', 'noweights'][1:2]:
-        ref_fn = os.path.join(ref_dir, '4Arnaud_{}.txt'.format(mode))
-        no_indweight = mode == 'noweights'
-        if no_indweight: mode = 'correlated'
-        fn = os.path.join(ref_dir, 'gal_w_{}.npy'.format(mode))
-        tmp = np.load(fn)
-        nbits = len([name for name in tmp.dtype.names if name.startswith('bit') and 'weight' not in name])
-        data_weights = [tmp['indweight']] + utils.pack_bitarrays(*[tmp['bit{:d}'.format(ibit)] for ibit in range(nbits)])
-        data_weights_iip = [data_weights[0], get_inverse_probability_weight(data_weights[1:], noffset=1, nrealizations=1 + nbits)]
-        if no_indweight:
-            data_weights = data_weights[1:]
-            data_weights_iip = data_weights_iip[1:]
-        data_positions = [tmp[axis] for axis in 'xyz']
-        fn = os.path.join(ref_dir, 'ran.npy')
-        tmp = np.load(fn)
-        randoms_positions = [tmp[axis] for axis in 'xyz']
-        edges = (np.linspace(0., 100., 101), np.linspace(-1., 1., 4))
-        ref = None
-        for isa in ['fallback', 'sse42', 'avx']:
-            result = TwoPointCorrelationFunction(mode='smu', edges=edges, data_positions1=data_positions, randoms_positions1=randoms_positions, los='midpoint',
-                                                 data_weights1=data_weights, weight_attrs={'nrealizations': 1 + nbits, 'normalization': 'counter'},
-                                                 isa=isa, position_type='xyz', nthreads=4)
-            if ref is not None:
-                assert np.allclose(result.D1D2.wcounts, ref)
-            else:
-                ref = result.D1D2.wcounts
-
-
 if __name__ == '__main__':
 
     setup_logging()
 
-    test_gpu()
+    #test_gpu()
     test_mu1()
 
     for mode in ['theta', 's', 'smu', 'rppi', 'rp']:
@@ -1145,4 +1162,4 @@ if __name__ == '__main__':
     test_rebin()
     test_pip_normalization()
     test_pip_counts()
-    #test_pip_counts2()
+    test_pip_counts_correction()
