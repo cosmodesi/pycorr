@@ -1487,7 +1487,7 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
             v = np.pi * self.edges[0][:, None]**2 * self.edges[1]
             dv = np.diff(np.diff(v, axis=0), axis=1)
         elif self.mode == 'rp':
-            v = np.pi * self.edges[0][:, None]**2 * self.boxsize['xyz'.index(self.los_type)]
+            v = np.pi * self.edges[0]**2 * self.boxsize['xyz'.index(self.los_type)]
             dv = np.diff(v, axis=0)
         else:
             raise TwoPointCounterError('No analytic randoms provided for mode {}'.format(self.mode))
