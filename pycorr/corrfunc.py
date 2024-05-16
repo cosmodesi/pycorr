@@ -221,13 +221,14 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
 
                 if self.los_type in ['x', 'y', 'z']:
                     positions1, positions2, boxsize = get_rotated_positions()
-                    if not self.periodic:
+                    if self.periodic:
+                        pimax = boxsize[-1] / 2.  # los axis is z
+                    else:
                         if autocorr:
                             boxsize = _get_surveysize(positions1)
                         else:
                             boxsize = _get_surveysize(positions1, positions2)
-                        boxsize = boxsize[-1]
-                    pimax = boxsize + 1.  # los axis is z
+                        pimax = boxsize[-1] + 1.  # los axis is z
                     result = call_corrfunc(theory.DDrppi, autocorr, nthreads=self.nthreads,
                                            binfile=self.edges[0], pimax=pimax, npibins=1,
                                            X1=positions1[0], Y1=positions1[1], Z1=positions1[2],
