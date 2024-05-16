@@ -288,6 +288,7 @@ def test_twopoint_counter(mode='s'):
                 nthreads = int(os.getenv('OMP_NUM_THREADS', '4'))
                 list_options.append({'autocorr': autocorr, 'n_individual_weights': 1, 'n_bitwise_weights': 2, 'weight_attrs': {'noffset': 0, 'default_value': 0.8}, 'dtype': dtype, 'isa': isa, 'nthreads': nthreads})
                 list_options.append({'autocorr': autocorr, 'n_individual_weights': 1, 'n_bitwise_weights': 2, 'weight_attrs': {'normalization': 'counter'}, 'dtype': dtype, 'isa': isa, 'nthreads': nthreads})
+                list_options.append({'autocorr': autocorr, 'n_individual_weights': 1, 'n_bitwise_weights': 0, 'weight_attrs': {'normalization': 'counter'}, 'dtype': dtype, 'isa': isa, 'nthreads': nthreads})
 
                 # twopoint weights
                 if itemsize > 4:
@@ -379,6 +380,8 @@ def test_twopoint_counter(mode='s'):
             def dataiip(data):
                 return data[:3] + [wiip(data[3: 3 + n_bitwise_weights])] + data[3 + n_bitwise_weights:]
 
+            if n_bitwise_weights == 0:
+                weight_attrs['nrealizations'] = None
             if iip:
                 data1_ref = dataiip(data1_ref)
                 data2_ref = dataiip(data2_ref)
@@ -400,7 +403,7 @@ def test_twopoint_counter(mode='s'):
             if twopoint_weights is not None:
                 twopoint_weights = TwoPointWeight(np.cos(np.radians(twopoint_weights.sep[::-1], dtype=dtype)), np.asarray(twopoint_weights.weight[::-1], dtype=dtype))
 
-            if weight_attrs.get('normalization', None) == 'counter':
+            if n_bitwise_weights and weight_attrs.get('normalization', None) == 'counter':
                 nalways = weight_attrs.get('nalways', 0)
                 noffset = weight_attrs.get('noffset', 1)
                 nrealizations = weight_attrs['nrealizations']
