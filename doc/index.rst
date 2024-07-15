@@ -50,7 +50,7 @@ A typical auto-correlation function estimation is as simple as:
   # separation array in result.sep
   # correlation function in result.corr
 
-Example notebooks are provided in :root:`pycorr/nb`.
+Example notebooks are provided in :root:`nb`.
 
 **************
 Code structure

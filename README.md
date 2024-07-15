@@ -23,11 +23,12 @@ result = TwoPointCorrelationFunction('rppi', edges, data_positions1=data_positio
 # correlation function in result.corr
 ```
 
-Example notebooks presenting most use cases are provided in directory nb/.
+Example notebooks presenting most use cases are provided in directory [nb/](https://github.com/cosmodesi/pycorr/tree/main/nb).
 
 ## Documentation
 
 Documentation is hosted on Read the Docs, [pycorr docs](https://py2pcf.readthedocs.io/).
+As mentioned above, you may find more practical guidance in [the example notebooks directory](https://github.com/cosmodesi/pycorr/tree/main/nb).
 
 ## Requirements
 
