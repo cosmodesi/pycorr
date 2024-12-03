@@ -407,10 +407,11 @@ def test_twopoint_counter(mode='s'):
                 nalways = weight_attrs.get('nalways', 0)
                 noffset = weight_attrs.get('noffset', 1)
                 nrealizations = weight_attrs['nrealizations']
-                joint = utils.joint_occurences(nrealizations, noffset=weight_attrs['noffset'] + nalways, default_value=weight_attrs['default_value'])
-                correction = np.zeros((nrealizations,) * 2, dtype='f8')
-                for c1 in range(correction.shape[0]):
-                    for c2 in range(correction.shape[1]):
+                noffset = weight_attrs['noffset']
+                joint = utils.joint_occurences(nrealizations, noffset=noffset + nalways, default_value=weight_attrs['default_value'])
+                correction = np.ones((n_bitwise_weights * 64 + 1,) * 2, dtype='f8')
+                for c1 in range(nalways, min(nrealizations - noffset, n_bitwise_weights * 64) + 1):
+                    for c2 in range(nalways, min(nrealizations - noffset, n_bitwise_weights * 64) + 1):
                         correction[c1][c2] = joint[c1 - nalways][c2 - nalways] if c2 <= c1 else joint[c2 - nalways][c1 - nalways]
                         correction[c1][c2] /= (nrealizations / (noffset + c1) * nrealizations / (noffset + c2))
                 weight_attrs['correction'] = correction
