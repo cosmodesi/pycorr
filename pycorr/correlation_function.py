@@ -223,8 +223,8 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         To select pairs to be counted, provide mapping between the quantity (string)
         and the interval (tuple of floats),
         e.g. ``{'rp': (0., 20.)}`` to select pairs with transverse separation 'rp' between 0 and 20,
-        `{'theta': (0., 20.)}`` to select pairs with separation angle 'theta' between 0 and 20 degrees.
-        One can additionally provide e.g. 'counts': ['D1D2', 'D1R2'] to specify counts for which the selection is to be applied,
+        ``{'theta': (0., 20.)}`` to select pairs with separation angle 'theta' between 0 and 20 degrees.
+        One can additionally provide e.g. ``'counts': ['D1D2', 'D1R2']`` to specify counts for which the selection is to be applied,
         except analytic counts; defaults to all counts.
 
     los : string, default='midpoint'

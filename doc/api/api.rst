@@ -1,6 +1,8 @@
 API
 ===
 
+You may find more practical guidance in example notebooks: :root:`nb`.
+
 High-level correlation function interface
 -----------------------------------------
 
