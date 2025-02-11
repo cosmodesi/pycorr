@@ -1489,10 +1489,9 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
             dv = np.diff(v, axis=0)
             if rp_selection:
                 v_rpcut = [4. / 3. * np.pi * (self.edges[0]**3 - (self.edges[0]**2 - np.fmin(rp_cut, self.edges[0])**2)**1.5) for rp_cut in rp_selection] # volume of the intersection of a cylinder with radius rp_cut and a sphere with radius s
-                v_rpcut = v_rpcut[1] - v_rpcut[0] # the volume that is removed between two rp cut limits
+                v_rpcut = v_rpcut[0] - v_rpcut[1] # the volume that is removed between two rp cut limits
                 dv_rpcut = np.diff(v_rpcut, axis=0) # volume in each bin removed by rp selection
-                dv_total = dv - dv_rpcut
-                dv = np.where(dv_total >= 1e-8 * dv, dv_total, 0) # ensure that the volume is not negative and further remove small positive values that may arise due to rounding errors; assumes that dv is accurate
+                dv = np.where(dv_rpcut >= 1e-8 * dv, dv_rpcut, 0) # ensure that the volume is not negative and further remove small positive values that may arise due to rounding errors; assumes that dv is accurate
         elif self.mode == 'smu':
             # we bin in mu
             v = 2. / 3. * np.pi * self.edges[0][:, None]**3 * self.edges[1]
@@ -1502,14 +1501,13 @@ class AnalyticTwoPointCounter(BaseTwoPointCounter):
                 sin_theta = np.sqrt(1 - mu**2) * np.ones_like(s)
                 v_rpcut = []
                 for rp_cut in rp_selection:
-                    ss = s * np.ones_like(mu); c = ss * sin_theta > rp_cut; ss[c] = rp_cut / sin_theta[c] # this prevents division by zero, should work when rp_cut = 0 or s = 0
+                    ss = s * np.ones_like(mu); c = ss * sin_theta > rp_cut; ss[c] = rp_cut / sin_theta[c] # this prevents division by zero, should work when rp_cut = 0, infinity or s = 0
                     r = ss * sin_theta # = min(rp_cut, s * sin(theta))
                     h = ss * mu # = cot(theta) * r, but avoids ambiguity/division by zero
                     v_rpcut.append(2. / 3. * np.pi * (s**3 - (s**2 - r**2)**1.5 + r**2 * h)) # volume of the intersection of a cylinder with radius rp_cut and a spherical sector/cone between -1 and mu with radius s. it can be decomposed into (1) intersection of a cylinder with the sphere, (2) a usual cylinder and (3) a usual cone. r is the radius of all these things from the line of sight; h is the height of the cylinder (2) and the cone (3)
-                v_rpcut = v_rpcut[1] - v_rpcut[0] # the volume that is removed between two rp cut limits
+                v_rpcut = v_rpcut[0] - v_rpcut[1] # the volume that is removed between two rp cut limits
                 dv_rpcut = np.diff(np.diff(v_rpcut, axis=0), axis=-1) # volume in each bin removed by rp selection
-                dv_total = dv - dv_rpcut
-                dv = np.where(dv_total >= 1e-8 * dv, dv_total, 0) # ensure that the volume is not negative and further remove small positive values that may arise due to rounding errors; assumes that dv is accurate
+                dv = np.where(dv_rpcut >= 1e-8 * dv, dv_rpcut, 0) # ensure that the volume is not negative and further remove small positive values that may arise due to rounding errors; assumes that dv is accurate
         elif self.mode == 'rppi':
             v = np.pi * self.edges[0][:, None]**2 * self.edges[1]
             dv = np.diff(np.diff(v, axis=0), axis=1)
