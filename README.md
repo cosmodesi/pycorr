@@ -56,11 +56,12 @@ See [pycorr docs](https://py2pcf.readthedocs.io/en/latest/user/building.html).
 
 ## Acknowledgments
 
-- Lehman Garrison and Manodeep Sinha for advice when implementing linear binning, and PIP and angular weights into Corrfunc.
-- Davide Bianchi for cross-checks of two-point counts with PIP weights.
-- Svyatoslav Trusov for script to compute jackknife covariance estimates based on https://arxiv.org/pdf/2109.07071.pdf: https://github.com/theonefromnowhere/JK_pycorr/blob/main/CF_JK_ST_conf.py.
+- Lehman Garrison and Manodeep Sinha for advice when implementing linear binning, and PIP and angular weights into Corrfunc
+- Davide Bianchi for cross-checks of two-point counts with PIP weights
+- Svyatoslav Trusov for script to compute jackknife covariance estimates based on https://arxiv.org/pdf/2109.07071.pdf: https://github.com/theonefromnowhere/JK_pycorr/blob/main/CF_JK_ST_conf.py
 - Enrique Paillas and Seshadri Nadathur for suggestions about reconstructed 2pcf measurements
 - Craig Warner for GPU-izing Corrfunc 'smu' counts
+- Misha Rashkovetskyi for rp-cut analytical pair counts
 - Craig Warner, James Lasker, Misha Rashkovetskyi and Edmond Chaussidon for spotting typos / bug reports
 
 # Citations
