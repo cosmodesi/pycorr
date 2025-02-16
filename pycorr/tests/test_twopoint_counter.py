@@ -981,7 +981,7 @@ def test_pip_counts_correction():
 
 def test_analytic_twopoint_counter(mode='s'):
     edges = np.linspace(50, 100, 5)
-    size = 10000
+    size = 40000
     boxsize = (1000,) * 3
     if mode == 'smu':
         edges = (edges, np.linspace(-1, 1, 5))
@@ -991,21 +991,27 @@ def test_analytic_twopoint_counter(mode='s'):
     list_options = []
     list_options.append({})
     list_options.append({'autocorr': True})
+    if mode in ['smu']:
+        list_options.append({'autocorr': True, 'selection_attrs': {'rp': (70., 90.)}})
 
     for options in list_options:
         autocorr = options.pop('autocorr', False)
         data1, data2 = generate_catalogs(size, boxsize=boxsize, n_individual_weights=0, n_bitwise_weights=0)
         ref = TwoPointCounter(mode=mode, edges=edges, positions1=data1[:3], positions2=None if autocorr else data2[:3],
                               weights1=None, weights2=None, position_type='xyz', boxsize=boxsize, los='z', **options)
-        test = AnalyticTwoPointCounter(mode, edges, boxsize, size1=len(data1[0]), size2=None if autocorr else len(data2[0]))
-        ratio = np.absolute(test.wcounts / ref.wcounts - 1)
-        assert np.all(ratio < 0.1)
+        test = AnalyticTwoPointCounter(mode, edges, boxsize, size1=len(data1[0]), size2=None if autocorr else len(data2[0]), selection_attrs=options.get('selection_attrs', {}))
+        diff = np.abs(test.wcounts - ref.wcounts)
+        assert np.all(diff <= 3. * np.sqrt(ref.wcounts))
+        if mode == 'smu' and (edges[1][0], edges[1][-1]) == (-1, 1):
+            test2 = AnalyticTwoPointCounter('s', edges[:1], boxsize, size1=len(data1[0]), size2=None if autocorr else len(data2[0]), selection_attrs=options.get('selection_attrs', {}))
+            assert np.allclose(test2.wcounts, test.wcounts.sum(axis=-1))
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             fn = os.path.join(tmp_dir, 'tmp.npy')
+            bak = np.copy(test.wcounts)
             test.save(fn)
             test = TwoPointCounter.load(fn)
-            ratio = np.absolute(test.wcounts / ref.wcounts - 1)
-            assert np.all(ratio < 0.1)
+            assert np.allclose(test.wcounts, bak)
             ref = test.copy()
             test.rebin((2, 2) if len(edges) == 2 else (2,))
             assert np.allclose(np.sum(test.wcounts), np.sum(ref.wcounts))
