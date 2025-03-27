@@ -61,7 +61,7 @@ if __name__ == '__main__':
           license='BSD3',
           url='http://github.com/cosmodesi/pycorr',
           install_requires=['numpy', 'scipy'],
-          extras_require={'mpi': ['mpi4py', 'pmesh'], 'jackknife': ['scikit-learn', 'healpy'], 'corrfunc': ['Corrfunc @ git+https://github.com/adematti/Corrfunc@desi']},
+          extras_require={'mpi': ['mpi4py', 'pmesh'], 'jackknife': ['scikit-learn', 'healpy'], 'corrfunc': ['Corrfunc @ git+https://github.com/cosmodesi/Corrfunc@desi']},
           ext_modules=[Extension(f'{package_basename}._utils', [f'{package_basename}/_utils.pyx'],
                        depends=[f'{package_basename}/_utils_imp.h', f'{package_basename}/_utils_generics.h'],
                        libraries=['m'],

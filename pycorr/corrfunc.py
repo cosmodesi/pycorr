@@ -155,7 +155,7 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
                     raise NotImplementedError('GPU kernel not implemented for kernel {}'.format(method)) from exc
                 raise TwoPointCounterError('Please reinstall relevant Corrfunc branch (including PIP weights):\n\
                                             > pip uninstall Corrfunc\n\
-                                            > pip install git+https://github.com/adematti/Corrfunc@desi\n') from exc
+                                            > pip install git+https://github.com/cosmodesi/Corrfunc@desi\n') from exc
 
         if len(positions1[0]) and (autocorr or len(positions2[0])):
 

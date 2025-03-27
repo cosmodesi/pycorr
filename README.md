@@ -39,7 +39,7 @@ Strict requirements are:
 
 To use Corrfunc as two-point-counting engine (only engine linked so far):
 
-  - https://github.com/adematti/Corrfunc (desi branch)
+  - https://github.com/cosmodesi/Corrfunc (desi branch, which is the default)
 
 To run with MPI:
 

@@ -12,7 +12,7 @@ Strict requirements are:
 
 To use Corrfunc as two-point counter engine (only engine linked so far):
 
-  - git+https://github.com/adematti/Corrfunc@desi
+  - git+https://github.com/cosmodesi/Corrfunc@desi
 
 To perform MPI parallelization:
 
@@ -25,8 +25,8 @@ To install **pycorr** alone (without two-point counter engine, so fairly useless
 
   python -m pip install git+https://github.com/cosmodesi/pycorr
 
-Corrfunc is currently the only two-point counter engine implemented. We currently use a branch of Corrfunc,
-located `here <https://github.com/adematti/Corrfunc/tree/desi>`_.
+Corrfunc is currently the only two-point counter engine implemented. We currently use a branch in a fork of Corrfunc,
+located `here <https://github.com/cosmodesi/Corrfunc/tree/desi>`_.
 Uninstall previous Corrfunc version (if any)::
 
   pip uninstall Corrfunc
@@ -37,7 +37,7 @@ then::
 
 or if **pycorr** is already installed::
 
-  python -m pip install git+https://github.com/adematti/Corrfunc@desi
+  python -m pip install git+https://github.com/cosmodesi/Corrfunc@desi
 
 To further perform MPI parallelization or use scikit-learn's KMeans algorithm to split catalog into subsamples for jackknife estimates::
 
