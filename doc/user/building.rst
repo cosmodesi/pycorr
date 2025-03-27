@@ -43,6 +43,9 @@ To further perform MPI parallelization or use scikit-learn's KMeans algorithm to
 
   python -m pip install git+https://github.com/cosmodesi/pycorr#egg=pycorr[mpi,jackknife,corrfunc]
 
+If you get the GPU support problem (``Error: To compile with GPU support define "CUDA_HOME" Else set "USE_GPU=0"``), it is probably easiest to prepend either definition to the command: ``CUDA_HOME=... python -m pip install ...`` or ``USE_GPU=0 python -m pip install ...``.
+Alternatively, you can ``export CUDA_HOME=...`` or ``export USE_GPU=0`` in your shell before running ``pip install``.
+
 git
 ---
 First::
