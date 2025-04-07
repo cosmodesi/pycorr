@@ -181,7 +181,7 @@ class BoxSubsampler(BaseSubsampler):
     def run(self):
         """Set edges for binning along each axis."""
         offset = self.boxcenter - self.boxsize / 2.
-        self.edges = [o + np.linspace(0, b, n) for o, b, n in zip(offset, self.boxsize, self.nsamples)]
+        self.edges = [o + np.linspace(0, b, n + 1) for o, b, n in zip(offset, self.boxsize, self.nsamples)]
 
     def label(self, positions, position_type=None):
         """
