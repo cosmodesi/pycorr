@@ -130,8 +130,8 @@ class BoxSubsampler(BaseSubsampler):
                 - "pos": Cartesian positions, shape (N, 3).
 
         wrap : bool, default=False
-            Whether to wrap input positions in [0, boxsize[?
-            If ``False`` and input positions do not fit in the the box size, raise a :class:`ValueError`.
+            Whether to wrap input positions in [boxcenter - boxsize/2, boxcenter + boxsize/2).
+            If ``False`` and input positions do not fit in that range, raise a :class:`ValueError`.
 
         dtype : string, np.dtype, default=None
             Array type for positions and weights.
