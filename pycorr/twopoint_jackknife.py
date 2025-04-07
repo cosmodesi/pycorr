@@ -214,7 +214,7 @@ class BoxSubsampler(BaseSubsampler):
             if not np.all((tmp >= 0) & (tmp < len(edge) - 1)):
                 raise ValueError('Some input positions outside of bounding box')
             ii.append(tmp)
-        return np.ravel_multi_index(tuple(ii), tuple(len(edge) - 1 for edge in self.edges), mode='raise', order='C')
+        return np.ravel_multi_index(tuple(ii), self.nsamples, mode='raise', order='C')
 
 
 class KMeansSubsampler(BaseSubsampler):
