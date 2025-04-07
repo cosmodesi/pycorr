@@ -169,9 +169,12 @@ class BoxSubsampler(BaseSubsampler):
         if isinstance(nsamples, (list, tuple)):
             if len(nsamples) != ndim:
                 raise ValueError('nsamples must be a list/tuple of size {:d}'.format(ndim))
+            if any(not isinstance(_, int) for _ in nsamples): raise TypeError('nsamples must be an integer or a list/tuple of integers')
+            if any(_ <= 0 for _ in nsamples): raise ValueError('nsamples must be a list/tuple of positive elements')
             self.nsamples = tuple(nsamples)
         else:
-            nsamples = int(nsamples)
+            if not isinstance(nsamples, int): raise TypeError('nsamples must be an integer')
+            if nsamples <= 0: raise ValueError('nsamples must be positive')
             self.nsamples = (int(np.rint(nsamples**(1. / ndim))),) * ndim
             if nsamples != np.prod(self.nsamples):
                 raise ValueError('Number of regions must be a {:d}-th power of an integer'.format(ndim))
