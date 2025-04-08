@@ -28,12 +28,14 @@ def test_subsampler():
     except ImportError:
         pass
 
-    boxsize = np.array([1000.] * 3)
+    boxsize_1d = 1000.
+    boxsize = np.array([boxsize_1d] * 3)
     boxcenter = np.array([100., 0., 0.])
     catalog = generate_catalogs(size=1000, boxsize=boxsize, offset=boxcenter - boxsize / 2.)[0]
     positions = catalog[:3]
     positions_bak = np.array(positions, copy=True)
-    nsamples = 27
+    nsamples_1d = 3
+    nsamples = nsamples_1d ** 3
     subsampler = BoxSubsampler(boxsize=boxsize, boxcenter=boxcenter, nsamples=nsamples)
     assert np.allclose(subsampler.boxsize, boxsize)
     labels = subsampler.label(positions)
@@ -53,6 +55,17 @@ def test_subsampler():
     assert np.allclose(subsampler.boxsize, boxsize, rtol=1e-2)
     labels = subsampler.label(catalog[:3])
     assert np.max(labels) < nsamples
+
+    # more accurate test for the labeling
+    points_per_part = 5 # how many points to put into each part along each coordinates (so that each regions will contain points_per_part**3 points)
+    coordinates_1d = np.linspace(0, boxsize_1d, 2 * points_per_part * nsamples_1d + 1)[1::2] # in the middle of the parts along each dimension (avoiding the very edges which can be ambiguous), with no shift to make things easier here
+    labels_1d = np.repeat(np.arange(nsamples_1d), points_per_part) # obvious regions along each axis
+    coordinates_alt = [np.ravel(_) for _ in np.meshgrid(coordinates_1d, coordinates_1d, coordinates_1d, indexing = 'ij')] # arrays of all 3D coordinate combinations taken from `coordinates_1d`
+    labels_3d = [np.ravel(_) for _ in np.meshgrid(labels_1d, labels_1d, labels_1d, indexing = 'ij')] # arrays of all 3D index combinations taken from `labels_1d`, same order as the coordinates
+    labels_alt = sum(_ * nsamples_1d ** i for (i, _) in enumerate(labels_3d[::-1])) # more explicit conversion to the multi-dimensional index
+    assert np.max(labels_alt) == nsamples - 1
+    subsampler2 = BoxSubsampler(boxsize=boxsize_1d, boxcenter=boxsize_1d/2, nsamples=nsamples) # subsampler for a strictly cubic box without shift
+    assert np.array_equal(subsampler2.label(coordinates_alt, position_type = 'xyz'), labels_alt)
 
     if mpi:
         mpicomm = mpi.COMM_WORLD

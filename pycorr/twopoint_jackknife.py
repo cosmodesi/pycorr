@@ -130,8 +130,8 @@ class BoxSubsampler(BaseSubsampler):
                 - "pos": Cartesian positions, shape (N, 3).
 
         wrap : bool, default=False
-            Whether to wrap input positions in [0, boxsize[?
-            If ``False`` and input positions do not fit in the the box size, raise a :class:`ValueError`.
+            Whether to wrap input positions in [boxcenter - boxsize/2, boxcenter + boxsize/2).
+            If ``False`` and input positions do not fit in that range, raise a :class:`ValueError`.
 
         dtype : string, np.dtype, default=None
             Array type for positions and weights.
@@ -169,10 +169,13 @@ class BoxSubsampler(BaseSubsampler):
         if isinstance(nsamples, (list, tuple)):
             if len(nsamples) != ndim:
                 raise ValueError('nsamples must be a list/tuple of size {:d}'.format(ndim))
+            if any(not isinstance(_, int) for _ in nsamples): raise TypeError('nsamples must be an integer or a list/tuple of integers')
+            if any(_ <= 0 for _ in nsamples): raise ValueError('nsamples must be a list/tuple of positive elements')
             self.nsamples = tuple(nsamples)
         else:
-            nsamples = int(nsamples)
-            self.nsamples = (int(nsamples**(1. / ndim) + 0.5),) * ndim
+            if not isinstance(nsamples, int): raise TypeError('nsamples must be an integer')
+            if nsamples <= 0: raise ValueError('nsamples must be positive')
+            self.nsamples = (int(np.rint(nsamples**(1. / ndim))),) * ndim
             if nsamples != np.prod(self.nsamples):
                 raise ValueError('Number of regions must be a {:d}-th power of an integer'.format(ndim))
 
@@ -181,7 +184,7 @@ class BoxSubsampler(BaseSubsampler):
     def run(self):
         """Set edges for binning along each axis."""
         offset = self.boxcenter - self.boxsize / 2.
-        self.edges = [o + np.linspace(0, b, n) for o, b, n in zip(offset, self.boxsize, self.nsamples)]
+        self.edges = [o + np.linspace(0, b, n + 1) for o, b, n in zip(offset, self.boxsize, self.nsamples)]
 
     def label(self, positions, position_type=None):
         """
@@ -214,7 +217,7 @@ class BoxSubsampler(BaseSubsampler):
             if not np.all((tmp >= 0) & (tmp < len(edge) - 1)):
                 raise ValueError('Some input positions outside of bounding box')
             ii.append(tmp)
-        return np.ravel_multi_index(tuple(ii), tuple(len(edge) - 1 for edge in self.edges), mode='raise', order='C')
+        return np.ravel_multi_index(tuple(ii), self.nsamples, mode='raise', order='C')
 
 
 class KMeansSubsampler(BaseSubsampler):

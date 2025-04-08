@@ -21,3 +21,6 @@ doc/_build/
 
 # Unit test / coverage reports
 **/.coverage
+
+# the annoying macOS hidden file
+.DS_Store
