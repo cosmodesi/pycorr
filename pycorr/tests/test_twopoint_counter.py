@@ -354,6 +354,7 @@ def test_twopoint_counter(mode='s'):
             weight_attrs = options_ref.pop('weight_attrs', {}).copy()
             selection_attrs = options_ref.pop('selection_attrs', {}).copy()
             compute_sepavg = options_ref.pop('compute_sepsavg', True)
+            if engine not in ['corrfunc']: compute_sepavg = False  # only corrfunc supports that for now
             options_ref.pop('isa', 'fallback')
             options_ref.pop('mesh_refine_factors', None)
 

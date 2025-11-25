@@ -25,7 +25,7 @@ def get_twopoint_counter(engine='corrfunc'):
     Parameters
     ----------
     engine : string, default='corrfunc'
-        Name of two-point counter engine, one of ["corrfunc", "analytic", "jackknife"].
+        Name of two-point counter engine, one of ["corrfunc", "cucount", "analytic", "jackknife"].
 
     Returns
     -------
@@ -36,6 +36,8 @@ def get_twopoint_counter(engine='corrfunc'):
 
         if engine.lower() == 'corrfunc':
             from . import corrfunc  # adds counter to BaseTwoPointCounter._registry
+        if engine.lower() == 'cucount':
+            from . import cucount  # adds counter to BaseTwoPointCounter._registry
 
         try:
             engine = BaseTwoPointCounter._registry[engine.lower()]

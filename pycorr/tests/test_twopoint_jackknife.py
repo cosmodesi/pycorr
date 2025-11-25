@@ -221,6 +221,7 @@ def test_twopoint_counter(mode='s'):
             dtype = options.pop('dtype', None)
             weight_attrs = options.get('weight_attrs', {}).copy()
             compute_sepavg = options.get('compute_sepsavg', True)
+            if engine not in ['corrfunc']: compute_sepavg = False
 
             def setdefaultnone(di, key, value):
                 if di.get(key, None) is None:

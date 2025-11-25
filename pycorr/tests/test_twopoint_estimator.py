@@ -117,7 +117,8 @@ def test_estimator(mode='s'):
         for options in list_options:
             print(mode, options)
             options = options.copy()
-            compute_sepsavg = options.get('compute_sepsavg', True)
+            compute_sepavg = options.get('compute_sepsavg', True)
+            if engine not in ['corrfunc']: compute_sepavg = False
             edges = options.pop('edges', ref_edges)
             weights_one = options.pop('weights_one', [])
             n_individual_weights = options.pop('n_individual_weights', 1)
@@ -230,7 +231,7 @@ def test_estimator(mode='s'):
 
             estimator_nojackknife = run_nojackknife()
             estimator_jackknife = run_jackknife()
-            if compute_sepsavg:
+            if compute_sepavg:
                 assert not np.allclose(estimator_nojackknife.sepavg(), estimator_nojackknife.sepavg(method='mid'), equal_nan=True)
             assert_allclose_estimators(estimator_jackknife, estimator_nojackknife)
 
