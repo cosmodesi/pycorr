@@ -531,11 +531,16 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
             setattr(self, name, getattr(counts, name))
         self.is_reversible = self.autocorr or self.is_reversible
         self.edges = counts.edges.copy()  # useful when rebinning
+        self.compute_sepsavg = counts.compute_sepsavg.copy()
         for name in ['wcounts', 'wnorm', 'ncounts']:
             if hasattr(counts, name):
                 setattr(self, name, sum(getattr(r, name) for r in self.auto.values()) + sum(getattr(r, name) for r in self.cross12.values()))
         if hasattr(self, 'ncounts'):
-            self.wcounts[self.ncounts == 0] = 0.
+            mask = self.ncounts == 0
+        else:
+            mask = [(r.wcounts == 0.) for r in self.auto.values()] + [(r.wcounts == 0.) for r in self.cross12.values()]
+            mask = np.logical_and.reduce(mask)
+        self.wcounts[mask] = 0.
         self._set_default_seps()  # reset self.seps to default
         for idim, compute_sepavg in enumerate(self.compute_sepsavg):
             if compute_sepavg:
@@ -699,7 +704,11 @@ class JackknifeTwoPointCounter(BaseTwoPointCounter):
             if hasattr(self, name):
                 state[name] = getattr(self, name) - getattr(self.auto[ii], name) - alpha * (getattr(self.cross12[ii], name) + getattr(self.cross21[ii], name))
         if 'ncounts' in state:
-            state['wcounts'][state['ncounts'] == 0] = 0.
+            mask = state['ncounts'] == 0
+        else:
+            mask = [item.wcounts == 0. for item in [self, self.auto[ii], self.cross12[ii], self.cross21[ii]]]
+            mask = np.logical_and.reduce(mask)
+        state['wcounts'][mask] = 0.
         state['seps'] = state['seps'].copy()
         for idim, compute_sepavg in enumerate(self.compute_sepsavg):
             if compute_sepavg:

@@ -50,8 +50,9 @@ def test_multipoles():
 
 def test_estimator(mode='s'):
 
+    list_engine = ['corrfunc', 'cucount']
+
     from pycorr import KMeansSubsampler
-    list_engine = ['corrfunc']
     edges = np.linspace(1, 100, 10)
     size = 1000
     cboxsize = (500,) * 3
@@ -59,63 +60,62 @@ def test_estimator(mode='s'):
     TwoPointWeight = namedtuple('TwoPointWeight', ['sep', 'weight'])
     twopoint_weights = TwoPointWeight(np.logspace(-4, 0, 40), np.linspace(4., 1., 40))
 
-    list_options = []
-
-    for autocorr in [False, True]:
-        for with_shifted in [False, True]:
-
-            list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'weights_one': ['D1', 'R2']})
-            if mode not in ['theta', 'rp']:
-                list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': 'natural', 'boxsize': cboxsize, 'with_randoms': False})
-            if mode == 'rppi':
-                list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': 'natural', 'boxsize': cboxsize, 'with_randoms': False, 'edges': (np.linspace(0, 100, 21), np.linspace(0, 20, 21))})
-
-            for estimator in ['natural', 'landyszalay', 'davispeebles', 'weight', 'residual']:
-
-                list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator})
-                if estimator not in ['weight']:
-                    list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator})
-
-                # pip
-                list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 0})
-                list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 1, 'n_bitwise_weights': 1, 'compute_sepsavg': False})
-                list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 1, 'n_bitwise_weights': 1, 'weight_attrs': {'normalization': 'counter'}})
-
-                # twopoint weights
-                list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'twopoint_weights': twopoint_weights})
-
-                # los
-                if mode in ['smu', 'rppi']:
-                    list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'los': 'firstpoint', 'twopoint_weights': twopoint_weights})
-                    list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'los': 'endpoint'})
-
-                # selection
-                if mode == 'smu':
-                    list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'los': 'midpoint', 'selection_attrs': {'rp': (5., np.inf)}})
-                    if estimator == 'natural':
-                        list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'boxsize': cboxsize, 'with_randoms': False, 'selection_attrs': {'rp': (5., np.inf)}})
-
-    mpi = False
-    try:
-        from pycorr import mpi
-        print('Has MPI')
-    except ImportError:
-        pass
-    if mpi:
-        list_options.append({'mpicomm': mpi.COMM_WORLD})
-
-    # list_options.append({'weight_type':'inverse_bitwise', 'n_bitwise_weights':2})
-    ref_edges = np.linspace(0, 100, 11)
-    if mode == 'smu':
-        ref_edges = (ref_edges, np.linspace(-1, 1, 21))
-    elif mode == 'rppi':
-        ref_edges = (ref_edges, np.linspace(-20, 20, 41))
-    elif mode == 'theta':
-        ref_edges = np.linspace(1e-5, 10, 11)  # below 1e-5, self pairs are counted by Corrfunc
-
     for engine in list_engine:
+        list_options = []
+        for autocorr in [False, True]:
+            for with_shifted in [False, True]:
+    
+                list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'weights_one': ['D1', 'R2']})
+                if mode not in ['theta', 'rp']:
+                    list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': 'natural', 'boxsize': cboxsize, 'with_randoms': False})
+                if mode == 'rppi':
+                    list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': 'natural', 'boxsize': cboxsize, 'with_randoms': False, 'edges': (np.linspace(0, 100, 21), np.linspace(0, 20, 21))})
+    
+                for estimator in ['natural', 'landyszalay', 'davispeebles', 'weight', 'residual']:
+    
+                    list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator})
+                    if estimator not in ['weight']:
+                        list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator})
+    
+                    # pip
+                    list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 0})
+                    list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 1, 'n_bitwise_weights': 1, 'compute_sepsavg': False})
+                    list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 1, 'n_bitwise_weights': 1, 'weight_attrs': {'normalization': 'counter'}})
+    
+                    # twopoint weights
+                    list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'n_individual_weights': 2, 'n_bitwise_weights': 2, 'twopoint_weights': twopoint_weights})
+    
+                    # los
+                    if mode in ['smu', 'rppi']:
+                        list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'los': 'firstpoint', 'twopoint_weights': twopoint_weights})
+                        list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'los': 'endpoint'})
+    
+                    # selection
+                    if mode == 'smu' and engine == 'corrfunc':
+                        list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'los': 'midpoint', 'selection_attrs': {'rp': (5., np.inf)}})
+                        if estimator == 'natural':
+                            list_options.append({'autocorr': autocorr, 'with_shifted': with_shifted, 'estimator': estimator, 'boxsize': cboxsize, 'with_randoms': False, 'selection_attrs': {'rp': (5., np.inf)}})
+
+        mpi = False
+        try:
+            from pycorr import mpi
+            print('Has MPI')
+        except ImportError:
+            pass
+        if mpi:
+            list_options.append({'mpicomm': mpi.COMM_WORLD})
+    
+        # list_options.append({'weight_type':'inverse_bitwise', 'n_bitwise_weights':2})
+        ref_edges = np.linspace(0, 100, 11)
+        if mode == 'smu':
+            ref_edges = (ref_edges, np.linspace(-1, 1, 21))
+        elif mode == 'rppi':
+            ref_edges = (ref_edges, np.linspace(-20, 20, 41))
+        elif mode == 'theta':
+            ref_edges = np.linspace(1e-5, 10, 11)  # below 1e-5, self pairs are counted by Corrfunc
+            
         for options in list_options:
-            print(mode, options)
+            print(engine, mode, options)
             options = options.copy()
             compute_sepavg = options.get('compute_sepsavg', True)
             if engine not in ['corrfunc']: compute_sepavg = False
@@ -224,9 +224,12 @@ def test_estimator(mode='s'):
                 assert np.allclose(res2.wcounts, res1.wcounts, **tol)
                 assert np.allclose(res2.wnorm, res1.wnorm, **tol)
 
-            def assert_allclose_estimators(res1, res2):
-                assert np.allclose(res2.corr, res1.corr, equal_nan=True)
-                assert np.allclose(res2.sep, res1.sep, equal_nan=True)
+            def assert_allclose_estimators(res1, res2, ignore_nan=False):
+                mask = Ellipsis
+                if ignore_nan:
+                    mask = ~(np.isnan(res2.corr) | np.isnan(res1.corr))
+                assert np.allclose(res2.corr[mask], res1.corr[mask], equal_nan=True)
+                assert np.allclose(res2.sep[mask], res1.sep[mask], equal_nan=True)
                 assert not np.any(res1.sep == 0.)
 
             estimator_nojackknife = run_nojackknife()
@@ -273,7 +276,9 @@ def test_estimator(mode='s'):
             ii = data1[-1][0]
             estimator_nojackknife_ii = run_nojackknife(ii=ii)
             estimator_jackknife_ii = estimator_jackknife.realization(ii, correction=None)
-            assert_allclose_estimators(estimator_jackknife_ii, estimator_nojackknife_ii)
+            # ignore_nan = True as there can be ~1e-16 residuals in RR of estimator_jackknife_ii,
+            # while RR of estimator_nojackknife_ii is strictly 0
+            assert_allclose_estimators(estimator_jackknife_ii, estimator_nojackknife_ii, ignore_nan=True)
 
             options_counts = options.copy()
             estimator = options_counts.pop('estimator', 'landyszalay')
@@ -320,7 +325,7 @@ def test_estimator(mode='s'):
                 assert_allclose(R1R2, estimator_jackknife.S1S2)
             if estimator in ['natural'] and not with_randoms:
                 R1R2 = TwoPointCounter(mode=mode, edges=edges, engine='analytic', boxsize=estimator_jackknife.D1D2.boxsize,
-                                       size1=estimator_jackknife.D1D2.size1, size2=None if estimator_jackknife.D1D2.autocorr else estimator_jackknife.D1D2.size2, los=options_counts['los'])
+                                       size1=estimator_jackknife.D1D2.size1, size2=None if estimator_jackknife.D1D2.autocorr else estimator_jackknife.D1D2.size2, los=options_counts['los'], selection_attrs=options.get('selection_attrs', None))
                 assert_allclose(R1R2, estimator_jackknife.R1R2)
 
             for estimator in [estimator_nojackknife, estimator_jackknife]:

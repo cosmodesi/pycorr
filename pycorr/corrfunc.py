@@ -1,5 +1,7 @@
 """Implement Corrfunc two-point counter engine."""
 
+import warnings
+
 import numpy as np
 from Corrfunc import theory, mocks
 
@@ -16,6 +18,10 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
 
     def run(self):
         """Compute the two-point counts and set :attr:`wcounts` and :attr:`sep`."""
+
+        # Set zero ncounts
+        self.ncounts = np.zeros_like(self.sep, dtype='i8')
+
         if self.ndim == 2:
             self.compute_sepsavg[1] = False
 
@@ -144,7 +150,6 @@ class CorrfuncTwoPointCounter(BaseTwoPointCounter):
             fast_acos = attrs.pop('fast_acos', False)
 
         if attrs:
-            import warnings
             warnings.warn('These arguments are not read: {}'.format(attrs))
 
         def call_corrfunc(method, *args, **kwargs):

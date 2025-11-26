@@ -23,6 +23,7 @@ class CucountTwoPointCounter(BaseTwoPointCounter):
             self.compute_sepsavg[1] = False
         if self.compute_sepsavg[0]:
             warnings.warn('cucount does not provide separation averages; setting compute_sepsavg[0] = False')
+        self.compute_sepsavg = [False] * len(self.compute_sepsavg)
 
         (positions1, weights1), (positions2, weights2) = self._mpi_decompose()
 
@@ -41,24 +42,24 @@ class CucountTwoPointCounter(BaseTwoPointCounter):
                 weights2 = reformat_bitweights(weights2)
             bitwise = {name: self.weight_attrs[name] for name in ['noffset', 'default_value', 'nrealizations']}
             correction = self.weight_attrs.get('correction', None)
-            if correction is not None: bitwise['p_correction_nbits'] = correction
+            bitwise['p_correction_nbits'] = correction if correction is not None else False
 
         # Prepare WeightAttrs
         angular = None
         if self.cos_twopoint_weights is not None:
-            angular = dict(sep=self.cos_twopoint_weights.sep,
-                           weight=self.cos_twopoint_weights.weight)
+            angular = dict(sep=self.twopoint_weights.sep, weight=self.twopoint_weights.weight)
 
         wattrs = WeightAttrs(bitwise=bitwise, angular=angular)
 
-        zero_indices = (np.digitize(0, edges, right=False) - 1 for edges in self.edges)
+        zero_indices = tuple(np.digitize(0, edges, right=False) - 1 for edges in self.edges)
         with_auto_pairs = all((zero_index >= 0) and (zero_index < len(edges) - 1) for zero_index, edges in zip(zero_indices, self.edges))
         # Prepare SelectionAttrs
-        sattrs = SelectionAttrs(**self.selection_attrs)
+        allowed_selection = ['theta']
+        if not set(self.selection_attrs).issubset(set(allowed_selection)):
+            raise NotImplementedError('selection only available for theta')
         if self.selection_attrs:
-            if self.mode != 'smu':
-                raise NotImplementedError('selection only available for mode smu')
             with_auto_pairs &= all(limits[0] <= 0. for limits in self.selection_attrs.values())
+        sattrs = SelectionAttrs(**self.selection_attrs)
 
         # Prepare BinAttrs
         battrs = {}
@@ -80,20 +81,24 @@ class CucountTwoPointCounter(BaseTwoPointCounter):
         battrs = BinAttrs(**battrs)
 
         attrs = dict(self.attrs)
-        cellsize = attrs.pop('cellsize', None)
+        meshsize = attrs.pop('meshsize', None)
+        refine = attrs.pop('refine', 1.)
         if attrs:
-            import warnings
             warnings.warn('These arguments are not read: {}'.format(attrs))
+
+        if positions2 is None:
+            positions2, weights2 = positions1, weights1
 
         if len(positions1[0]) and (autocorr or len(positions2[0])):
             # Prepare Particles
             particles = [Particles(positions=positions, weights=weights, positions_type='rd' if self.mode == 'theta' else 'xyz') for positions, weights in
                         [(positions1, weights1), (positions2, weights2)]]
-            mattrs = dict(cellsize=cellsize, sattrs=sattrs, battrs=battrs)
+            mattrs = dict(meshsize=meshsize, sattrs=sattrs, battrs=battrs, refine=refine)
             if self.periodic:
                 if self.mode == 'theta':
                     raise TwoPointCounterError('cucount does not provide periodic boundary conditions for the angular correlation function')
                 mattrs.update(boxsize=self.boxsize, periodic=True)
+
             mattrs = MeshAttrs(*particles, **mattrs)
             self.wcounts = count2(*particles, mattrs=mattrs, wattrs=wattrs, battrs=battrs, sattrs=sattrs, nthreads=self.nthreads)['weight']
 
