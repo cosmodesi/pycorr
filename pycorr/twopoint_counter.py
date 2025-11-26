@@ -74,7 +74,7 @@ class TwoPointCounter(BaseClass, metaclass=MetaTwoPointCounter):
     Parameters
     ----------
     engine : string, default='corrfunc'
-        Name of two-point counter engine, one of ["corrfunc", "analytical"].
+        Name of two-point counter engine, one of ["corrfunc", "cucount", "analytical"].
 
     args : list
         Arguments for two-point counter engine, see :class:`BaseTwoPointCounter`.

@@ -265,10 +265,14 @@ def TwoPointCorrelationFunction(mode, edges, data_positions1, data_positions2=No
         Else the MPI rank where input positions and weights are gathered.
 
     kwargs : dict
-        Counter engine-specific options, e.g. for corrfunc:
+        One can provide "engine", one of ['corrfunc', 'cucount'], and engine-specific options, e.g.
+        For 'corrfunc':
         - 'isa': one of 'fallback', 'sse42', 'avx', 'fastest'
         - 'mesh_refine_factors': an integer for ech dimension (2 for ``mode = 'theta'``),
-          which increases the resolution of the grid used to speed-up pair counting.
+          which increases the resolution of the grid used to speed-up pair counting (only impacts running time).
+        For 'cucount':
+        - 'refine': a float of order 1; > 1 to increase the resolution of the grid used to speed-up pair counting
+        (only impact running time); < 1 to decrease the resolution.
 
         One can also provide precomputed two-point counts, e.g. R1R2.
 
