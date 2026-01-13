@@ -166,7 +166,7 @@ def _format_positions(positions, mode='auto', position_type='xyz', dtype=None, c
     def __format_positions(positions):
         pt = position_type
         if position_type == 'pos':  # array of shape (N, 3)
-            positions = np.array(positions, dtype=dtype, copy=copy)
+            positions = np.array(positions, dtype=dtype) if copy else np.asarray(positions, dtype=dtype)
             if positions.shape[-1] != 3:
                 return None, 'For position type = {}, please provide a (N, 3) array for positions'.format(position_type)
             positions = positions.T
@@ -175,7 +175,7 @@ def _format_positions(positions, mode='auto', position_type='xyz', dtype=None, c
         positions = list(positions)
         for ip, p in enumerate(positions):
             # Cast to the input dtype if exists (may be set by previous positions)
-            positions[ip] = np.array(p, dtype=dtype, copy=copy)
+            positions[ip] = np.array(p, dtype=dtype) if copy else np.asarray(p, dtype=dtype)
 
         size = len(positions[0])
         dt = positions[0].dtype
